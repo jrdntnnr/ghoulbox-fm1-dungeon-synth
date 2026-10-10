@@ -844,6 +844,7 @@ static int menu_protocol(void)
         usb_cdc_on = 1;
         usb_serial_apply();
         ok = usb_cdc_on && usb.config;
+        fm1_ms = 1000; /* even tick: ms | 1 must not underflow and disconnect immediately */
         ok &= menu_set(11, 1) == 3 && host_wire[6] == 11 && ed_rv(host_wire + 7) == 1 && (ui_prefs & PREF_SERIAL_OFF);
         t0 = fm1_ms;
         usb_serial_apply();
@@ -929,9 +930,29 @@ static int drum_kit_retired(void)
     return bad;
 }
 
+static int tuning_protocol(void)
+{
+    int bad=0, ok=1; reset();
+    uint8_t a[4]={0,P_SCALE,0,0};
+    uint32_t n=request(ED_DESC,a,2);
+    const char *p=(const char *)host_wire+14;
+    p+=strlen(p)+1; p+=strlen(p)+1;
+    for(unsigned i=0;i<NELEM(N_SCALE);i++) {
+        if(p >= (const char *)host_wire+n-1 || strcmp(p,N_SCALE[i])) {ok=0;break;}
+        p+=strlen(p)+1;
+    }
+    bad+=check("SCL descriptor includes every one of the 40 names in a complete SysEx frame",ok && (uint8_t)*p==0xF7);
+    a[1]=P_TC4; unsigned u=8192-13; a[2]=u&127; a[3]=u>>7;
+    request(ED_SET,a,4);
+    bad+=check("cent trim SET accepts negative cents and survives a sound change",TSEL->p[P_TC4]==-13 && param_kept(P_TC4));
+    apply_preset_to(TSEL,0);
+    bad+=check("loading a factory sound preserves cent trims",TSEL->p[P_TC4]==-13);
+    return bad;
+}
+
 int main(void)
 {
-    int bad = preferences() + framing() + uart_recovery() + steps() + samples() + song_protocol() + malformed_saves() +
+    int bad = tuning_protocol() + preferences() + framing() + uart_recovery() + steps() + samples() + song_protocol() + malformed_saves() +
               fm6_patches() + user_preset_roundtrip() + live_sync() + usb_burst() + menu_protocol() + drum_kit_retired();
     printf("%s\n", bad ? "EDITOR TEST FAILED" : "editor test passed");
     return bad != 0;

@@ -18,7 +18,7 @@ uneven (text_spacing_test.py measures it).
 import os
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, features as pil_features
 
 
 def open_font(spec, px):
@@ -28,7 +28,8 @@ def open_font(spec, px):
     path = os.path.expanduser(path)
     if not os.path.exists(path):
         raise SystemExit(f"font not found: {path}")
-    f = ImageFont.truetype(path, px, index=int(idx) if idx else 0, layout_engine=ImageFont.Layout.RAQM)
+    engine = ImageFont.Layout.RAQM if pil_features.check_feature("raqm") else ImageFont.Layout.BASIC
+    f = ImageFont.truetype(path, px, index=int(idx) if idx else 0, layout_engine=engine)
     if wght:
         f.set_variation_by_axes([float(wght)])
     return f
@@ -131,7 +132,12 @@ def raster_font(spec, px, chars, tracking=0.0, gamma=1.0, tabular=True, kern_min
     pad = px                                   # canvas margin around the glyph (overhang, accents)
     cw, chh = px * 3, asc + desc + 2 * pad
     base = pad + asc                           # baseline row of the canvas
-    feats = ["tnum"] if tabular else None
+    # The monospaced pixel face needs no OpenType features or kerning. Keep
+    # non-pixel builds strict: silently changing their shaping changes layout.
+    raqm = pil_features.check_feature("raqm")
+    if not crisp and not raqm:
+        raise SystemExit("Antialiased UI fonts require Pillow with libraqm support")
+    feats = ["tnum"] if tabular and raqm else None
     glyphs, adv, nat = {}, {}, {}
     for ch in chars:
         f = feats if ch.isdigit() else None

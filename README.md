@@ -1,5 +1,7 @@
 # GHOULBOX: FM-1 Dungeon Synth
 
+**Development branch: 1.2-dev microtuning.** 40 scales, maqam starting tunings and per-key cent trims. See [controls, compatibility and host tests](docs/MICROTONAL.md). Target build and hardware validation are pending; the released 1.1 guide below describes the original firmware.
+
 ![GHOULBOX 1.0: boot, HOME, PRESETS, MENU](docs/ghoulbox-1.0.png)
 
 **GHOULBOX** is dungeon-synth firmware for the **M-VAVE FM-1**: a fork of

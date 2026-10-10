@@ -44,7 +44,8 @@ static void gurdy_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
     int32_t drn = 36 + clamp(p[P_E0], 0, 11), dlvl = p[P_E1] * 200, flvl = p[P_E2] * 170, whl = p[P_E3];
     int32_t buzz = p[P_E4] * 220, body = p[P_E6] * 258, wobl = p[P_E7];
     uint32_t coup = (uint32_t)clamp(p[P_E5], 0, 4), i;
-    uint32_t inc = m->inc, dinc = cents_inc(drn * 16, 0, m->fine), finc = cents_inc((drn + 7) * 16, 0, m->fine);
+    uint32_t inc = m->inc, dinc = cents_inc(drn * 16, tuning_cents(t, drn), m->fine - m->tuning_fine),
+             finc = cents_inc((drn + 7) * 16, tuning_cents(t, drn + 7), m->fine - m->tuning_fine);
     uint32_t ph0 = v->ph[0], ph1 = v->ph[1], ph2 = v->ph[2];
     int32_t b1 = v->s[0], b2 = v->s[1], n1 = v->s[2], n2 = v->s[3], nst = v->s[4], wob = v->s[5], cnt = v->s[6];
     int32_t lp = v->s[7], kp = 6000 + whl * 200, fric = whl * 24, e0, e1, de, e, w;

@@ -4,8 +4,6 @@
 static const char *const N_LWAVE[] = {"SIN", "TRI", "SAW", "SQR", "S&H"};
 static const char *const N_AMODE[] = {"OFF", "UP", "DN", "UPDN", "RND", "ORD", "REPEAT"};
 static const char *const N_DIV[] = {"1/4", "1/8", "1/16", "1/32", "8T", "16T", "1/2", "1/1", "2BAR", "4BAR"};
-static const char *const N_SCALE[] = {"CHR", "MAJ", "MIN", "DOR", "MIX", "PEN", "MPEN", "HARM",
-                                    "PHRY", "LYD", "LOC", "MEL", "BLUES", "WHOLE", "DIMHW", "DIMWH"};
 static const char *const N_ONOFF[] = {"OFF", "ON"};
 /* seq.c kb_map; 1 = SNAP (stored projects: the former ON); 3 = SEQ: SNAP, and the sequencer's notes snap too as
  * they play (seq.c seq_step; the steps keep what was written). Append-only: older projects hold 0..2 */
@@ -67,6 +65,19 @@ static const param_desc_t TP[P_COUNT] = {
     [P_AORDER] = PE("ORD", N_ORDER, 0),
     [P_ROOT] = PD("ROOT", F_NOTE, 0, 11, 0),
     [P_SCALE] = PE("SCL", N_SCALE, 0),
+    [P_TC0] = {"1", F_INT, -63, 63, 0, 0, "ct"},
+    [P_TC1] = {"b2", F_INT, -63, 63, 0, 0, "ct"},
+    [P_TC2] = {"2", F_INT, -63, 63, 0, 0, "ct"},
+    [P_TC3] = {"b3", F_INT, -63, 63, 0, 0, "ct"},
+    [P_TC4] = {"3", F_INT, -63, 63, 0, 0, "ct"},
+    [P_TC5] = {"4", F_INT, -63, 63, 0, 0, "ct"},
+    [P_TC6] = {"b5", F_INT, -63, 63, 0, 0, "ct"},
+    [P_TC7] = {"5", F_INT, -63, 63, 0, 0, "ct"},
+    [P_TC8] = {"b6", F_INT, -63, 63, 0, 0, "ct"},
+    [P_TC9] = {"6", F_INT, -63, 63, 0, 0, "ct"},
+    [P_TC10] = {"b7", F_INT, -63, 63, 0, 0, "ct"},
+    [P_TC11] = {"7", F_INT, -63, 63, 0, 0, "ct"},
+
     [P_QUANT] = PE("QNT", N_QUANT, 0),
     [P_TRANS] = PD("TRN", F_SEMI, -24, 24, 0),
     [P_SLEN] = PD("LEN", F_STEPS, 1, NSTEP, 16),
@@ -368,7 +379,11 @@ static const page_t PAGES[] = {
     {"CHORUS", FAM_FX, SC_GLOBAL, GR_NONE, {G_CRATE, G_CDEPTH, 0xFF, 0xFF}},
     {"TAPE", FAM_FX, SC_GLOBAL, GR_NONE, {G_TAPE, G_CRSH, 0xFF, 0xFF}},             /* GHOULBOX (tape.c) */
     {"SCL", FAM_SCL, SC_TRACK, GR_SCALE, {P_ROOT, P_SCALE, P_QUANT, P_TRANS}},
-    {"CHORD", FAM_SCL, SC_TRACK, GR_CHORD, {P_CHRD, P_VOIC, 0xFF, 0xFF}},   /* SCL again: the chord keys (chord.c) */
+    {"CHORD", FAM_SCL, SC_TRACK, GR_CHORD, {P_CHRD, P_VOIC, 0xFF, 0xFF}},
+    {"TUNE 1", FAM_SCL, SC_TRACK, GR_SCALE, {P_TC0, P_TC1, P_TC2, P_TC3}},
+    {"TUNE 2", FAM_SCL, SC_TRACK, GR_SCALE, {P_TC4, P_TC5, P_TC6, P_TC7}},
+    {"TUNE 3", FAM_SCL, SC_TRACK, GR_SCALE, {P_TC8, P_TC9, P_TC10, P_TC11}},
+   /* SCL again: the chord keys (chord.c) */
     {"EDIT 1", FAM_EDIT, SC_ENGINE, GR_NONE, {P_E0, P_E1, P_E2, P_E3}},
     {"EDIT 2", FAM_EDIT, SC_ENGINE, GR_NONE, {P_E4, P_E5, P_E6, P_E7}},
     {"SLICES", FAM_EDIT, SC_TRACK, GR_SLICES, {0xFF, 0xFF, 0xFF, 0xFF}},   /* SLICE only: the slices by hand (ui_slice.c) */

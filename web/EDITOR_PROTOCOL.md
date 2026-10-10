@@ -1,5 +1,8 @@
 # Felucca editor protocol (SysEx over USB-MIDI)
 
+**GHOULBOX 1.2-dev:** `INFO` reports P_COUNT 103 and P_E0 95. IDs 83–94 are twelve root-relative cent trims (−63..63); scale ID 26 now has 40 enum entries. `DESC` sends all forty names, so readers must not cap enum strings at 24. Wire command numbers and v14 encoding are unchanged. Projects use GBM1 (3,648 bytes), with legacy FUN8 import; stored preset versions are 6/7. See [microtuning compatibility and controls](../docs/MICROTONAL.md). This extension has host coverage only.
+
+
 The firmware side is `firmware/src/editor.c`. Commands 1-15, track selection, dumps, step reads
 and parameter writes (27, 29, 30, 31) were checked on hardware. `tests/editor_test.c` also exercises the real C
 handler, malformed transfers and stop timeouts against simulated flash. User-preset

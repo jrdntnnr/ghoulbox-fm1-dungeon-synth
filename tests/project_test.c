@@ -23,6 +23,7 @@
 #undef main
 #define PROJ_HOST 1                             /* (trk_def_engine: engines.c, through hostsim.c) */
 #include "../firmware/src/project.c"
+#include "legacy_project.h"
 
 static int check(const char *what, int ok)
 {
@@ -173,10 +174,10 @@ int main(void)
     int bad = 0, ok;
 
     bad += check("layout: SLICER after DETUNE, then the matrix just before P_E0",
-                 P_SLCR == P_DETUNE + 1 && P_SLDEPTH + 1 == P_M1SRC && P_M4AMT + 1 == P_FM1_ATK && P_FM4_LEVEL + 1 == P_CHRD && P_VOIC + 1 == P_E0 && P_E0 == 83 &&
-                 P_COUNT == PROJ_NP_V3 + 34u && PROJ_NP_V3 == PROJ_NP_V2 + 4u);
+                 P_SLCR == P_DETUNE + 1 && P_SLDEPTH + 1 == P_M1SRC && P_M4AMT + 1 == P_FM1_ATK && P_FM4_LEVEL + 1 == P_CHRD && P_VOIC + 1 == P_TC0 && P_TC11 + 1 == P_E0 && P_E0 == 95 &&
+                 P_COUNT == PROJ_NP_V3 + 46u && PROJ_NP_V3 == PROJ_NP_V2 + 4u);
     bad += check("FUN8 fits one flash object, the retained cache in NOINIT", sizeof(project_store_t) <= 4096u - 256u &&
-                 sizeof(project_store_t) == 3584u && 0xC8u + 4u * sizeof(project_store_t) <= 0x3D50u);
+                 sizeof(project_store_t) == 3648u && 0xC8u + 4u * sizeof(project_store_t) <= 0x3D50u);
 
     /* format 2, as written before the SLICER */
     memset(&v2, 0, sizeof v2);
@@ -418,8 +419,8 @@ int main(void)
         project_store_t st, st2;
         uint32_t i, zero = 1;
         bad += check("FUN8 name at the end of the reserved tail, the FM6 patches before it, after the data",
-                     PROJ_NAME_OFF == 3568u && PROJ_FM6_OFF == 3056u && 68u + NTRK * (P_COUNT + 2u + NSTEP * 9u) +
-                     sizeof(chain_config_t) + sizeof(motion_store_t) + 16u == PROJ_FM6_OFF);
+                     PROJ_NAME_OFF == 3632u && PROJ_FM6_OFF == 3120u && 68u + NTRK * (P_COUNT + 2u + NSTEP * 9u) +
+                     sizeof(chain_config_t) + sizeof(motion_store_t) + 32u == PROJ_FM6_OFF);
         memset(&a, 0, sizeof a);
         a.magic = PROJ_MAGIC; a.size = sizeof a; a.parts = NPART; a.phys = PROJ_PHYS;
         chain_defaults(&a.chain);
@@ -468,7 +469,7 @@ int main(void)
         }
         memcpy(a.name, "FM SONG", 7);
         a.sum = proj_sum(&a);
-        ok = proj_pack(&st, &a) && ((uint32_t *)st.raw)[0] == 0x46554E38u && proj_import(&c, &st, sizeof st);
+        ok = proj_pack(&st, &a) && ((uint32_t *)st.raw)[0] == 0x47424D31u && proj_import(&c, &st, sizeof st);
         for (k = 0; k < NTRK; k++)
             ok &= !memcmp(c.fm6[k], FM6_FACTORY[k * 2u], FM6_PACKED) && c.t[k].engine == ENGI_FM6 &&
                   !memcmp(st.raw + PROJ_FM6_OFF + k * FM6_PACKED, FM6_FACTORY[k * 2u], FM6_PACKED);
@@ -477,13 +478,7 @@ int main(void)
         bad += check("FUN8: a patch byte changed: the hash refuses it", !proj_import(&c, &st, sizeof st));
         st.raw[PROJ_FM6_OFF + 5] ^= 1u;
         /* the same music as FUN7 (3388 bytes, no patches): the data where it was, the name at 3372 */
-        memcpy(v7, st.raw, PROJ_STORE_V7 - 16u);
-        memset(v7 + PROJ_FM6_OFF, 0, PROJ_STORE_V7 - 16u - PROJ_FM6_OFF);
-        memcpy(v7 + PROJ_STORE_V7 - 16u, st.raw + PROJ_NAME_OFF, 12);
-        ((uint32_t *)v7)[0] = 0x46554E37u;
-        ((uint32_t *)v7)[1] = PROJ_STORE_V7;
-        sum = proj_hash(v7, PROJ_STORE_V7 - 4u);
-        memcpy(v7 + PROJ_STORE_V7 - 4u, &sum, 4);
+        legacy_fun7(v7, &st);
         ok = proj_import(&c, v7, sizeof v7);
         for (k = 0; k < NTRK; k++)
             init &= !memcmp(c.fm6[k], FM6_INIT, FM6_PACKED);
@@ -567,13 +562,7 @@ int main(void)
                      c.motion.count == 2u && c.motion.event[0].param == P_CHOR && c.motion.event[1].place == 3u &&
                      c.motion.event[1].param == P_E4 && motion_valid(&c.motion) && proj_ok(&c));
         bad += check("  imported again: as it is (FM6 now)", proj_import(&d, &c, sizeof c) && !memcmp(&d, &c, sizeof d));
-        memcpy(v7, st.raw, PROJ_STORE_V7 - 16u);       /* the same as FUN7 (as the FUN8 block above) */
-        memset(v7 + PROJ_FM6_OFF, 0, PROJ_STORE_V7 - 16u - PROJ_FM6_OFF);
-        memset(v7 + PROJ_STORE_V7 - 16u, 0, 12);
-        ((uint32_t *)v7)[0] = 0x46554E37u;
-        ((uint32_t *)v7)[1] = PROJ_STORE_V7;
-        sum = proj_hash(v7, PROJ_STORE_V7 - 4u);
-        memcpy(v7 + PROJ_STORE_V7 - 4u, &sum, 4);
+        legacy_fun7(v7, &st);
         bad += check("FUN7 with a DIGITAL track: the same", proj_import(&c, v7, sizeof v7) && FM4_OK(c) &&
                      c.motion.count == 2u);
         memset(&a.motion, 0, sizeof a.motion);

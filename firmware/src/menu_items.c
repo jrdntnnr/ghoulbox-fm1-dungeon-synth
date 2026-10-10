@@ -72,7 +72,9 @@ static uint32_t menu_serial_at;                        /* fm1_ms | 1 of the edit
 static void usb_serial_apply(void)
 {
 #if FELUCCA_CDC
-    if (menu_serial_at && fm1_ms - menu_serial_at < 200u)
+    /* The nonzero timestamp uses ms | 1: at even ms it is one tick ahead.
+     * Signed subtraction keeps that tick inside the delay across wrap too. */
+    if (menu_serial_at && (int32_t)(fm1_ms - menu_serial_at) < 200)
         return;
     menu_serial_at = 0;
     usb_cdc_switch(FELUCCA_CDC_DEFAULT && !(ui_prefs & PREF_SERIAL_OFF));   /* (a FELUCCA_CDC_DEFAULT=0 build: off) */

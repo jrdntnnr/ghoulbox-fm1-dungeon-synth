@@ -15,6 +15,7 @@
  * tests/run_tests.sh. */
 #define UI_TEST_NO_MAIN 1
 #include "ui_test.c"
+#include "legacy_project.h"
 
 /* track 1 alone, a one-step loop: step 0 NOTE 60 (flags), RATCH hits, GATE 64, no swing; the transport started */
 static track_t *one_step(uint32_t hits, uint32_t flags)
@@ -189,10 +190,7 @@ static int projects(void)
         project_store_t old;
         uint32_t sum, magic = PROJ_MAGIC_V7, size = PROJ_STORE_V7;
         project_t fun7;
-        memcpy(&old, &packed, sizeof old);
-        memcpy(old.raw, &magic, 4); memcpy(old.raw + 4, &size, 4);
-        memset(old.raw + PROJ_STORE_V7 - 4u - PROJ_NAME_LEN, 0, PROJ_NAME_LEN);
-        sum = proj_hash(old.raw, PROJ_STORE_V7 - 4u); memcpy(old.raw + PROJ_STORE_V7 - 4u, &sum, 4);
+        legacy_fun7(old.raw, &packed);
         ok = proj_import(&fun7, &old, PROJ_STORE_V7);
         for (k = 0; ok && k < NTRK; k++)
             for (i = 0; i < NSTEP; i++)

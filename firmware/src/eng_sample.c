@@ -113,7 +113,7 @@ static void smp_user_scan(uint32_t k)
  * (engines.c snd_missing, ui_input.c sample_notice). */
 static void smp_sine(int32_t *out, uint32_t n, const vmod_t *m, int32_t d16, int32_t lp, uint32_t *ph, int32_t *y)
 {
-    uint32_t i, p = *ph, inc = pitch_inc((uint32_t)clamp(m->pitch16 + d16, 0, 2047));
+    uint32_t i, p = *ph, inc = tuning_rate(pitch_inc((uint32_t)clamp(m->pitch16 + d16, 0, 2047)), m->tuning_fine);
     int32_t s = *y;
     for (i = 0; i < n; i++, p += inc) {
         s += mulq15((sine_i(p) >> 1) - s, lp);
@@ -201,7 +201,9 @@ static void sample_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, cons
     const smp_zone_t *z = smp_zone((uint32_t)v->s[4]);
     uint32_t i, frac = v->ph[1];
     int32_t d16 = clamp(m->pitch16 + p[P_E1] * 16 - z->root16, -1536, 576);   /* <= 3 octaves up: bounded decode load */
-    uint32_t r = pow2_q16(d16), stepq = (r >> 8) * (z->rate >> 8);   /* Q16 samples per output */
+    uint32_t r = pow2_q16(d16), stepq = (r >> 8) * (z->rate >> 8);
+    if (tuning_cents(t, v->note))
+        stepq = tuning_rate((uint32_t)(((uint64_t)r * z->rate) >> 16), m->tuning_fine);   /* Q16 samples per output */
     int32_t bits = p[P_E2], lp = 4000 + ((clamp((p[P_E4] << 8) + m->cutoff, 0, 127 << 8) * 28767) >> 15);
     int32_t drv = p[P_E6], sh = bits / 10;
     if (v->s[6] == 2) {                               /* no sample data: the sine at the note's pitch + TUNE */

@@ -323,6 +323,13 @@ static void graph_scale(const track_t *t, uint16_t c)
         int32_t x = 13 + (int32_t)i * 18;
         uint16_t col = (mask >> deg) & 1u ? (deg == 0u ? T_ACCENT : c) : T_RAISE;
         cv_rrect(x + 3, BLACK[i] ? 6 : 38, 10, 52, 3, col, T_SURF);
+        int32_t cents = tuning_cents(t, i), y = BLACK[i] ? 43 : 75;
+        if (cents) { /* arrows on altered keys: down = flat, up = sharp */
+            int32_t tip = y + (cents < 0 ? 5 : -5);
+            cv_line(x + 8, y - 5, x + 8, y + 5, T_SURF);
+            cv_line(x + 5, y, x + 8, tip, T_SURF);
+            cv_line(x + 11, y, x + 8, tip, T_SURF);
+        }
     }
 }
 /* CHORD (SCL 2): the chord's name ("Cm7": the last one the track played; before any, the one on its ROOT from
