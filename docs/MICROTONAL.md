@@ -1,6 +1,6 @@
 # Microtonal GHOULBOX
 
-This branch combines GHOULBOX 1.4 (`b61a931`) and Felucca 1.5.1 (`a4d7ca2`) with 40 factory scales, one custom scale and real per-voice tuning. The JieLi target build succeeds with the hidden SLICE engine omitted. Physical FM-1 validation remains pending; see [integration status](INTEGRATION-STATUS.md).
+This branch combines GHOULBOX 1.4 (`b61a931`) and Felucca 1.5.1 (`a4d7ca2`) with 42 factory scales, one custom scale and real per-voice tuning. The JieLi target build succeeds with the hidden SLICE engine omitted. Physical FM-1 validation remains pending; see [integration status](INTEGRATION-STATUS.md).
 
 ## Play Rast or Bayati
 
@@ -30,7 +30,7 @@ For C Rast, DIA7 on C plays C, E half-flat, G and B half-flat. Set the **3** tri
 
 MAJ/MIN/DOM7 and the other fixed shapes retain their fixed key intervals, with the track's tuning applied afterwards. Use DIA3/DIA7 for scale-derived harmonization. The generator is a creative chord tool, not a model of traditional maqam harmony or melodic development.
 
-Keyboard, incoming MIDI, chord/UP arpeggiation, chord recording and sequencer playback are covered by automated tests. The test renders every simultaneous oscillator voice across 7,560 combinations of nine maqam presets, twelve roots, seven degrees, two chord types and five voicings, with custom trims. All measured errors are below 0.5 cents. The dedicated test also passes ASan/UBSan. External MIDI output remains ordinary note numbers.
+Keyboard, incoming MIDI, chord/UP arpeggiation, chord recording and sequencer playback are covered by automated tests. The test renders every simultaneous oscillator voice across 9,240 combinations of eleven maqam and Shur presets, twelve roots, seven degrees, two chord types and five voicings, with custom trims. All measured errors are below 0.5 cents. The dedicated test also passes ASan/UBSan. External MIDI output remains ordinary note numbers.
 
 ## Scala import
 
@@ -54,6 +54,32 @@ The six presets below use editable quarter-tone starting points. They describe p
 | BAY SHUR | 0, 150, 300, 500, 600, 900, 1000 |
 
 The two Rast and two Bayati entries offer alternative upper ajnas. References: [MaqamWorld Rast](https://www.maqamworld.com/en/maqam/rast.php), [Bayati](https://www.maqamworld.com/en/maqam/bayati.php), [Suznak](https://www.maqamworld.com/en/maqam/suznak.php), [Bayati Shuri](https://www.maqamworld.com/en/maqam/bayati_shuri.php). The quarter-tone cent values are this implementation's starting tunings, not a claim that a single fixed tuning covers performance practice.
+
+## Persian Shur (experimental)
+
+SHUR1 and SHUR2 are a pilot for Persian dastgāh support. They are **experimental 24-EDO starting points**, not reviewed transcriptions of any radif. A dastgāh is a modal system (note hierarchy, gusheh, darāmad, forud); a pitch collection represents only part of one.
+
+| Display | ID | Starting pitches, cents above ROOT |
+| --- | --- | --- |
+| SHUR1 | 41 | 0, 150, 300, 500, 700, 800, 1000 |
+| SHUR2 | 42 | 0, 150, 300, 500, 650, 800, 1000 |
+
+- SHUR1 has the same pitches as BAYATI. The Persian name is the only difference; the koron second is a 24-EDO approximation.
+- SHUR2 lowers the fifth by 50 cents. The two rows share the same seven keys, so switching between them retunes only the fifth. Note identities, WHITE/SNAP keys and recorded steps stay the same.
+- Performers place the koron second and the variable fifth differently. Adjust them with the TUNE pages: over ROOT D, control **2** moves E koron, control **5** moves A.
+
+Audition, on the device or in the web editor:
+
+1. Choose a pitched sound, **VOICE POLY**, **ROOT D**, **QNT WHITE**, **SCL SHUR1**.
+2. Play the white keys C4 to C5: D, E koron, F, G, A, B♭, C, D.
+3. Hold A (the G key) and switch to **SCL SHUR2**. The held note follows the new tuning (LIVE); there is no per-note snapshot yet.
+4. Save the project, reload it and confirm SCL still reads SHUR2.
+
+Without a device, [SHUR_REVIEW.md](SHUR_REVIEW.md) renders the same comparisons to audio files for a reviewer.
+
+**Compatibility:** selecting SHUR1/2 needs no new project format; GBM2 stores the scale ID. Firmware without these rows clamps IDs 41–42 to CUSTOM when loading. With no custom mask saved, SNAP and WHITE then play only the tonic. Keep the project on this firmware or later.
+
+## Other added scales
 
 The other additions are HIJAZ, HIJAZKAR, NIKRIZ, HARM MAJ, DOR b2, LYD AUG, LYD DOM, MIX b6, LOC #2, ALTERED, HUNG MIN, UKR DOR, MAJ BLUS, HIRAJOS, INSEN, IWATO, YO and EGYPT. Their initial offsets are zero; any key can be adjusted on the tuning pages.
 
@@ -90,6 +116,6 @@ sh tests/run_tuning_tests.sh
 
 The command generates missing local headers, checks the scale catalog, runs native pitch/input/project/UI/editor tests, compares the audio reference renders, checks UI layouts, and runs the web protocol and backup tests. It does not need the JieLi SDK, create a firmware package, or flash a device. Logs are in `build/assessment/`; UI renders are in `build/ui_tuning/`.
 
-The pitch test measures actual sine output for quarter-tones and fine adjustments, checks simultaneous C/E/G tuning, and sweeps all 40 factory scales, twelve roots, MIDI notes 12–115 and every permitted trim through the oscillator pitch calculation. The measured worst calculation error is below 0.5 cents. Additional tests inspect SAMPLE/GRAIN playback rates at ±1-cent and quarter-tone settings and GURDY's independent melody/drone phases. This is not an acoustic accuracy guarantee for every sampled or physical instrument.
+The pitch test measures actual sine output for quarter-tones and fine adjustments, checks simultaneous C/E/G tuning, and sweeps every factory scale, twelve roots, MIDI notes 12–115 and every permitted trim through the oscillator pitch calculation. The measured worst calculation error is below 0.5 cents. Additional tests inspect SAMPLE/GRAIN playback rates at ±1-cent and quarter-tone settings and GURDY's independent melody/drone phases. This is not an acoustic accuracy guarantee for every sampled or physical instrument.
 
-The catalog lives in `assets/scales.json`. IDs are append-only. Regenerate `firmware/src/scales.h` with `python3 tools/gen_scales.py`; update the web mock's names too. The web test compares those names with the catalog and the firmware descriptors. The firmware build checks the generated header for staleness.
+The catalog lives in `assets/scales.json`. IDs are append-only. Regenerate `firmware/src/scales.h` with `python3 tools/gen_scales.py`; update the web mock's names too. The generator refuses any change to IDs 0–40 (CUSTOM stays at 40, `SCALE_CUSTOM_ID` in the header). The web test compares those names with the catalog and the firmware descriptors. The firmware build checks the generated header for staleness.

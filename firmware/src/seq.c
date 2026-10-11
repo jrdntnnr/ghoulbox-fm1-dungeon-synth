@@ -77,7 +77,7 @@ static int32_t song_key(uint32_t k)
 
 static uint32_t scale_mask(const track_t *t)
 {
-    if (t->p[P_SCALE] == 40)
+    if (t->p[P_SCALE] == SCALE_CUSTOM_ID)
         return ((t->p[P_TMASK0] & 63u) | (t->p[P_TMASK1] & 63u) << 6) | 1u;
     return SCALE_MASK[clamp(t->p[P_SCALE], 0, sizeof SCALE_MASK / sizeof SCALE_MASK[0] - 1)];
 }

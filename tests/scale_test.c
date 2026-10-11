@@ -75,6 +75,39 @@ static void mapping_test(void)
     puts("scales: all 16 scales, 12 roots, octave/transpose ranges, bypass, drums and SNAP ok");
 }
 
+/* Appended scales keep CUSTOM at 40. SHUR1 and B share keys: WHITE and SNAP
+ * give the same note identities in both, so switching them only retunes. */
+static void appended_test(void)
+{
+    static const uint8_t SHUR[] = {62, 64, 65, 67, 69, 70, 72, 74};   /* D, white keys C4 up */
+    track_t *t = &trk[0];
+    uint32_t s, k, w;
+    assert(!strcmp(N_SCALE[SCALE_CUSTOM_ID], "CUSTOM"));
+    t->p[P_SCALE] = SCALE_CUSTOM_ID;
+    t->p[P_TMASK0] = t->p[P_TMASK1] = 0;
+    assert(scale_mask(t) == 1u);
+    for (s = SCALE_CUSTOM_ID + 1u; s < NELEM(N_SCALE); s++) {
+        if (strncmp(N_SCALE[s], "SHUR", 4))
+            continue;
+        t->p[P_SCALE] = (int16_t)s;
+        t->p[P_ROOT] = 2;
+        t->p[P_TRANS] = 0;
+        song.octave = 0;
+        t->p[P_QUANT] = QN_WHITE;
+        for (k = 7u, w = 0; w < NELEM(SHUR); k++) {
+            if (k != WHITE_KEYS[w + 4u])
+                continue;
+            assert(kb_map(t, k) == SHUR[w]);
+            w++;
+        }
+        t->p[P_QUANT] = QN_SNAP;
+        assert(kb_map(t, 10) == 62u && kb_map(t, 13) == 65u && kb_map(t, 15) == 67u);   /* D# F# G#: D F G */
+    }
+    t->p[P_QUANT] = 0;
+    t->p[P_ROOT] = 0;
+    puts("scales: CUSTOM stays at 40; SHUR1/2 map the same WHITE and SNAP keys");
+}
+
 static void key_events_test(void)
 {
     track_t *t = &trk[0];
@@ -426,6 +459,7 @@ int main(void)
 {
     host_tracks_init();
     mapping_test();
+    appended_test();
     key_events_test();
     seq_quant_test();
     arp_follow_test();

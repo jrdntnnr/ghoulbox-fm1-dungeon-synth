@@ -4,16 +4,18 @@
 #define TUNING_TEST_NO_MAIN 1
 #include "tuning_test.c"
 
-static const struct { uint8_t key[7]; int8_t cents[7]; } MAQAM[] = {
-    {{0,2,4,5,7,9,11}, {0,0,-50,0,0,0,-50}}, /* Rast */
-    {{0,2,4,5,7,9,10}, {0,0,-50,0,0,0,0}},   /* Rast Nahawand */
-    {{0,2,3,5,7,8,10}, {0,-50,0,0,0,0,0}},   /* Bayati */
-    {{0,2,3,5,7,9,10}, {0,-50,0,0,0,-50,0}}, /* Bayati Rast */
-    {{0,2,4,5,7,8,11}, {0,0,-50,0,0,0,0}},   /* Suznak */
-    {{0,2,3,5,6,9,10}, {0,-50,0,0,0,0,0}},   /* Bayati Shuri */
-    {{0,1,4,5,7,8,10}, {0}},                  /* Hijaz */
-    {{0,1,4,5,7,8,11}, {0}},                  /* Hijazkar */
-    {{0,2,3,6,7,9,10}, {0}},                  /* Nikriz */
+static const struct { const char *name; uint8_t key[7]; int8_t cents[7]; } MAQAM[] = {
+    {"RAST",     {0,2,4,5,7,9,11}, {0,0,-50,0,0,0,-50}}, /* Rast */
+    {"RAST NH",  {0,2,4,5,7,9,10}, {0,0,-50,0,0,0,0}},   /* Rast Nahawand */
+    {"BAYATI",   {0,2,3,5,7,8,10}, {0,-50,0,0,0,0,0}},   /* Bayati */
+    {"BAY RAST", {0,2,3,5,7,9,10}, {0,-50,0,0,0,-50,0}}, /* Bayati Rast */
+    {"SUZNAK",   {0,2,4,5,7,8,11}, {0,0,-50,0,0,0,0}},   /* Suznak */
+    {"BAY SHUR", {0,2,3,5,6,9,10}, {0,-50,0,0,0,0,0}},   /* Bayati Shuri */
+    {"HIJAZ",    {0,1,4,5,7,8,10}, {0}},                  /* Hijaz */
+    {"HIJAZKAR", {0,1,4,5,7,8,11}, {0}},                  /* Hijazkar */
+    {"NIKRIZ",   {0,2,3,6,7,9,10}, {0}},                  /* Nikriz */
+    {"SHUR1",   {0,2,3,5,7,8,10}, {0,-50,0,0,0,0,0}},   /* Shur, experimental */
+    {"SHUR2",   {0,2,3,5,7,8,10}, {0,-50,0,0,-50,0,0}}, /* Shur, koron fifth, experimental */
 };
 
 static void chord_reset(void)
@@ -56,7 +58,7 @@ static void maqam_sweep(void)
     for(unsigned degree=0;degree<7;degree++) for(unsigned mode=CH_DIA3;mode<=CH_DIA7;mode++)
     for(unsigned voicing=VC_CLOSE;voicing<=VC_BASS;voicing++) {
         chord_reset(); track_t *t=&trk[0]; uint8_t notes[4]; int cents[4];
-        t->p[P_SCALE]=16+s; t->p[P_ROOT]=root; t->p[P_CHRD]=mode; t->p[P_VOIC]=voicing;
+        t->p[P_SCALE]=scale_id(MAQAM[s].name); t->p[P_ROOT]=root; t->p[P_CHRD]=mode; t->p[P_VOIC]=voicing;
         /* Include non-quarter-tone owner adjustments on two independent keys. */
         t->p[P_TC0+MAQAM[s].key[1]]=13; t->p[P_TC0+MAQAM[s].key[2]]=-7;
         kb_note[7]=36+root+MAQAM[s].key[degree]; key_on(7,t);
@@ -112,7 +114,7 @@ static void input_paths(void)
 static void custom_and_labels(void)
 {
     chord_reset(); track_t *t=&trk[0]; uint8_t nn[4]; int32_t r; uint16_t mask; char name[12];
-    t->p[P_SCALE]=40; t->p[P_TMASK0]=t->p[P_TMASK1]=63; t->p[P_TC4]=-37;
+    t->p[P_SCALE]=SCALE_CUSTOM_ID; t->p[P_TMASK0]=t->p[P_TMASK1]=63; t->p[P_TC4]=-37;
     kb_note[7]=60; key_on(7,t);
     const uint8_t all[]={60,62,64,66}; const int ac[]={0,0,-37,0};
     sounding(all,ac,4); key_off(7,t); released();
