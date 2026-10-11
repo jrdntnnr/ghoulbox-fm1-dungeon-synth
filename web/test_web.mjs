@@ -254,7 +254,7 @@ async function editorMock() {
   await rq(E.req.uiSet(3, 0));
   const scale = E.parse[E.CMD.DESC](await rq(E.req.desc(0, 26)));
   const scaleNames = JSON.parse(readFileSync(join(HERE, "../assets/scales.json"), "utf8")).map(s => s.name);
-  ok(scale.label === "SCL" && scale.max === 40 && eq(scale.names, scaleNames), "editor: all 41 scale names exposed");
+  ok(scale.label === "SCL" && scale.max === scaleNames.length - 1 && eq(scale.names, scaleNames), `editor: all ${scaleNames.length} scale names exposed`);
   const scaleSet = E.parse[E.CMD.SET](await rq(E.req.set(0, scale.id, 40)));
   ok(scaleSet.value === 40, "editor: new scale selection is not clamped to the old range");
   const dump = E.parse[E.CMD.DUMP](await rq(E.req.dump()), info);

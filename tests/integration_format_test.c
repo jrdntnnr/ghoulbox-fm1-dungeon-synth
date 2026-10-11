@@ -61,7 +61,7 @@ int main(void)
     assert(up_valid(&u));up_params(&u,values,def);
     assert(values[P_LN0]==111&&values[P_TC0]==0&&values[P_E0]==3&&values[P_E4]==109);
     track_t *t=&trk[0];host_tracks_init();host_preset(t,0,0);
-    t->p[P_SCALE]=40;t->p[P_TMASK0]=0x35;t->p[P_TMASK1]=0x2a;t->p[P_TC4]=-50;
+    t->p[P_SCALE]=SCALE_CUSTOM_ID;t->p[P_TMASK0]=0x35;t->p[P_TMASK1]=0x2a;t->p[P_TC4]=-50;
     assert(scale_mask(t)==0xab5&&tuning_cents(t,64)==-50&&tuning_cents(t,67)==0);
     t->p[P_ROOT]=2;assert(tuning_cents(t,66)==-50);
     t->p[P_TMASK0]=t->p[P_TMASK1]=0;assert(scale_mask(t)==1); /* tonic always playable */

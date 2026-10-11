@@ -28,14 +28,22 @@ static voice_t *voice(track_t *t, unsigned note)
     for(unsigned i=0;i<NVOICE;i++) if(t->v[i].active && t->v[i].note==note) return &t->v[i];
     assert(!"missing voice"); return 0;
 }
+/* a factory scale's ID by its display name: tests never hard-code appended IDs */
+static unsigned scale_id(const char *name)
+{
+    for(unsigned s=0;s<NELEM(N_SCALE);s++) if(!strcmp(N_SCALE[s],name)) return s;
+    assert(!"missing scale"); return 0;
+}
 static double hz(unsigned note, int cents) { return 440*pow(2, ((int)note-69+cents/100.0)/12); }
 static double error(double got, double want) { return 1200*log2(got/want); }
 
 static void pitch_math(void)
 {
     reset(); track_t *t=&trk[0]; double worst=0;
-    assert(NELEM(SCALE_CENTS)==41 && NELEM(SCALE_MASK)==41);
-    for(int s=0;s<40;s++) for(int root=0;root<12;root++) {
+    const int nscale=(int)NELEM(SCALE_CENTS);
+    assert(NELEM(SCALE_MASK)==NELEM(SCALE_CENTS) && NELEM(N_SCALE)==NELEM(SCALE_CENTS));
+    assert(nscale>SCALE_CUSTOM_ID && !strcmp(N_SCALE[SCALE_CUSTOM_ID],"CUSTOM"));
+    for(int s=0;s<nscale;s++) for(int root=0;root<12;root++) {
         t->p[P_SCALE]=s; t->p[P_ROOT]=root;
         for(int n=12;n<116;n++) for(int trim=-63;trim<=63;trim++) {
             int pc=(n+12-root)%12, c=SCALE_CENTS[s][pc]+trim;
@@ -56,7 +64,7 @@ static void pitch_math(void)
     t->p[P_ROOT]=2; assert(tuning_cents(t,66)==-37 && !tuning_cents(t,64));
     t->eng_req=ENGI_DRUM; assert(!tuning_cents(t,66));
     t->eng_req=ENGI_SLICE; assert(!tuning_cents(t,66));
-    printf("tuning: 40 scales, 12 tonics, 104 notes and all trims: worst %.3f cents\n",worst);
+    printf("tuning: %d scales, 12 tonics, 104 notes and all trims: worst %.3f cents\n",nscale,worst);
 }
 static double audio_frequency(unsigned scale, unsigned note, int trim)
 {
@@ -214,6 +222,8 @@ static void persistence_test(void)
         assert(!memcmp(q.fm6[t],FM6_FACTORY[t],FM6_PACKED));
         q.t[t].p[P_SCALE]=16+t; q.t[t].p[P_TC0+t]=-63+t; q.t[t].p[P_TC11]=63;
     }
+    q.t[3].p[P_SCALE]=scale_id("SHUR2");   /* an appended ID saves in GBM2 and loads unclamped */
+    assert(param_fit(&TP[P_SCALE],q.t[3].p[P_SCALE])==q.t[3].p[P_SCALE]);
     assert(q.motion.event[0].param==P_E4 && q.motion.event[0].value==77);
     q.sum=proj_sum(&q); assert(proj_pack(&packed,&q));
     assert(proj_import(&r,&packed,sizeof packed) && !memcmp(q.t,r.t,sizeof q.t));
@@ -231,6 +241,42 @@ static void persistence_test(void)
     u.ver=4; assert(!up_valid(&u));
     puts("tuning: frozen GHOULBOX 1.1 project/preset migration, FM6, motion IDs, tuned round trip and corrupt data pass");
 }
+/* Experimental Shur pilot (docs/MICROTONAL.md): A and B share key identities and
+ * differ only at the fifth, so switching them retunes without moving notes. */
+static void shur_test(void)
+{
+    static const int fifth[2]={0,-50};
+    const unsigned id[2]={scale_id("SHUR1"),scale_id("SHUR2")};
+    for(unsigned v=0;v<2;v++) {
+        assert(id[v]>SCALE_CUSTOM_ID && SCALE_MASK[id[v]]==0x5ad);
+        reset(); track_t *t=&trk[0]; t->p[P_SCALE]=id[v]; t->p[P_ROOT]=2;   /* D */
+        const unsigned n[]={62,64,65,67,69,70,72,86,88,93}; const int c[]={0,-50,0,0,fifth[v],0,0,0,-50,fifth[v]};
+        for(unsigned k=0;k<NELEM(n);k++) assert(tuning_cents(t,n[k])==c[k]);
+        t->p[P_TC0+2]=13; assert(tuning_cents(t,64)==-37);   /* trims add, relative to ROOT */
+        t->p[P_TC0+2]=0; t->p[P_ROOT]=7;                     /* G: koron A, D */
+        assert(tuning_cents(t,69)==-50 && tuning_cents(t,74)==fifth[v]);
+    }
+    const struct { unsigned s,n,root; int c; } cases[]={
+        {id[0],64,2,-50},{id[0],69,2,0},{id[1],69,2,-50},{id[1],81,2,-50},{id[1],74,7,-50}
+    };
+    for(unsigned k=0;k<NELEM(cases);k++) {
+        reset(); track_t *t=&trk[0]; int32_t out[CTL];
+        t->p[P_SCALE]=cases[k].s; t->p[P_ROOT]=cases[k].root;
+        trk_note_on(t,cases[k].n,100); track_render(t,out,CTL);
+        voice_t *v=voice(t,cases[k].n); uint32_t before=v->ph[0]; track_render(t,out,CTL);
+        double got=(uint32_t)(v->ph[0]-before)*(double)FS/CTL/4294967296.0;
+        assert(fabs(error(got,hz(cases[k].n,cases[k].c)))<0.5);
+    }
+    /* LIVE policy: a held fifth follows a 1 -> 2 switch; its note identity stays */
+    reset(); track_t *t=&trk[0]; int32_t out[CTL];
+    t->p[P_SCALE]=id[0]; t->p[P_ROOT]=2; trk_note_on(t,69,100);
+    t->p[P_SCALE]=id[1];
+    for(int i=0;i<100;i++) track_render(t,out,CTL);
+    voice_t *v=voice(t,69); uint32_t before=v->ph[0]; track_render(t,out,CTL);
+    assert(fabs(error((uint32_t)(v->ph[0]-before)*(double)FS/CTL/4294967296.0,hz(69,-50)))<0.5);
+    trk_note_off(t,69); assert(!v->gate);
+    puts("tuning: SHUR1/2 pitches, roots, trims, live 1 -> 2 switch and note-off identity pass");
+}
 #ifndef TUNING_TEST_NO_MAIN
-int main(void) { pitch_math(); audio_test(); independent_rates(); auxiliary_rates(); input_test(); persistence_test(); return 0; }
+int main(void) { pitch_math(); audio_test(); independent_rates(); auxiliary_rates(); input_test(); persistence_test(); shur_test(); return 0; }
 #endif
