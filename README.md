@@ -79,6 +79,10 @@ Felucca's sequencer, song mode, effects, editor and backups all work as they do 
   power-on; it borrows the delay's buffer, so it needs no extra RAM.
 - **TAPE and CRSH** (FX > TAPE): the mix through a worn cassette (wow, flutter, saturation, hiss) and a
   cheap sampler's bits and rate.
+- **Drone latch** (hold GLO, then F#4, G#4, A#4 or C#5 for tracks 1–4): a latched track keeps sounding the chord
+  you play after you let go, so you can select another track and play over the drone. A new chord replaces it;
+  pressing a note of the drone stops it. Other tracks never steal its voices (up to 8). The latch isn't saved,
+  and it does nothing on a DRUM track or with the ARP on (ARP HOLD does that job there).
 - **GURDY**, a hurdy-gurdy engine: a bowed melody string, drones you tune, and the trompette's buzzing
   bridge struck in time, in six sounds.
 - **Real recordings**: a bowed psaltery, a Renaissance chamber organ, a baroque tenor recorder and a folk
@@ -388,7 +392,7 @@ The pages by button:
 |---|---|---|
 | HOME | HOME, MIXER, CLOCK (BPM, swing, clock source) | the menu |
 | SEQ | STEP (the piano roll, or the drum grid), DETAIL, AUTOMATION | SEQ TOOLS, on every page |
-| GLO | SONG | the GLO layer (mutes, solos, levels, TAP tempo, D4: MIDI LEARN) |
+| GLO | SONG | the GLO layer (mutes, solos, levels, TAP tempo, D4: MIDI LEARN, drone latch) |
 | SAVE | USER, PRESETS, PHRASES (the pattern loader), PROJECT, TOOLS | UNDO |
 | LFO | LFO, LFO 2, LFO DEST, MOD | MOMENTARY (with a knob) |
 | EDIT | EDIT 1, EDIT 2, VOICE, VOICE 2, VOICE 3 (FM6 adds OPERATOR, OP ENV, OPERATOR 2; DRUM LANES; SLICE SLICES; ANALOG FILTER) | the EDIT layer (the engines; on DRUM the black keys mute lanes) |
