@@ -13,7 +13,7 @@ Every file in this tree that carries an `SPDX-License-Identifier: GPL-3.0-only` 
 
 - the firmware: `firmware/` (app, HAL, update loader)
 - the build script and tools: `build.sh`, `tools/`
-- the web pages (installer, editor, the browser emulator `web/emu/`) and their tests: `web/` (not the Fukiai and DotGothic16 fonts, below)
+- the web pages (installer, editor, the browser emulator `web/emu/`) and their tests: `web/` (not the Fukiai, DotGothic16, Vazirmatn and Reem Kufi fonts, below)
 - the host tests: `tests/`
 
 Three source files are ports and keep the licence of their originals:
@@ -52,6 +52,8 @@ All by Hügelton Instruments (Leo Kuroshita), in this tree:
 | klattsch by Tony Gies (<https://github.com/tgies/klattsch>): design reference for the VOICE engine; no code copied. Formant data from Klatt (1980) / Hillenbrand et al. (1995) | MIT (klattsch) | credit only |
 | X0X by charlesvestal (<https://github.com/charlesvestal/fm1-x0x>), a Felucca fork: the design of the browser emulator (the worklet, the device clock driven by its audio, the exports); its files credit it in their headers | GPL-3.0 | `web/emu/` |
 | DotGothic16 font by The DotGothic16 Project Authors (<https://github.com/fontworks-fonts/DotGothic16>): the browser emulator's knob labels, served with its page (cut to printable ASCII; the font declares no Reserved Font Name) | SIL OFL 1.1 | `web/emu/fonts/DotGothic16-subset.woff`, `LICENSES/OFL-DotGothic16.txt` (also `web/emu/fonts/OFL.txt`) |
+| Vazirmatn font by The Vazirmatn Project Authors (<https://github.com/rastikerdar/vazirmatn>) (SARDAB): the web editor's text and numbers, Latin and Persian, served with its page (cut to Latin and Arabic script; the font declares no Reserved Font Name) | SIL OFL 1.1 | `web/fonts/vazirmatn.woff2`, `LICENSES/OFL-Vazirmatn.txt` (also `web/fonts/OFL-Vazirmatn.txt`) |
+| Reem Kufi font by The Reem Kufi Project Authors (<https://github.com/aliftype/reem-kufi>) (SARDAB): the web editor's headings and Persian wordmark text, served with its page (cut to Latin and Arabic script; its Reserved Font Name "Josefin Sans" is not used) | SIL OFL 1.1 | `web/fonts/reem-kufi.woff2`, `LICENSES/OFL-ReemKufi.txt` (also `web/fonts/OFL-ReemKufi.txt`) |
 | JieLi AC79 SDK by JieLi Technology: three of its files go into every `.fwsc` package (below); none are in this tree | Apache-2.0 | `LICENSES/Apache-2.0.txt` |
 
 On the device, HOME held > ABOUT opens the information screen; turning PRESETS scrolls on into

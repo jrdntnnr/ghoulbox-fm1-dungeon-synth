@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 630 100" role="img" aria-label="SARDAB">
+  <!-- SARDAB wordmark (docs/SARDAB_UI_SPEC.md 3.1): angular capitals with 45-degree cuts; the mark
+       is a stair descending into a shaft. Fill follows currentColor. -->
+  <g fill="currentColor" fill-rule="evenodd">
+      <path d="M4 4h10v10h10v10h10v20H4z M38 4h6v40h-6z" transform="translate(-8.33 -8.33) scale(2.0833)"/>
+      <g transform="translate(120 0)">
+        <path d="M18 0H72V24H26V38H54L72 56V100H0V76H46V62H18L0 44V18Z"/>
+        <path d="M30 0H46L76 100H52L47 82H29L24 100H0ZM32 62H44L38 38Z" transform="translate(86 0)"/>
+        <path d="M0 0H54L72 18V48L60 58L72 100H48L38 64H24V100H0ZM24 22H48V42H24Z" transform="translate(176 0)"/>
+        <path d="M0 0H50L72 22V78L50 100H0ZM24 24H42L48 30V70L42 76H24Z" transform="translate(262 0)"/>
+        <path d="M30 0H46L76 100H52L47 82H29L24 100H0ZM32 62H44L38 38Z" transform="translate(348 0)"/>
+        <path d="M0 0H56L70 14V40L62 50L72 60V86L58 100H0ZM24 22H46V40H24ZM24 60H48V78H24Z" transform="translate(438 0)"/>
+      </g>
+  </g>
+</svg>

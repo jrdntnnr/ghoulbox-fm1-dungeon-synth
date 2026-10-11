@@ -78,6 +78,7 @@ def main(pkg, version, out):
     for f in ("fukiai.ttf", "FUKIAI-LICENSE.txt", "fm1backup.js", "scala.js", "desert.js"):
         if (HERE / f).exists():
             shutil.copy(HERE / f, ed / f)
+    shutil.copytree(HERE / "fonts", ed / "fonts", dirs_exist_ok=True)   # SARDAB: Vazirmatn, Reem Kufi (OFL)
     shutil.copytree(HERE.parent / "assets" / "desert", out / "webapp" / "assets" / "desert", dirs_exist_ok=True)
     (out / "index.html").write_text(
         '<!doctype html><meta charset="utf-8"><title>GHOULBOX</title>'

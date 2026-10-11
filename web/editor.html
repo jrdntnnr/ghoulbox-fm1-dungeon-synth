@@ -9,6 +9,27 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GHOULBOX Editor</title>
+<script>
+  /* SARDAB brand (docs/SARDAB_UI_SPEC.md), the default: ?brand=ghoulbox returns to GHOULBOX, ?theme=light (or dark).
+     Set before the first paint and remembered here. */
+  (function () {
+    const q = new URLSearchParams(location.search), root = document.documentElement;
+    const pick = (key, ok) => {
+      let v = q.get(key);
+      try {
+        if (ok.includes(v)) localStorage.setItem("fm1-" + key, v);
+        else v = localStorage.getItem("fm1-" + key);
+      } catch (e) { /* no storage: the URL alone */ }
+      return ok.includes(v) ? v : null;
+    };
+    const brand = pick("brand", ["sardab", "ghoulbox"]), theme = pick("theme", ["dark", "light"]);
+    if (brand !== "ghoulbox") {
+      root.dataset.brand = "sardab";
+      document.title = "SARDAB Editor";
+    }
+    if (theme) root.dataset.theme = theme;
+  })();
+</script>
 <style>
   /* Fukiai: Hügelton Instruments' icon font (MIT, FUKIAI-LICENSE.txt). Icons are text in .ic spans;
      they stay hidden until the face has loaded (html.fk), so a missing font never shows boxes. */
@@ -153,12 +174,62 @@
   .strip button.selb:disabled { opacity: 1; background: none; color: var(--dim); }
   #sysinfo th { padding-right: 16px; }
   [hidden] { display: none !important; }
+
+  /* SARDAB (docs/SARDAB_UI_SPEC.md 4-5): semantic tokens, mapped onto the editor's five variables so every panel
+     follows. Dark is the identity; light only when asked (data-theme="light"). Fonts (OFL, fonts/): Vazirmatn for text
+     and numbers (its digits are tabular), Reem Kufi (geometric Kufic) for headings and the Persian name. */
+  @font-face { font-family: "Vazirmatn"; src: url("fonts/vazirmatn.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+  @font-face { font-family: "Reem Kufi"; src: url("fonts/reem-kufi.woff2") format("woff2"); font-weight: 400 700; font-display: swap; }
+  :root[data-brand="sardab"] {
+    color-scheme: dark;
+    --sd-bg: #101511; --sd-surface: #262B25; --sd-text: #EADFC9; --sd-value: #DFB587; --sd-active: #DC916C;
+    --sd-muted: #B0A895; --sd-rule: #4F554C; --sd-annotate: #89A89B;
+    --sd-error: #F08C83; --sd-warning: #E8C37C; --sd-success: #9EC7A8;
+    --sd-font: "Vazirmatn", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --sd-font-display: "Reem Kufi", "Vazirmatn", system-ui, sans-serif;
+  }
+  :root[data-brand="sardab"][data-theme="light"] {
+    color-scheme: light;
+    --sd-bg: #EFE9DA; --sd-surface: #E4DACA; --sd-text: #20231D; --sd-value: #614B39; --sd-active: #87462C;
+    --sd-muted: #5C574B; --sd-rule: #AEA697; --sd-annotate: #3A6455;
+    --sd-error: #A3302A; --sd-warning: #7A5A12; --sd-success: #2F6B3E;
+  }
+  :root[data-brand="sardab"] { --bg: var(--sd-bg); --fg: var(--sd-text); --dim: var(--sd-muted); --line: var(--sd-rule);
+                               --theme: var(--sd-value); }
+  :root[data-brand="sardab"] body { font-family: var(--sd-font); }
+  :root[data-brand="sardab"] h2 { font-family: var(--sd-font-display); font-weight: 600; letter-spacing: .02em; }
+  :root[data-brand="sardab"] .tabs button[aria-selected="true"] {   /* the selected tab: a plate with a copper index */
+    background: var(--sd-surface); color: var(--sd-text); box-shadow: inset 0 2px 0 var(--sd-active); }
+  :root[data-brand="sardab"] :focus-visible { outline: 2px solid var(--sd-active); outline-offset: 1px; }
+  .sd-only { display: none; }
+  :root[data-brand="sardab"] .sd-only { display: revert; }
+  :root[data-brand="sardab"] .gb-only { display: none; }
+  :root[data-brand="sardab"] .sd-lockup { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin: 0 0 8px; }
+  .sd-lockup svg { height: 22px; width: auto; color: var(--sd-text); }
+  .sd-lockup [lang="fa"] { font: 600 24px/1 var(--sd-font-display); color: var(--sd-value); }
+  .sd-lockup .sd-desc { font: 500 11px/1 var(--sd-font); letter-spacing: .1em; color: var(--sd-muted); }
+  @media (prefers-reduced-motion: reduce) { :root[data-brand="sardab"] * { transition: none !important; } }
 </style>
 </head>
 <body>
 <main>
   <button class="lang" id="lang"></button>
-  <h1>GHOULBOX Editor</h1>
+  <h1 class="gb-only">GHOULBOX Editor</h1>
+  <h1 class="sd-only sd-lockup">
+    <!-- assets/sardab/sardab-wordmark.svg, inline: the editor is one file -->
+    <svg viewBox="0 0 630 100" role="img" aria-label="SARDAB"><g fill="currentColor" fill-rule="evenodd">
+      <path d="M4 4h10v10h10v10h10v20H4z M38 4h6v40h-6z" transform="translate(-8.33 -8.33) scale(2.0833)"/>
+      <g transform="translate(120 0)">
+        <path d="M18 0H72V24H26V38H54L72 56V100H0V76H46V62H18L0 44V18Z"/>
+        <path d="M30 0H46L76 100H52L47 82H29L24 100H0ZM32 62H44L38 38Z" transform="translate(86 0)"/>
+        <path d="M0 0H54L72 18V48L60 58L72 100H48L38 64H24V100H0ZM24 22H48V42H24Z" transform="translate(176 0)"/>
+        <path d="M0 0H50L72 22V78L50 100H0ZM24 24H42L48 30V70L42 76H24Z" transform="translate(262 0)"/>
+        <path d="M30 0H46L76 100H52L47 82H29L24 100H0ZM32 62H44L38 38Z" transform="translate(348 0)"/>
+        <path d="M0 0H56L70 14V40L62 50L72 60V86L58 100H0ZM24 22H46V40H24ZM24 60H48V78H24Z" transform="translate(438 0)"/>
+      </g></g></svg>
+    <span lang="fa" dir="rtl">سرداب</span>
+    <span class="sd-desc">MICROTONAL SYNTHESIZER · EDITOR</span>
+  </h1>
   <p class="dim"><a href="../installer/" style="color:inherit" data-t="installer"></a></p>
   <!-- always visible: connection, version, sync mode, the tabs and (Sound / Sequencer / Tracks) the track selector -->
   <header class="top">
