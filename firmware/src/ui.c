@@ -1378,6 +1378,9 @@ static void gb_scene_load(uint32_t s)
         pat_sig[i] = steps_sig(t);            /* a default pattern, not the user's */
         pat_last[i] = p[2];
         t->p[P_SDIV] = 1;                     /* 1/8, a slow scene */
+        if (s == 5u && t->eng_req != ENGI_DRUM) {
+            t->p[P_ROOT] = 2; t->p[P_SCALE] = 18; /* Bayati on D */
+        }
     }
     undo_depth--;
     song.sel = 0;

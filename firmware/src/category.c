@@ -27,12 +27,12 @@ static const char *const PRESET_CAT[16] = {
     "KKLLKPKLU",                      /* 4 SAMPLE: PIANO, (PIANO: the retired TRANH's alias), FLUTE, SAX */
     "PLBFPPFB",                      /* 5 VOICE: CHOIR AAH, VOX LEAD, WOW BASS, WHISPER */
     "BLLUPPLPL",                     /* 6 TRIO: FAT BASS, ARP LEAD, SYNC LEAD, RING BELL, CHIP CHOIR */
-    "KKKKKKKKL",                     /* 7 WHEEL: the organs */
+    "KKKKKKKKLL",                     /* 7 WHEEL: the organs */
     "PFPP",                      /* 8 GRAIN: CLOUD PAD, GLITCH, FROZEN, SHIMMER */
-    "UUUPUDDPUUKUP",                 /* 9 PHYS: BELL TREE, MARIMBA, PLUCK, BOWED METAL, KALIMBA, HAND DRUM, TOMS, DRONE
+    "UUUPUDDPUUKUPUU",                 /* 9 PHYS: BELL TREE, MARIMBA, PLUCK, BOWED METAL, KALIMBA, HAND DRUM, TOMS, DRONE
                                   * STRING, HARP */
-    "DDD",                         /* 10 DRUM: DRUM KIT */
-    "FFFFFF",                      /* 11 NOISE: WIND, RAIN, ARCADE, METAL */
+    "DDDD",                         /* 10 DRUM: DRUM KIT */
+    "FFFFFFF",                      /* 11 NOISE: WIND, RAIN, ARCADE, METAL */
     "KUBLPUKULKPPLKB",                  /* 12 FM6: TINE EP, BELL, FM BASS, BRASS, PAD, MARIMBA, ORGAN, PLUCK */
     "DD",                        /* 13 SLICE: CHOP, STUTTER */
     "LPLLLL",                    /* 14 GURDY: HURDY, DRONE, DANCE, TROMPETTE, VIELLE, BAGPIPE */

@@ -227,6 +227,14 @@ static const struct {
     /* GHOULBOX 1.2: for the DRUM engine's CRYPT kit (GM notes: its FRAME, SHAKR, TIMP, ROPE, SLAP lanes) */
     {"TOMBBEAT", {36, 42, 0, 42, 45, 42, 36, 42, 36, 42, 45, 45, 38, 42, 39, 42},       /* 22 a procession */
      {1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0}},
+    /* Desert motifs in Bayati on D: the E keys sound half-flat via per-note tuning. */
+    {"CARAVAN", {50, 57, 62, 64, 65, 64, 62, 57, 50, 57, 60, 62, 64, 62, 57, 0},
+     {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0}},
+    {"DUNES", {74, 0, 76, 77, 76, 0, 74, 0, 72, 69, 72, 74, 76, 74, 0, 0},
+     {1, T_, 0, 0, 0, T_, 0, T_, 0, 0, 0, 0, 0, 1, T_, T_}},
+    {"SANDSTEP", {36, 0, 39, 42, 38, 0, 39, 0, 36, 42, 0, 39, 38, 0, 42, 0},
+     {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0}},
+
 };
 #undef T_
 #define NPATTERNS (sizeof PATTERNS / sizeof PATTERNS[0])
@@ -237,7 +245,7 @@ static const uint8_t TRK_DEF[NPART][3] = {{0, 4, 0}, {ENGI_FM6, 4, 0}, {3, 0, 0}
 /* GHOULBOX: what felucca_init plays instead (TRK_DEF stays Felucca's: an old project's missing parts are those), in D
  * minor, 1/8 steps, HALL (ui.c gb_scene_load). 1.3: MENU > SYSTEM > SCENE picks one (ui_scene; append-only: a saved
  * value keeps its scene, an unknown one plays DUNGEON). The patterns are the dungeon nine (PATTERNS[n - 1]) */
-#define GB_NSCENE 5u
+#define GB_NSCENE 6u
 static const struct { const char *name; uint8_t bpm, tape, part[NPART][3]; } GB_SCENES[GB_NSCENE] = {
     {"DUNGEON", 72, 40, {{ENGI_GURDY, 0, 15}, {0, 12, 14}, {5, 4, 16}, {ENGI_GURDY, 1, 17}}},   /* HURDY GURDY BALLAD,
                                     * CRYPT PAD DIRGE, MONKS CHANT, DRONE WHEEL PEDAL: the scene up to 1.2 */
@@ -249,6 +257,8 @@ static const struct { const char *name; uint8_t bpm, tape, part[NPART][3]; } GB_
                                     * MONKS CHANT, TENOR RECORD LAMENT, VIELLE ANTIPHON */
     {"BLANK", 72, 40, {{ENGI_GURDY, 0, 0}, {0, 12, 0}, {5, 4, 0}, {ENGI_GURDY, 1, 0}}},         /* DUNGEON's sounds, no
                                     * notes: a clean start */
+    {"CITADEL", 78, 32, {{ENGI_PHYS, 13, 23}, {ENGI_FM6, 4, 17}, {7, 9, 24}, {ENGI_DRUM, 3, 25}}},
+
 };
 #define GB_SCENE (GB_SCENES[0].part)   /* (the scene up to 1.2: tests/descdump.c, tests/ghoulbox_shots.c) */
 static uint32_t trk_def_engine(uint32_t i) { return TRK_DEF[i % NPART][0]; }

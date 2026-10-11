@@ -149,7 +149,7 @@ static void noise_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
     }
     if (mode == NZ_LFSR) {
         uint32_t mask = taps;                         /* the register's own bits (MODE / LEN changes) */
-        inc = noise_inc(m->pitch16 + p[P_E7] * 16 + d16);
+        inc = tuning_rate(noise_inc(m->pitch16 + p[P_E7] * 16 + d16), m->tuning_fine);
         mask |= mask >> 1;
         mask |= mask >> 2;
         mask |= mask >> 4;
@@ -249,6 +249,7 @@ static const preset_t NOISE_PRESETS[] = {
     /* GHOULBOX presets (tools/ghoulbox_presets.py) */
     {"CAVE WIND", {0, 40, 50, 90, 0, 0, 90, 0}, {110, 90, 120, 120}, 0, 0, FX(0, 40, 20, 120), PAT(5)},
     {"TORCH", {1, 30, 100, 60, 0, 60, 30, 0}, {20, 90, 127, 80}, 0, 0, FX(0, 0, 0, 70), PAT(5)},
+    {"SAND WIND", {0, 75, 42, 80, 0, 0, 65, 0}, {110, 90, 110, 120}, 0, 0, FX(0, 15, 15, 110), PAT(17)},
     /* GHOULBOX end */
 };
 

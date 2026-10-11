@@ -325,6 +325,9 @@ static const preset_t DRUM_PRESETS[] = {
     /* GHOULBOX 1.2: the CRYPT kit as designed, and lower / longer */
     {"CRYPT KIT", {DK_CRYPT, 64, 64, 64, 64, 100, 0, 0}, {0, 100, 127, 100}, 0, 0, FX(0, 0, 0, 70), PAT(22)},
     {"TOMB DRUMS", {DK_CRYPT, 48, 50, 68, 64, 100, 0, 0}, {0, 100, 127, 100}, 0, 0, FX(0, 0, 0, 90), PAT(22)},
+    /* GHOULBOX presets (tools/ghoulbox_presets.py) */
+    {"DUNE DRUMS", {9, 58, 82, 48, 80, 110, 0, 5}, {0, 100, 127, 80}, 0, 0, FX(0, 0, 0, 65), PAT(25)},
+    /* GHOULBOX end */
 };
 
 static const engine_t ENG_DRUM = {

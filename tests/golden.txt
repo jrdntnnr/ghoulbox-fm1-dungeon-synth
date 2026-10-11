@@ -139,3 +139,9 @@ sends/ANALOG/dist 1ff75ac225e918e0
 song/4track_mix 6667b6c911a3b548
 slicer/gate/ANALOG_ACID 07581a19222c2474
 slicer/song_gate_stut 7e91d788f9dedecc
+# Dungeons of the Desert: appended presets only; prior hashes unchanged.
+preset/WHEEL/09_DUNE_NEY 65ea270f2ca61a2c
+preset/PHYS/13_DESERT_OUD f49648ace939c108
+preset/PHYS/14_BRASS_QANUN d35c5b7a0757184c
+preset/DRUM/03_DUNE_DRUMS ef18e989a9f73e94
+preset/NOISE/06_SAND_WIND 6ad3b0bec3b0a918

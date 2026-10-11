@@ -75,9 +75,10 @@ def main(pkg, version, out):
     for doc in ("LICENSE", "LICENSING.md"):
         shutil.copy(HERE.parent / doc, fw / doc)
     shutil.copy(HERE / "editor.html", ed / "index.html")
-    for f in ("fukiai.ttf", "FUKIAI-LICENSE.txt", "fm1backup.js", "scala.js"):
+    for f in ("fukiai.ttf", "FUKIAI-LICENSE.txt", "fm1backup.js", "scala.js", "desert.js"):
         if (HERE / f).exists():
             shutil.copy(HERE / f, ed / f)
+    shutil.copytree(HERE.parent / "assets" / "desert", out / "webapp" / "assets" / "desert", dirs_exist_ok=True)
     (out / "index.html").write_text(
         '<!doctype html><meta charset="utf-8"><title>GHOULBOX</title>'
         '<meta http-equiv="refresh" content="0; url=webapp/installer/">'

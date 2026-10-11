@@ -14,6 +14,14 @@ medieval and fantasy synth music, from Old Tower and Hole Dweller to Mortiis-era
 
 ## What's new
 
+### Dungeons of the Desert — microtonal preview 2
+
+**CITADEL**, a Bayati-on-D desert dungeon scene, plus DESERT OUD, BRASS QANUN,
+DUNE NEY, DUNE DRUMS and SAND WIND. Three optional **CC0 Oud / Qanun / Ney Air**
+banks load from the editor's Samples tab. Includes further oscillator and
+sample-chord tuning fixes. [Playing guide](docs/DUNGEONS-OF-THE-DESERT.md) ·
+[Samples and credits](assets/desert/README.md).
+
 ### 1.4
 
 - **Power-on scenes.** Hold HOME for the menu and pick **SYSTEM > SCENE** to choose what the FM-1 plays

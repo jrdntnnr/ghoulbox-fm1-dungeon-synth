@@ -10,7 +10,7 @@ python3 tools/gen_scales.py --check
 if [ ! -f build/gen/ui_fonts.h ] || [ ! -f build/gen/felucca_samples.h ]; then
     python3 -c 'import sys; sys.path.insert(0,"tools"); import build; build.generate()'
 fi
-for name in tuning chord_tuning integration_format scale project chord motion ratchet midi_control ui persistence backup editor; do
+for name in tuning chord_tuning desert integration_format scale project chord motion ratchet midi_control ui persistence backup editor; do
     "$CC" -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/${name}_test" "tests/${name}_test.c" -lm
     if "$OUT/${name}_test" > "build/assessment/tuning-${name}.log" 2>&1; then
         echo "$name: passed"

@@ -1,7 +1,7 @@
 # Microtonal development preview — 2026-10-11
 
 This fork combines **GHOULBOX 1.4** (`b61a931`) with **Felucca 1.5.1**
-(`a4d7ca2`). GHOULBOX advanced by 25 commits after the initial 1.1 assessment;
+(`a4d7ca2`, plus maintenance commit `ef1f561`). GHOULBOX advanced by 25 commits after the initial 1.1 assessment;
 those changes are integrated. Both histories are retained as merge parents.
 The public source and releases belong to
 [jrdntnnr/ghoulbox-fm1-dungeon-synth](https://github.com/jrdntnnr/ghoulbox-fm1-dungeon-synth).
@@ -9,6 +9,24 @@ The public source and releases belong to
 **Status: buildable development preview, not a hardware-validated release.**
 No FM-1 has been flashed or acoustically tested in this work. The broader suite
 still reports UI layout and static target-cost failures described below.
+
+## Preview 2: Dungeons of the Desert
+
+- CITADEL: Bayati on D, 78 BPM; five appended presets and three patterns.
+- Optional CC0 Oud / Qanun / Ney Air user banks and editor preparation controls.
+- Detuned SUB / LFSR fine-pitch fixes; saturated clock correction; consistent
+  precision for all SAMPLE/GRAIN notes on new scales or tracks with cent trims.
+- Actual bank playback through DIA7, owner trims and release tests; web WAV
+  integrity, root and capacity checks. Playback-rate error stays below one cent;
+  source recordings retain natural pitch movement. Native sanitizer checks use
+  the repository's existing fixed-point/XIP exclusions.
+- **144 audio goldens pass:** five new presets added; all 139 old hashes unchanged.
+  Host audio-health, voice/routing and CPU-budget checks pass.
+- Final target build and source snapshot match. Hardware checks remain pending.
+
+[Playing guide](DUNGEONS-OF-THE-DESERT.md) · [Sample provenance](../assets/desert/README.md).
+The previous full-suite findings below remain unless explicitly updated here;
+this update reruns affected native, web, storage and target checks.
 
 ## Implemented
 
@@ -36,13 +54,13 @@ required AC79 SDK packaging assets are SHA-256 checked by the builder.
 
 | Item | Final preview build |
 | --- | --- |
-| Application | 573,152 bytes |
+| Application | 573,400 bytes (8,164 bytes free) |
 | Static RAM | 50,548 / 73,728 bytes |
 | SDRAM pool | 332,132 / 368,640 bytes |
 | RAM-resident interrupt code | 916 instructions, no calls |
 | Loader | 6,930 bytes |
 | Firmware package | 610,086 bytes; identity `FM-1_900` |
-| Package SHA-256 | `33b26b830218839ec99bb85adab79c081d219bebc93869a2426ff6be5496708e` |
+| Package SHA-256 | `f8eaf0b27c35ecc9ded8e319d7a977a3f8615275ec2c3cb4d44b9ed1e939620d` |
 
 The target profile omits the already-hidden SLICE engine to fit the original
 application slot. Engine ID 13 stays reserved, but old SLICE tracks cannot
@@ -58,7 +76,7 @@ Host tests retain the full SLICE implementation. [Build instructions](../BUILDIN
   chord recording/playback, releases, custom scale masks and tuned chord labels.
 - Fine pitch math, rendered sine frequencies, SAMPLE/GRAIN playback rates,
   independent GURDY melody/drone tuning, track isolation and live retuning.
-- **139 audio golden renders:** zero changed hashes, health failures,
+- **139 original audio golden renders:** zero changed hashes, health failures,
   voice/routing failures, CPU-budget failures or crashes. These golden files
   match GHOULBOX 1.4; they were not regenerated to hide integration failures.
 - **720 engine-switch comparisons:** zero differences from the existing
@@ -84,8 +102,9 @@ silently disabled:
   clipped wide numeric values, splash geometry and FM6 chart spacing. The
   audit reports zero text-on-identical-background errors and zero off-palette
   GREY/MONO pixels. The Rast chord screen has also been visually inspected.
-- Target static cost: `noise_render` scores **1,008 vs 259** and the audio ISR
-  **45,394 vs 37,502**, exceeding the existing +10% limit. These are compiler
+- Target static cost: the audio ISR still scores **45,394 vs 37,502**, exceeding
+  the existing +10% limit. The prior `noise_render` failure now passes after
+  the tuning-rate changes; no budget was raised. These are compiler
   disassembly estimates, not measured device timings. Host CPU checks pass;
   that does not establish FM-1 audio headroom.
 - Physical installation, USB enumeration/audio, save/reboot/recovery and

@@ -34,5 +34,19 @@ static int32_t tuning_residual(const track_t *t, uint32_t note)
  * path preserves their existing output exactly; no division in sample loops. */
 static uint32_t tuning_rate(uint32_t rate, int32_t fine)
 {
-    return fine ? (uint32_t)((int64_t)rate + (int64_t)rate * fine / 4096) : rate;
+    int64_t corrected;
+    if (!fine) return rate;
+    corrected = (int64_t)rate + (int64_t)rate * fine / 4096;
+    return corrected <= 0 ? 0 : corrected >= 0xFFFFFFFFLL ? 0xFFFFFFFFu : (uint32_t)corrected;
+}
+
+/* Resolve every member of a tuned chord at the same precision, including its
+ * unaltered keys. Keep the original scales with zero trims bit-identical. */
+static int tuning_precise(const track_t *t)
+{
+    uint32_t i;
+    if (t->p[P_SCALE] >= 16) return 1;
+    for (i = P_TC0; i <= P_TC11; i++)
+        if (t->p[i]) return 1;
+    return 0;
 }

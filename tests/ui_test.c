@@ -9675,7 +9675,7 @@ static int test_hidden_presets(void)
     bad += check("hidden presets: 54 names (PIANO covers SAMPLE's two), each one a real preset",
                  ok && NELEM(GB_HIDDEN) == 54u);
     preset_all_pos(&total);
-    ok = total == 59u + (FELUCCA_FM4 ? ENGINES[ENGI_DIGITAL]->npresets : 0u);   /* (+ DIGITAL's, built in; 1.1: + 4 CC0, BAGPIPE) */
+    ok = total == 64u + (FELUCCA_FM4 ? ENGINES[ENGI_DIGITAL]->npresets : 0u);   /* (+ DIGITAL's, built in; 1.1: + 4 CC0, BAGPIPE) */
     for (i = 0; i < total; i++) {
         e = preset_all_at(i, &k);
         ok &= e < NENGINES && !preset_hidden(ENGINES[e], k);
@@ -9728,7 +9728,7 @@ static int test_hidden_presets(void)
                          c2 < ENGINES[ENGI_DRUM]->npresets && t2 < ENGINES[ENGI_DRUM]->npresets &&
                          !preset_hidden(ENGINES[ENGI_DRUM], c2) && !preset_hidden(ENGINES[ENGI_DRUM], t2) &&
                          ENGINES[ENGI_DRUM]->presets[c2].e[0] == DK_CRYPT && ENGINES[ENGI_DRUM]->presets[c2].pat == 22u &&
-                         NPATTERNS == 22u && str_eq(PATTERNS[21].name, "TOMBBEAT"));
+                         NPATTERNS == 25u && str_eq(PATTERNS[21].name, "TOMBBEAT"));
         }
         bad += check("1.2: patterns 18..21 MARCH LAMENT ARPEGGIO ANTIPHON, after 1.0's (none renumbered)", NPATTERNS >= 21u &&
                      str_eq(PATTERNS[13].name, "DIRGE") && str_eq(PATTERNS[16].name, "PEDAL") && str_eq(PATTERNS[17].name, "MARCH") &&
@@ -9797,12 +9797,14 @@ static int test_scenes(void)
         {"DANCE GURDY", "DUNGEON HARP", "LUTE", "CRYPT KIT"},
         {"CATHEDRAL", "MONKS", "TENOR RECORD", "VIELLE"},
         {"HURDY GURDY", "CRYPT PAD", "MONKS", "DRONE WHEEL"},
+        {"DESERT OUD", "PAD", "DUNE NEY", "DUNE DRUMS"},
     };
     static const char *const PAT[GB_NSCENE][NTRK] = {
         {"BALLAD", "DIRGE", "CHANT", "PEDAL"}, {"PEDAL", "DIRGE", "PEDAL", "TOMBBEAT"},
         {"BALLAD", "ARPEGGIO", "MARCH", "TOMBBEAT"}, {"DIRGE", "CHANT", "LAMENT", "ANTIPHON"}, {0, 0, 0, 0},
+        {"CARAVAN", "PEDAL", "DUNES", "SANDSTEP"},
     };
-    static const int16_t BPM[GB_NSCENE] = {72, 60, 96, 66, 72};
+    static const int16_t BPM[GB_NSCENE] = {72, 60, 96, 66, 72, 78};
     int bad = 0, ok = 1;
     uint32_t s, i, k, row = MI_SCENE;
     for (s = 0; s < GB_NSCENE; s++) {
@@ -9818,22 +9820,24 @@ static int test_scenes(void)
             else
                 for (k = 0; k < NSTEP; k++)
                     ok &= !t->step[k].n && !t->step[k].hit;
+            if (s == 5 && i != 3)
+                ok &= t->p[P_ROOT] == 2 && t->p[P_SCALE] == 18 && tuning_cents(t,64) == -50;
         }
     }
-    bad += check("1.3 SCENE: DUNGEON CRYPT TAVERN CHAPEL BLANK load their sounds, patterns (BLANK: none), tempo, HALL", ok);
+    bad += check("1.3 SCENE: DUNGEON CRYPT TAVERN CHAPEL BLANK CITADEL load their sounds, patterns (BLANK: none), tempo, HALL", ok);
     ui_power_on();
     ok = MI_TAB[row] == MTAB_SYSTEM && MI_TAB[row + 1u] == MTAB_SYSTEM && row + 1u == MI_SERIAL &&
          menu_n(row) == GB_NSCENE && str_eq(MI_NAME[row], "SCENE") && menu_get(row) == 0 &&
          str_eq(menu_vname(row, 0), "DUNGEON") && str_eq(menu_vname(row, 4), "BLANK");
     menu_put(row, 2);
     ok &= menu_get(row) == 2 && ui_scene == 2 && menu_step(row, 1) == 3 && menu_step(row, -1) == 1;
-    menu_put(row, 4);
-    ok &= menu_step(row, 1) == 4;                              /* (stops at the end) */
+    menu_put(row, GB_NSCENE - 1);
+    ok &= menu_step(row, 1) == GB_NSCENE - 1;                              /* (stops at the end) */
     ui_scene = 200;                                            /* a value from a later version: DUNGEON */
     ok &= menu_get(row) == 0;
     gb_scene_load(ui_scene);
     ok &= !strcmp(ENGINES[trk[0].engine]->presets[trk[0].preset].name, "HURDY GURDY") && song.g[G_BPM] == 72;
-    bad += check("1.3 SCENE: MENU > SYSTEM row (5 names, stops at the ends); a later version's value plays DUNGEON", ok);
+    bad += check("1.3 SCENE: MENU > SYSTEM row (6 names, stops at the ends); a later version's value plays DUNGEON", ok);
     {   /* the row redraws at once when its value changes (ui_menu.c: the menu signature holds ui_scene) */
         static uint16_t before[240 * 240];
         ui_power_on();

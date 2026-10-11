@@ -21,6 +21,7 @@ ENGINES = {
     "LOFI": ("eng_lofi.c", "LOFI_PRESETS"),
     "PHASE": ("eng_phase.c", "PHASE_PRESETS"),
     "NOISE": ("eng_noise.c", "NOISE_PRESETS"),
+    "DRUM": ("eng_drum.c", "DRUM_PRESETS"),
     "GURDY": ("eng_gurdy.c", "GURDY_PRESETS"),
 }
 
@@ -45,12 +46,15 @@ PRESETS = {
         ("CATHEDRAL", [15, 3, 0, -2, 0, 0, 10, 0], [30, 64, 127, 90], 0, 0, (0, 0, 0, 115), 5),
         ("HARMONIUM", [10, 0, 1, -4, 0, 10, 25, 1], [15, 64, 127, 50], 0, 0, (5, 20, 0, 85), 6),
         ("TOWER FLUTE", [0, 0, -3, -6, 0, 0, 30, 1], [25, 64, 127, 60], 0, 1, (0, 30, 20, 95), 4),
+        ("DUNE NEY", [0, -3, 0, -5, 0, 0, 8, 0], [30, 64, 110, 55], 0, 1, (0, 8, 18, 95), 24),
     ],
     "PHYS": [  # STRNG: MODEL STRC BRIT DAMP POS ACC BOW EXC; SYMP: MODEL CHRD BRIT DAMP SYMP ACC BUZZ EXC
         ("LUTE", [1, 48, 55, 70, 30, 127, 0, 0], [0, 100, 127, 70], 0, 0, (0, 15, 20, 80), 3),
         ("HARPSICHORD", [1, 80, 110, 78, 12, 127, 0, 0], [0, 100, 127, 50], 0, 0, (0, 10, 10, 75), 3),
         ("DUNGEON HARP", [3, 4, 50, 80, 70, 127, 0, 0], [0, 100, 127, 90], 0, 0, (0, 20, 20, 95), 3),
         ("GURDY DRONE", [3, 1, 70, 95, 80, 127, 110, 0], [30, 100, 127, 90], 0, 0, (5, 10, 0, 90), 5),
+        ("DESERT OUD", [1, 35, 62, 65, 23, 127, 0, 0], [0, 100, 127, 45], 0, 0, (0, 5, 18, 75), 23),
+        ("BRASS QANUN", [1, 72, 105, 82, 10, 127, 0, 0], [0, 100, 127, 65], 0, 0, (0, 12, 28, 85), 23),
     ],
     "TRIO": [  # WAVE INT2 INT3 DTN | MODE CUT RES PW
         ("FANTASY PAD", [0, 12, 7, 14, 0, 55, 20, 64], [90, 90, 115, 100], 10, 0, (0, 90, 25, 110), 5),
@@ -69,6 +73,10 @@ PRESETS = {
     "NOISE": [  # MODE (ANLG DUST LFSR META) COLR FREQ RES | TRK DENS DRFT CRSH
         ("CAVE WIND", [0, 40, 50, 90, 0, 0, 90, 0], [110, 90, 120, 120], 0, 0, (0, 40, 20, 120), 5),
         ("TORCH", [1, 30, 100, 60, 0, 60, 30, 0], [20, 90, 127, 80], 0, 0, (0, 0, 0, 70), 5),
+        ("SAND WIND", [0, 75, 42, 80, 0, 0, 65, 0], [110, 90, 110, 120], 0, 0, (0, 15, 15, 110), 17),
+    ],
+    "DRUM": [
+        ("DUNE DRUMS", [9, 58, 82, 48, 80, 110, 0, 5], [0, 100, 127, 80], 0, 0, (0, 0, 0, 65), 25),
     ],
     "GURDY": [  # DRN (C .. B) DLVL 5TH WHL | BUZZ COUP (HOLD 1/4 1/8 1/8T 1/16) BODY WOBL
         # 1.3: pushed apart (each one character), the trompette louder in the engine; dungeon patterns

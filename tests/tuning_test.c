@@ -144,6 +144,40 @@ static void independent_rates(void)
     }
     puts("tuning: SAMPLE and GRAIN playback rates retain fine cents; GURDY melody and both drones tune independently");
 }
+/* Measure the actual secondary oscillator / noise clock, not just pitch helpers. */
+static void auxiliary_rates(void)
+{
+    for (int trim=-63; trim<=63; trim++) {
+        reset(); track_t *t=&trk[0]; vmod_t m={0};
+        t->p[P_TC4]=trim; m.pitch16=tuning_pitch16(t,64);
+        m.fine=m.tuning_fine=tuning_residual(t,64);
+        m.inc=tuning_rate(pitch_inc(m.pitch16),m.tuning_fine); m.shape=64<<8;
+        for (int det=0;det<=25;det+=25) {
+            voice_t v={0}; int32_t out[1]={0};
+            t->p[P_E0]=AW_SUB; t->p[P_E1]=det; t->p[P_E3]=t->p[P_E6]=0;
+            analog_render_x(t,&v,out,1,&m);
+            double got=v.ph[1]*(double)FS/4294967296.0;
+            assert(fabs(error(got,hz(52,trim+det)))<0.6);
+        }
+        for (int mode=NZ_LFSR;mode<=NZ_META;mode++) {
+            voice_t v={0}; int32_t out[1]={0};
+            t->p[P_E0]=mode; t->p[P_E6]=0; t->p[P_E7]=12;
+            noise_render(t,&v,out,1,&m);
+            double got=v.ph[0]*(double)FS/4294967296.0;
+            assert(fabs(error(got,hz(76,trim)))<0.6);
+            if (m.tuning_fine>0) {
+                memset(&v,0,sizeof v); t->p[P_E7]=127;
+                noise_render(t,&v,out,1,&m);
+                assert(v.ph[0]==0xFFFFFFFFu);
+            }
+        }
+    }
+    assert(tuning_rate(0xFFFFFFFFu,0)==0xFFFFFFFFu);
+    assert(tuning_rate(0xFFFFFFFFu,14)==0xFFFFFFFFu);
+    assert(tuning_rate(0xFFFFFFFFu,-4096)==0);
+    assert(tuning_rate(100,-8192)==0 && tuning_rate(0,14)==0);
+    puts("tuning: SUB, LFSR and META retain all cents trims; saturated clocks never wrap");
+}
 static void input_test(void)
 {
     reset(); track_t *t=&trk[0]; kb_prev=0; usb.config=1; mo_w=mo_r=0;
@@ -198,5 +232,5 @@ static void persistence_test(void)
     puts("tuning: frozen GHOULBOX 1.1 project/preset migration, FM6, motion IDs, tuned round trip and corrupt data pass");
 }
 #ifndef TUNING_TEST_NO_MAIN
-int main(void) { pitch_math(); audio_test(); independent_rates(); input_test(); persistence_test(); return 0; }
+int main(void) { pitch_math(); audio_test(); independent_rates(); auxiliary_rates(); input_test(); persistence_test(); return 0; }
 #endif

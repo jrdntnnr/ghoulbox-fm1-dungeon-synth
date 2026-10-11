@@ -877,7 +877,7 @@ static int menu_protocol(void)
         {"SCOPE", "OUT,MIX"}, {"STEP PREVIEW", "OFF,ON"}, {"CHORD ENTRY", "HOLD,ADD"},                  /* (1.2) */
         {"MIDI IN", "CH1-4,SEL,CH5-8,CH9-12,CH13-16"}, {"TUNE", 0},   /* (1.2: the project's ROUT and TUNE; TUNE a number) */
         {"HOME", "SCOPE,TRACKS,LEVELS"},                                                       /* (1.3; 1.5: LEVELS) */
-        {"HELP", "OFF,ON"}, {"SCENE", "DUNGEON,CRYPT,TAVERN,CHAPEL,BLANK"}};                                                                         /* (1.5) */
+        {"HELP", "OFF,ON"}, {"SCENE", "DUNGEON,CRYPT,TAVERN,CHAPEL,BLANK,CITADEL"}};                                                                         /* (1.5) */
     static const int32_t DEF[26] = {-1, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};   /* (COLOR: the default palette) */
     static const uint8_t TAB[26] = {0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 4, 2, 2, 2, 4, 1, 0, 0, 1, 1, 3, 2, 0, 4, 4};   /* DISPLAY CONTROL AUDIO
                                                                                                          * MIDI SYSTEM (1.2) */

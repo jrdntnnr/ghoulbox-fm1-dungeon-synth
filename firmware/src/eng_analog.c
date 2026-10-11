@@ -68,7 +68,7 @@ static __attribute__((noinline)) void analog_render_x(track_t *t, voice_t *v, in
     int32_t ic1 = v->s[0], ic2 = v->s[1], nst = v->s[2];
     int32_t jl = v->s[3];                             /* SYNC: 1 + the step of a restart a sample ago (16 bits), 0 none */
     if (sub) {                                        /* an octave below OSC 1, DTN as OSC 2 always had it */
-        inc2 = (det ? cents_inc(m->pitch16, det, 0) : inc1) >> 1;
+        inc2 = (det ? cents_inc(m->pitch16, det, m->tuning_fine) : inc1) >> 1;
     } else {                                          /* DTN and the shape above OSC 1, 3/16 semitone a step */
         inc2 = pitch_inc(clamp(m->pitch16 + det * 3 + (((m->shape - (64 << 8)) * 3) >> 8), 0, 2047));
         if (m->fine)

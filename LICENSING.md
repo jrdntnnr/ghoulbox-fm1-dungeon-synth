@@ -101,3 +101,12 @@ by those owners.
 ## Radio
 
 Felucca never enables the Bluetooth / Wi-Fi radio of the hardware.
+
+## Optional desert recordings
+
+`assets/desert/*.wav`, `*.hdr` and `*.bin` are CC0-1.0 audio/data, separate from
+the GPL firmware. Oud: hammondman; Turkish kanun: barisbozkurt; ney: aliaref.
+[Source URLs, license links and hashes](assets/desert/sources.json) and
+[processing/usage notes](assets/desert/README.md) travel with the sample pack.
+The source MP3 previews were converted and pitch-calibrated; original masters
+are not included.
