@@ -352,6 +352,7 @@
 </main>
 <script type="module">
 import { parseScala } from "./scala.js";
+import { prepareDesertBank, DESERT_NAMES, DESERT_BASE } from "./desert.js";
 "use strict";
 /*PROTO-BEGIN*/
 /* ---------------------------------------------------------------- protocol --- */
@@ -1759,7 +1760,7 @@ function makeMockDevice(opt = {}) {
       presets: [P("FULL ORGAN", [15, 0, 0, 0, 0, 30, 20, 1], [0, 64, 127, 45], 0, 5), P("JAZZ PERC", [4, 0, 0, 0, 2, 50, 8, 1], [0, 64, 127, 40], 0, 3),
         P("GOSPEL", [6, 0, 0, 0, 1, 60, 40, 2], [0, 64, 127, 45], 0, 6), P("SOFT FLUTE", [1, 0, -2, 0, 0, 10, 0, 1], [0, 64, 127, 55], 0, 5),
         P("ROCK DRIVE", [7, 0, 0, 0, 0, 70, 100, 2], [0, 64, 127, 40], 0, 4),
-        /* GHOULBOX presets (tools/ghoulbox_presets.py) */ P("CRYPT ORGAN", [12, 2, 0, -3, 0, 5, 15, 1], [20, 64, 127, 70], 0, 5), P("CATHEDRAL", [15, 3, 0, -2, 0, 0, 10, 0], [30, 64, 127, 90], 0, 5), P("HARMONIUM", [10, 0, 1, -4, 0, 10, 25, 1], [15, 64, 127, 50], 0, 6), P("TOWER FLUTE", [0, 0, -3, -6, 0, 0, 30, 1], [25, 64, 127, 60], 1, 4) /* GHOULBOX end */] },
+        /* GHOULBOX presets (tools/ghoulbox_presets.py) */ P("CRYPT ORGAN", [12, 2, 0, -3, 0, 5, 15, 1], [20, 64, 127, 70], 0, 5), P("CATHEDRAL", [15, 3, 0, -2, 0, 0, 10, 0], [30, 64, 127, 90], 0, 5), P("HARMONIUM", [10, 0, 1, -4, 0, 10, 25, 1], [15, 64, 127, 50], 0, 6), P("TOWER FLUTE", [0, 0, -3, -6, 0, 0, 30, 1], [25, 64, 127, 60], 1, 4), P("DUNE NEY", [0, -3, 0, -5, 0, 0, 8, 0], [30, 64, 110, 55], 1, 24) /* GHOULBOX end */] },
     { name: "GRAIN", titles: ["GRAN", "SPRY"], edit: [E("SRC", ["PIANO", "PIANO", "FLUTE", "SAX", "PIANO", "USR1", "USR2", "USR3", "PSALTERY", "RENORGAN", "RECORDER", "FOLKHARP"], 0),
         D("POS", F.PCT, 0, 127, 32), D("SIZE", F.PCT, 0, 127, 80), D("DENS", F.PCT, 0, 127, 80),
         D("PTCH", F.SEMI, -24, 24, 0), D("SPRD", F.PCT, 0, 127, 30), D("RAND", F.PCT, 0, 127, 10), D("TONE", F.PCT, 0, 127, 127)],
@@ -1773,18 +1774,19 @@ function makeMockDevice(opt = {}) {
         P("KALIMBA", [0, 34, 16, 56, 100, 90, 0, 48], [0, 100, 127, 60], 0, 7), P("HAND DRUM", [2, 112, 76, 56, 44, 100, 14, 24], [0, 100, 127, 64], 0, 6),
         P("TOMS", [2, 0, 52, 40, 30, 100, 40, 30], [0, 100, 127, 70], 0, 2), P("DRONE STRING", [3, 127, 80, 88, 64, 100, 92, 0], [0, 100, 127, 90], 0, 3),
         P("HARP", [3, 8, 62, 74, 60, 90, 0, 0], [0, 100, 127, 80], 0, 3),
-        /* GHOULBOX presets (tools/ghoulbox_presets.py) */ P("LUTE", [1, 48, 55, 70, 30, 127, 0, 0], [0, 100, 127, 70], 0, 3), P("HARPSICHORD", [1, 80, 110, 78, 12, 127, 0, 0], [0, 100, 127, 50], 0, 3), P("DUNGEON HARP", [3, 4, 50, 80, 70, 127, 0, 0], [0, 100, 127, 90], 0, 3), P("GURDY DRONE", [3, 1, 70, 95, 80, 127, 110, 0], [30, 100, 127, 90], 0, 5) /* GHOULBOX end */] },
+        /* GHOULBOX presets (tools/ghoulbox_presets.py) */ P("LUTE", [1, 48, 55, 70, 30, 127, 0, 0], [0, 100, 127, 70], 0, 3), P("HARPSICHORD", [1, 80, 110, 78, 12, 127, 0, 0], [0, 100, 127, 50], 0, 3), P("DUNGEON HARP", [3, 4, 50, 80, 70, 127, 0, 0], [0, 100, 127, 90], 0, 3), P("GURDY DRONE", [3, 1, 70, 95, 80, 127, 110, 0], [30, 100, 127, 90], 0, 5), P("DESERT OUD", [1, 35, 62, 65, 23, 127, 0, 0], [0, 100, 127, 45], 0, 23), P("BRASS QANUN", [1, 72, 105, 82, 10, 127, 0, 0], [0, 100, 127, 65], 0, 23) /* GHOULBOX end */] },
     { name: "DRUM", titles: ["KIT", "HIT"], edit: [E("KIT", ["STD", "66", "10", "77", "80", "10", "66", "55", "77", "CRYPT"], 0), D("TUNE", F.PCT, 0, 127, 64),
         D("TONE", F.PCT, 0, 127, 64), D("DECY", F.PCT, 0, 127, 64), D("SNAP", F.PCT, 0, 127, 64), D("ACC", F.PCT, 0, 127, 100),
         E("KICK", ["PUNCH", "ROUND"], 0), D("DRV", F.PCT, 0, 127, 0)],
       presets: [P("DRUM KIT", [0, 64, 70, 64, 64, 100, 0, 0], [0, 100, 127, 100], 0, 12),
-        P("CRYPT KIT", [9, 64, 64, 64, 64, 100, 0, 0], [0, 100, 127, 100], 0, 22), P("TOMB DRUMS", [9, 48, 50, 68, 64, 100, 0, 0], [0, 100, 127, 100], 0, 22)] },
+        P("CRYPT KIT", [9, 64, 64, 64, 64, 100, 0, 0], [0, 100, 127, 100], 0, 22), P("TOMB DRUMS", [9, 48, 50, 68, 64, 100, 0, 0], [0, 100, 127, 100], 0, 22),
+        /* GHOULBOX presets (tools/ghoulbox_presets.py) */ P("DUNE DRUMS", [9, 58, 82, 48, 80, 110, 0, 5], [0, 100, 127, 80], 0, 25) /* GHOULBOX end */] },
     { name: "NOISE", titles: ["SRC", "MOVE"], edit: [E("MODE", ["ANLG", "DUST", "LFSR", "META"], 0), D("COLR", F.PCT, 0, 127, 64),
         D("FREQ", F.CUTOFF, 0, 127, 80), D("RES", F.PCT, 0, 127, 30), D("TRK", F.PCT, 0, 127, 64), D("DENS", F.PCT, 0, 127, 0),
         D("DRFT", F.PCT, 0, 127, 0), D("CRSH", F.PCT, 0, 127, 0)],
       presets: [P("WIND", [0, 64, 70, 100, 127, 0, 70, 0], [90, 90, 110, 90], 0, 5), P("RAIN", [1, 30, 88, 80, 64, 105, 40, 0], [10, 90, 127, 70], 0, 5),
         P("ARCADE", [2, 0, 127, 0, 127, 112, 0, 84], [0, 80, 0, 50], 0, 3), P("METAL", [3, 0, 100, 40, 100, 32, 0, 0], [0, 75, 40, 60], 0, 7),
-        /* GHOULBOX presets (tools/ghoulbox_presets.py) */ P("CAVE WIND", [0, 40, 50, 90, 0, 0, 90, 0], [110, 90, 120, 120], 0, 5), P("TORCH", [1, 30, 100, 60, 0, 60, 30, 0], [20, 90, 127, 80], 0, 5) /* GHOULBOX end */] },
+        /* GHOULBOX presets (tools/ghoulbox_presets.py) */ P("CAVE WIND", [0, 40, 50, 90, 0, 0, 90, 0], [110, 90, 120, 120], 0, 5), P("TORCH", [1, 30, 100, 60, 0, 60, 30, 0], [20, 90, 127, 80], 0, 5), P("SAND WIND", [0, 75, 42, 80, 0, 0, 65, 0], [110, 90, 110, 120], 0, 17) /* GHOULBOX end */] },
     { name: "FM6", titles: ["OPS", "PATCH"], edit: [D("ALG", F.INT, 0, 32, 0), D("FB", F.INT, -7, 7, 0), D("MLVL", F.BIPCT, -64, 63, 0),
         D("MRAT", F.INT, -16, 16, 0), D("MEG", F.BIPCT, -64, 63, 0), D("VMOD", F.INT, -7, 7, 0), D("DTUN", F.PCT, 0, 127, 0),
         D("SLOT", F.INT, 0, FM6.FACTORY_PK.length + 32, 0)],   /* F1..F8, then OWN (eng_fm6.c, 1.0.3), B1..B32 (1.4.1) */
@@ -1835,6 +1837,9 @@ function makeMockDevice(opt = {}) {
     [[50, 53, 57, 62, 46, 50, 53, 58, 48, 52, 55, 60, 45, 49, 52, 57], [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]],   /* 20 ARPEGGIO (GHOULBOX 1.2) */
     [[62, 0, 65, 64, 62, 0, 0, 0, 50, 0, 53, 52, 50, 0, 0, 0], [1, T_, 0, 0, 0, T_, T_, 0, 1, T_, 0, 0, 0, T_, T_, 0]],   /* 21 ANTIPHON (GHOULBOX 1.2) */
     [[36, 42, 0, 42, 45, 42, 36, 42, 36, 42, 45, 45, 38, 42, 39, 42], [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]],   /* 22 TOMBBEAT (GHOULBOX 1.2, the CRYPT kit) */
+    [[50,57,62,64,65,64,62,57,50,57,60,62,64,62,57,0], [1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0]], // 23 CARAVAN
+    [[74,0,76,77,76,0,74,0,72,69,72,74,76,74,0,0], [1,T_,0,0,0,T_,0,T_,0,0,0,0,0,1,T_,T_]], // 24 DUNES
+    [[36,0,39,42,38,0,39,0,36,42,0,39,38,0,42,0], [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0]], // 25 SANDSTEP
   ];
   for (let op = 0; op < 4; op++) TP.push(D("ATK", F.TIME, 0, 127, 0), D("DEC", F.TIME, 0, 127, 0), D("SUS", F.PCT, 0, 127, 127), D("REL", F.TIME, 0, 127, 0), D("LVL", F.PCT, 0, 127, 127));
   TP.push(E("CHRD", ["OFF", "DIA3", "DIA7", "MAJ", "MIN", "DOM7", "MAJ7", "MIN7", "SUS4", "POW"], 0),   /* the chord keys 81, 82 */
@@ -2603,6 +2608,7 @@ const TEXT = {
     denied: "MIDI（SysEx）の使用が許可されませんでした。",
     nodevice: "GHOULBOX が見つかりません。USB で接続して、もう一度押してください。",
     connecting: "接続中", reading: "読み込み中 ", steploading: "ステップを読み込み中 ",
+    desertReady: "準備完了。音を確認してから Upload を押してください: ",
     ready: "接続しました", disconnected: "切断されました", lost: "GHOULBOX が外されました",
     noreply: "応答がありません", error: "エラー: ", busy: "処理中",
     applying: "書き込み中 ", applied: "読み込みました", badfile: "ファイルを読み込めません: ",
@@ -2706,6 +2712,7 @@ const TEXT = {
     denied: "MIDI (SysEx) access was not allowed.",
     nodevice: "GHOULBOX not found. Connect it by USB and press Connect again.",
     connecting: "Connecting", reading: "Reading ", steploading: "Reading steps ",
+    desertReady: "Prepared. Preview the notes, then Upload to this slot: ",
     ready: "Connected", disconnected: "Disconnected", lost: "GHOULBOX was unplugged",
     noreply: "No reply from the device", error: "Error: ", busy: "Busy",
     applying: "Writing ", applied: "Loaded", badfile: "Cannot read the file: ",
@@ -3929,6 +3936,20 @@ async function addFiles(k, list) {
   renderSamples();
 }
 
+async function smpDesert(k) {
+  if (smpBusy || recActive()) return;
+  if (smpDraft[k].files.length && !confirm("Replace the prepared file list with " + DESERT_NAMES[k] + "?")) return;
+  smpBusy = true;
+  renderSamples();
+  try {
+    const draft = await prepareDesertBank(k, decodeFile);
+    buildSlot(draft.name, draft.files); // validate capacity before replacing the draft
+    smpDraft[k] = draft;
+    sayK("desertReady", DESERT_NAMES[k]);
+  } catch (e) { sayK("smpFail", e.message); }
+  finally { smpBusy = false; renderSamples(); }
+}
+
 /* a slot's recording row: Record / Stop, the input, the time and the level */
 function recRow(k) {
   const on = rec && rec.k === k;
@@ -3973,6 +3994,9 @@ function renderSamples() {
         el("button", { ic: "symbol_upload", disabled: smpBusy || recActive() || !d.files.length || tooBig || !d.name, onclick: () => smpUpload(k, prog) }, t("upload")),
         d.files.length ? el("button", { text: t("clearList"), disabled: smpBusy || recActive(), onclick: () => { d.files = []; renderSamples(); } }) : "",
         size, prog),
+      el("div", { class: "head" },
+        el("button", { text: "Prepare " + DESERT_NAMES[k], disabled: smpBusy || recActive(), onclick: () => smpDesert(k) }),
+        el("a", { href: new URL("README.md", DESERT_BASE).href, target: "_blank", rel: "noopener", text: "Desert banks · CC0 · instructions" })),
       recRow(k));
     if (d.files.length) {
       const keys = splitKeys(d.files);
