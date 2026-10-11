@@ -364,8 +364,18 @@ static void graph_detail(const track_t *t, uint16_t c)
         }
     }
 }
+/* a solid diamond of radius r centred on (cx, cy): the root's mark */
+static void cv_diamond(int32_t cx, int32_t cy, int32_t r, uint16_t c)
+{
+    int32_t dy;
+    for (dy = -r; dy <= r; dy++) {
+        int32_t half = r - (dy < 0 ? -dy : dy);
+        cv_rect(cx - half, cy + dy, 2 * half + 1, 1, c);
+    }
+}
 /* SCL: the 12 keys as rounded bars (black keys high, white keys low): in the scale THEME, the root the
- * accent, out of the scale RAISE */
+ * accent, out of the scale RAISE. A diamond in the root's own column (over a white key, under a black one)
+ * marks it by shape as well as colour (SARDAB's copper and sandstone are close; MONO has one white) */
 static void graph_scale(const track_t *t, uint16_t c)
 {
     static const uint8_t BLACK[12] = {0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0};
@@ -375,6 +385,8 @@ static void graph_scale(const track_t *t, uint16_t c)
         int32_t x = 13 + (int32_t)i * 18;
         uint16_t col = (mask >> deg) & 1u ? (deg == 0u ? T_ACCENT : c) : T_RAISE;
         cv_rrect(x + 3, BLACK[i] ? 6 : 38, 10, 52, 3, col, T_SURF);
+        if (deg == 0u)
+            cv_diamond(x + 8, BLACK[i] ? 66 : 29, 4, T_ACCENT);
         int32_t cents = tuning_cents(t, i), y = BLACK[i] ? 43 : 75;
         if (cents) { /* arrows on altered keys: down = flat, up = sharp */
             int32_t tip = y + (cents < 0 ? 5 : -5);
