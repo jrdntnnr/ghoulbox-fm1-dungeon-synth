@@ -339,7 +339,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--release", metavar="X.Y", help="release build: identity FM-1_9XY, version string vX.Y")
     ap.add_argument("--sdk", type=Path, help="JieLi AC79 SDK checkout (default: $AC79_SDK)")
+    ap.add_argument("--gen-only", action="store_true",
+                    help="GHOULBOX: only the generated headers (build/gen), no toolchain or SDK: the host tests (CI)")
     a = ap.parse_args()
+    if a.gen_only:                  # (before the SLICE default below: the headers the host tests always used)
+        generate()
+        print(f"gen      {GEN}")
+        return 0
     # Dungeon profile: the hidden SLICE engine and its 22 KiB BREAK recording
     # exceed the app slot when combined with GHOULBOX's additional instruments.
     # Keep its ID reserved; FELUCCA_SLICE=1 explicitly requests the full build.
