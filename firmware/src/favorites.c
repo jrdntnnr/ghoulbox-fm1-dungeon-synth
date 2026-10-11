@@ -5,8 +5,9 @@
 typedef struct {
     uint8_t factory[16][32]; /* engine 0..15, preset 0..255 */
     uint32_t user, filter;
+    uint8_t learned[32]; /* MIDI learn has its own storage: engine 14 is GURDY. */
 } favorites_t;
-static favorites_t favorites;
+static favorites_t favorites __attribute__((section(".pool")));
 static int favorite_has(uint32_t engine, uint32_t preset)
 {
     if (engine == NENGINES)

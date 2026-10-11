@@ -34,7 +34,7 @@ static double error(double got, double want) { return 1200*log2(got/want); }
 static void pitch_math(void)
 {
     reset(); track_t *t=&trk[0]; double worst=0;
-    assert(NELEM(SCALE_CENTS)==40 && NELEM(SCALE_MASK)==40);
+    assert(NELEM(SCALE_CENTS)==41 && NELEM(SCALE_MASK)==41);
     for(int s=0;s<40;s++) for(int root=0;root<12;root++) {
         t->p[P_SCALE]=s; t->p[P_ROOT]=root;
         for(int n=12;n<116;n++) for(int trim=-63;trim<=63;trim++) {
@@ -120,10 +120,10 @@ static void independent_rates(void)
         double want=pow(2,(64-z->root16/16.0+offsets[k]/100.0)/12)*z->rate/65536.0;
         double got=v->ph[0]-1+v->ph[1]/65536.0;
         assert(fabs(error(got,want))<0.6);
-        reset(); t=&trk[0]; memset(gr_p,0,sizeof gr_p); host_preset(t,8,0) /* GRAIN */;
+        reset(); t=&trk[0]; memset(eng_mem,0,sizeof eng_mem); host_preset(t,8,0) /* GRAIN */;
         t->p[P_E0]=t->p[P_E1]=t->p[P_E4]=t->p[P_E6]=0; t->p[P_TC4]=offsets[k];
         trk_note_on(t,64,100); v=voice(t,64);
-        gr_part_t *g=&gr_p[0]; gr_grain_t *found=0;
+        gr_part_t *g=gr_of(t); gr_grain_t *found=0;
         for(unsigned n=0;n<100 && !found;n++) {
             track_render(t,out,CTL);
             for(unsigned j=0;j<GR_NG;j++) if(g->g[j].owner) {found=&g->g[j];break;}
