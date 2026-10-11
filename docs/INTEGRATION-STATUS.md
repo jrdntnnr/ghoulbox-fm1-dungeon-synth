@@ -66,6 +66,9 @@ Host tests retain the full SLICE implementation. [Build instructions](../BUILDIN
   GHOULBOX added two presets where the reference firmware had only one.
 - Project/preset migration, compact storage, settings conversion, persistence,
   MIDI controls, editor protocol and web backup/Scala tests.
+- Legacy PIANO HD in USR1 matches the built-in piano bit-for-bit at all twelve
+  tested keys. The sample test now addresses the fixed USR1 ID rather than
+  mistaking GHOULBOX’s expanded factory-set count for a user-slot ID.
 - Native UI functional tests, including the optional legacy FM4 build, pass.
   Text reference and font-spacing checks pass.
 - Update entry and loader simulations pass with the final package, including
@@ -90,7 +93,9 @@ silently disabled:
   was available. A browser-driven visual editor test was not performed;
   protocol, parser and deployment-file checks are automated.
 
-Release assets include selected validation logs and checksums. Local complete
+Release assets include selected validation logs and checksums. The full-suite
+log retains two SAMPLE failures from stale upstream test assumptions; the
+corrected test’s separate `sample-final.log` passes. Local complete
 logs live under ignored `build/assessment/`; UI audit reports are in
 `build/ui_new/`.
 
