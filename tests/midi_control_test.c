@@ -11,6 +11,7 @@ static void midi_test_reset(void)
     memset(midi_owners, 0, sizeof midi_owners); memset(midi_bend_q8, 0, sizeof midi_bend_q8);
     memset(midi_bend_target, 0, sizeof midi_bend_target); memset(&midi_clock, 0, sizeof midi_clock);
     memset(&um, 0, sizeof um); memset(midi_in_source, 0, sizeof midi_in_source);
+    memset((void *)midi_cc_q, 0, sizeof midi_cc_q);
     mi_r = mi_w = 0; midi_in_overflow = 0; midi_beat_samples = 0;
     fm1_in.notes = kb_prev = 0; fm1_ms = 0; song.sel = 0;
     events_block(CTL);
@@ -19,6 +20,7 @@ static void queued(uint32_t st, uint32_t d1, uint32_t d2, uint32_t source)
 {
     midi_enqueue((st >= 0xF8u ? 0xFu : st >> 4) | st << 8 | d1 << 16 | d2 << 24, source);
     events_block(CTL);
+    midi_cc_apply();
 }
 static int gate_note(const track_t *t, uint32_t note)
 {
@@ -376,14 +378,14 @@ static int cc_map_test(void)
     queued(0xB0, 10, 127, 1); ok &= trk[0].p[P_PAN] == 63;
     queued(0xB0, 10, 64, 1); ok &= trk[0].p[P_PAN] == 0;
     bad += check("CC10 PAN: 0 left, 64 centre, 127 right", ok);
-    queued(0xB0, 74, 127, 1); queued(0xB0, 71, 0, 1);
-    bad += check("CC74 / CC71 on ANALOG: CUT / RES", trk[0].p[P_E4] == 127 && trk[0].p[P_E5] == 0);
-    queued(0xB1, 74, 64, 1); queued(0xB1, 74, 127, 1);
-    bad += check("CC74 on FM6 (channel 2): MLVL, bipolar (127: +63)", trk[1].p[P_E2] == 63);
+    queued(0xB0, 21, 127, 1); queued(0xB0, 71, 0, 1);
+    bad += check("CC21 / CC71 on ANALOG: CUT / RES", trk[0].p[P_E4] == 127 && trk[0].p[P_E5] == 0);
+    queued(0xB1, 21, 64, 1); queued(0xB1, 21, 127, 1);
+    bad += check("CC21 on FM6 (channel 2): MLVL, bipolar (127: +63)", trk[1].p[P_E2] == 63);
     memcpy(before, trk[1].p, sizeof before); queued(0xB1, 71, 99, 1);
     bad += check("CC71 on FM6 (no resonance): ignored", !memcmp(before, trk[1].p, sizeof before));
-    queued(0xB3, 74, 10, 1);
-    bad += check("CC74 on DRUM (channel 4): TONE", trk[3].p[P_E2] == 10);
+    queued(0xB3, 22, 10, 1);
+    bad += check("CC22 on DRUM (channel 4): TONE", trk[3].p[P_E2] == 10);
     for (e = 0, ok = 1; e < NENGINES; e++) {   /* the table names a continuous EDIT value of every engine */
         uint32_t m = MIDI_CC_ENG[e], k;
         for (k = 0; k < 2u; k++) {
@@ -399,7 +401,7 @@ static int cc_map_test(void)
     memcpy(before, trk[0].p, sizeof before);
     queued(0xB0, 121, 0, 1);
     bad += check("CC121 resets no mapped parameter (RP-015)", !memcmp(before, trk[0].p, sizeof before));
-    queued(0xB0, 20, 99, 1); queued(0xB0, 76, 99, 1); queued(0xB0, 95, 99, 1);
+    queued(0xB0, 20, 99, 1); queued(0xB0, 80, 99, 1); queued(0xB0, 95, 99, 1);
     bad += check("CCs outside the map change nothing", !memcmp(before, trk[0].p, sizeof before));
     memcpy(before, trk[2].p, sizeof before);
     queued(0xB4, 7, 5, 1); queued(0xB9, 74, 5, 2); queued(0xBF, 91, 5, 1);
@@ -413,15 +415,15 @@ static int cc_map_test(void)
     /* AUTOMATION: the selected track armed and playing records the CC as a knob move; else it is the new base */
     midi_test_reset();
     song.rec = 1; seq_start(); events_block(CTL);
-    queued(0xB0, 74, 20, 1);
-    bad += check("armed and playing: CC74 records a motion event of CUT on the selected track", motion.count == 1u &&
+    queued(0xB0, 21, 20, 1);
+    bad += check("armed and playing: CC21 records a motion event of CUT on the selected track", motion.count == 1u &&
                  motion.event[0].param == P_E4 && motion.event[0].value == 20 && (motion.event[0].place >> 6) == 0u);
-    queued(0xB1, 74, 20, 1);
+    queued(0xB1, 21, 20, 1);
     bad += check("  another track (channel 2, not selected): not recorded", motion.count == 1u && trk[1].p[P_E2] != 0);
     seq_stop(); events_block(CTL);
     bad += check("  stopped: the patch's own CUT comes back", trk[0].p[P_E4] == ANALOG_PRESETS[trk[0].preset].e[4]);
     song.rec = 0;
-    queued(0xB0, 74, 77, 1);
+    queued(0xB0, 21, 77, 1);
     bad += check("not armed: the CC is the new value, no event", trk[0].p[P_E4] == 77 && motion.count == 1u);
     return bad;
 }
@@ -566,7 +568,7 @@ static int learn_test(void)
     for (i = 0; i < P_COUNT; i++)
         ok &= ml_id(ml_code(i)) == i && (i < P_E0 ? ml_code(i) == i + 1u && ml_code(i) < ML_E0 : ml_code(i) == ML_E0 + i - P_E0);
     ok &= ml_id(0) == P_COUNT && ml_id(P_E0 + 1u) == P_COUNT && ml_id(ML_E0 - 1u) == P_COUNT;   /* (no such parameter) */
-    memset(favorites.factory[14], 0, 32);
+    memset(favorites.learned, 0, 32);
     ok &= ml_learn(30, 1, P_IMIX) == 1u && ml_learn(31, 2, P_ESYNC) == 1u && ml_learn(33, 3, P_E0 + 3u) == 1u;
     ok &= ml_get(0) == (30u | 1u << 7 | (P_IMIX + 1u) << 9) && ml_get(1) == (31u | 2u << 7 | (P_ESYNC + 1u) << 9) &&
           ml_get(2) == (33u | 3u << 7 | (ML_E0 + 3u) << 9);
@@ -575,7 +577,7 @@ static int learn_test(void)
     queued(0xB0, 33, 127, 1);
     ok &= trk[1].p[P_IMIX] == 0 && trk[2].p[P_ESYNC] == 1 && trk[3].p[P_E0 + 3u] == param_desc_of(eng_idx(trk[3].eng_req), P_E0 + 3u)->max;
     bad += check("MIDI LEARN codes with 1.5's P_E0 103: common ids + 1 (INSERT MIX, ESYNC), engine ML_E0 + k; all ids round trip", ok);
-    memset(favorites.factory[14], 0, 32);
+    memset(favorites.learned, 0, 32);
     return bad;
 }
 /* 1.5.1 (#179): MIDI Program Change. The audio side only notes it (ui.mpc); the main loop loads it, as PRESETS
@@ -588,6 +590,12 @@ static int pc_bank_read(uint32_t k, uint8_t *pk)
     pc_bank_k = k;
     memcpy(pk, FM6_FACTORY[(k + 2u) % FM6_NFACTORY], FM6_PACKED);
     return 0;
+}
+static uint32_t pc_preset(uint32_t e, uint32_t n)
+{
+    for (uint32_t k=0;k<ENGINES[e]->npresets;k++)
+        if (!preset_hidden(ENGINES[e],k) && !n--) return k;
+    return 255;
 }
 static int pc_test(void)
 {
@@ -606,9 +614,9 @@ static int pc_test(void)
     bad += check("PC on ch 1: the audio side only notes it (track 1, program 3), nothing loaded there", ok);
     frame();
     got = *t;
-    bad += check("  the main loop loads track 1's preset 3", t->preset == 3 && t->eng_req == 0 && !ui.mpc[0]);
+    bad += check("  the main loop loads track 1's preset 3", t->preset == pc_preset(0, 3) && t->eng_req == 0 && !ui.mpc[0]);
     *t = was;
-    apply_preset_to(t, 3);
+    apply_preset_to(t, pc_preset(0, 3));
     ok = !memcmp(got.p, t->p, sizeof got.p) && !memcmp(got.step, was.step, sizeof got.step);
     ok &= got.p[P_LEVEL] == 90 && got.p[P_AMODE] == 2 && got.p[P_SLCR] == SL_GATE;
     ok &= got.p[P_ITYPE] == TP[P_ITYPE].def && got.p[P_FTYPE] == TP[P_FTYPE].def && got.p[P_ESYNC] == TP[P_ESYNC].def;
@@ -621,9 +629,9 @@ static int pc_test(void)
     was = *t;
     pc(0, 2); pc(0, 5);
     frame();
-    ok = t->preset == 5;
+    ok = t->preset == pc_preset(0, 5);
     pc(0, 1); frame();
-    ok &= t->preset == 1;
+    ok &= t->preset == pc_preset(0, 1);
     hold(B_SAVE);
     ok &= same_sound(t, &was) && msg_is("UNDO/REDO T1");
     bad += check("  two before a frame: the last loads; a run of PCs is one undo (SAVE held: the sound before)", ok);
@@ -632,7 +640,7 @@ static int pc_test(void)
     set_engine_of(&trk[1], 0);
     sync_reload = 0;
     pc(1, 2); frame();
-    ok = trk[1].preset == 2 && !sync_reload;
+    ok = trk[1].preset == pc_preset(0, 2) && !sync_reload;
     pc(0, 2); frame();
     ok &= sync_reload;
     bad += check("  a RELOAD to the editor for the selected track's load, none for another's", ok);
@@ -645,7 +653,7 @@ static int pc_test(void)
         set_engine_of(t, e);
         for (n = 0, last = -1; n < preset_shown(e); n++) {
             pc(0, n); frame();
-            ok &= t->eng_req == e && (int32_t)t->preset > last && preset_orig(ENGINES[e], t->preset) == t->preset;
+            ok &= t->eng_req == e && (int32_t)t->preset > last && !preset_hidden(ENGINES[e], t->preset);
             last = t->preset;
         }
         was = *t;
@@ -655,10 +663,10 @@ static int pc_test(void)
     bad += check("  every engine: 0.. its presets in PRESETS' order (no alias twice); past the last ignored", ok);
     set_engine_of(t, ENGI_SAMPLE);
     pc(0, 1); frame();
-    ok = str_eq(ENGINES[ENGI_SAMPLE]->presets[t->preset].name, "FLUTE");
+    ok = str_eq(ENGINES[ENGI_SAMPLE]->presets[t->preset].name, "REN ORGAN");
     pc(0, 4); frame();
-    ok &= t->eng_req == ENGI_SAMPLE && str_eq(ENGINES[ENGI_SAMPLE]->presets[t->preset].name, "FLUTE");
-    bad += check("  SAMPLE: PC 1 is FLUTE (not PIANO's alias); PC 4 (once PERC) does not turn the track into DRUM", ok);
+    ok &= t->eng_req == ENGI_SAMPLE && str_eq(ENGINES[ENGI_SAMPLE]->presets[t->preset].name, "REN ORGAN");
+    bad += check("  SAMPLE: PC 1 is REN ORGAN; out-of-range PC 4 does not turn the track into DRUM", ok);
 
     /* DRUM: the kits as KIT steps through them */
     {
@@ -677,7 +685,7 @@ static int pc_test(void)
                 ok &= k == P_E0 || dr->p[k] == was.p[k];
             last = dr->p[P_E0];
         }
-        ok &= n == 6u && last == d->max;
+        ok &= n == 7u && last == d->max;
         pc(3, DK_COUNT + 2u); frame();
         ok &= dr->p[P_E0] == last;
         bad += check("  DRUM: 0..5 the six kits (STD 80 10 66 55 77; HAND CYM H+CYM skipped), only KIT; 6.. ignored", ok);
@@ -688,28 +696,28 @@ static int pc_test(void)
         track_t *f = &trk[1];
         uint8_t v[FP_SIZE + 1u];
         set_engine_of(f, ENGI_FM6);
-        pc(1, 4); frame();
+        pc(1, 1); frame();
         ok = f->preset == 4 && f->p[P_E7] == 4 && fm6_slot[1] == 4u && f->p[P_E6] == 30;   /* PAD: F5, DTUN 30 */
-        bad += check("  FM6: 0..7 its presets (PC 4: PAD, SLOT F5, its DTUN)", ok);
-        pc(1, FM6_NFACTORY); frame();
+        bad += check("  FM6: visible presets (PC 1: PAD, SLOT F5, its DTUN)", ok);
+        pc(1, preset_shown(ENGI_FM6)); frame();
         ok = f->p[P_E7] == 4 && fm6_slot[1] == 4u;
         fm6_bank_used = 1u | 1u << 5;
         fm6_bank_read = pc_bank_read;
-        pc(1, FM6_NFACTORY); frame();
+        pc(1, preset_shown(ENGI_FM6)); frame();
         fm6_unpack(FM6_FACTORY[2], v);
         ok &= f->p[P_E7] == (int16_t)(FM6_OWN + 1u) && fm6_slot[1] == FM6_OWN + 1u && pc_bank_k == 0u &&
               !memcmp(v, fm6_patch[1], FP_SIZE) && f->p[P_E6] == 30 && f->preset == 4;
-        pc(1, FM6_NFACTORY + 1); frame();
+        pc(1, preset_shown(ENGI_FM6) + 1); frame();
         ok &= f->p[P_E7] == (int16_t)(FM6_OWN + 1u);
-        pc(1, FM6_NFACTORY + 5); frame();
+        pc(1, preset_shown(ENGI_FM6) + 5); frame();
         ok &= f->p[P_E7] == (int16_t)(FM6_OWN + 6u) && pc_bank_k == 5u;
-        pc(1, FM6_NFACTORY + FM6_NBANK); frame();
+        pc(1, preset_shown(ENGI_FM6) + FM6_NBANK); frame();
         ok &= f->p[P_E7] == (int16_t)(FM6_OWN + 6u);
         pc(1, 0); frame();
-        ok &= f->p[P_E7] == 0 && fm6_slot[1] == 0u && f->p[P_E6] == 0;
+        ok &= f->p[P_E7] == 1 && fm6_slot[1] == 1u && f->preset == 1;
         fm6_bank_used = 0;
         fm6_bank_read = 0;
-        bad += check("  FM6: 8.. the voice bank B1..B32 through SLOT (the rest stays), an empty or no bank ignored", ok);
+        bad += check("  FM6: after visible presets, the voice bank B1..B32 through SLOT (the rest stays), an empty or no bank ignored", ok);
     }
 
     /* ROUT */
@@ -724,12 +732,12 @@ static int pc_test(void)
     song.g[G_ROUTE] = 1;
     song.sel = 2;
     pc(9, 3); frame();
-    ok = trk[2].preset == 3 && trk[0].preset == initial_preset;
+    ok = trk[2].preset == pc_preset(0, 3) && trk[0].preset == initial_preset;
     song.g[G_ROUTE] = 2;
     song.sel = 0;
     events_block(CTL);
     pc(5, 1); pc(0, 2); frame();
-    ok &= trk[1].preset == 1 && trk[0].preset == initial_preset;
+    ok &= trk[1].preset == pc_preset(0, 1) && trk[0].preset == initial_preset;
     song.g[G_ROUTE] = 0;
     events_block(CTL);
     bad += check("  ROUT SEL: any channel the selected track; CH5-8: channel 6 track 2, channel 1 ignored", ok);
@@ -738,9 +746,9 @@ static int pc_test(void)
     um_byte(0xC1); um_byte(2); events_block(CTL);
     ok = ui.mpc[1] == (0x80u | 2u);
     frame();
-    ok &= trk[1].preset == 2;
+    ok &= trk[1].preset == pc_preset(0, 2);
     um_byte(3); events_block(CTL); frame();
-    ok &= trk[1].preset == 3;
+    ok &= trk[1].preset == pc_preset(0, 3);
     bad += check("  TRS MIDI IN: a PC (one data byte) and the next under running status", ok);
 
     /* MIDI LEARN waiting for a CC: a PC is no CC */
@@ -749,7 +757,7 @@ static int pc_test(void)
     ok = !ml_heard && ui.mpc[0] == (0x80u | 2u);
     ml_arm = 0;
     frame();
-    ok &= trk[0].preset == 2;
+    ok &= trk[0].preset == pc_preset(0, 2);
     bad += check("  MIDI LEARN waiting: a PC is not taken for a CC, it loads", ok);
     return bad;
 }

@@ -15,7 +15,7 @@
  * nothing of theirs is in the settings record (MI_PROJECT: menu_get / menu_put read and write song.g) */
 enum { MI_COLOR, MI_STYLE, MI_LARGE, MI_ANIM, MI_LEDS, MI_SCROFF, MI_SCOPE, MI_HOME, MI_HOLD, MI_ACCEL, MI_LATCH, MI_BPMLOCK, MI_SCLLED,
        MI_PREVIEW, MI_CHADD, MI_LOWCUT, MI_USB,
-       MI_CLICK, MI_CLKLVL, MI_COUNTIN, MI_TUNE, MI_MIDIIN, MI_LCLEAR, MI_SERIAL, MI_RESTORE, MI_HELP, MI_PANEL, MI_INFO,
+       MI_CLICK, MI_CLKLVL, MI_COUNTIN, MI_TUNE, MI_MIDIIN, MI_LCLEAR, MI_SCENE, MI_SERIAL, MI_RESTORE, MI_HELP, MI_PANEL, MI_INFO,
        MI_ABOUT, MI_COUNT };
                                                        /* (1.1: the metronome's rows in AUDIO; 1.2: RESTORE LAST in
                                                         * SYSTEM, SCALE LEDS STEP PREVIEW CHORD ENTRY in CONTROL, SCOPE in
@@ -27,7 +27,7 @@ static int menu_valued(uint32_t row) { return row < MI_VALUES && row != MI_LCLEA
 static const char *const MI_NAME[MI_COUNT] = {"COLOR", "STYLE", "LARGE", "ANIM", "LEDS", "SCREEN OFF", "SCOPE", "HOME", "HOLD", "KNOB ACCEL",
                                               "FX LATCH", "BPM LOCK", "SCALE LEDS", "STEP PREVIEW", "CHORD ENTRY",
                                               "SPEAKER EQ", "USB LEVEL", "CLICK", "CLICK LEVEL", "COUNT-IN", "TUNE",
-                                              "MIDI IN", "LEARN CLEAR", "USB SERIAL", "RESTORE LAST", "HELP", "CALIBRATION", "INFO",
+                                              "MIDI IN", "LEARN CLEAR", "SCENE", "USB SERIAL", "RESTORE LAST", "HELP", "CALIBRATION", "INFO",
                                               "ABOUT"};
 /* 1.0.5: the MENU's tabs (ui_menu.c: ALGORITHM steps between them, PRESETS among one tab's rows; the editor gets a
  * row's tab after its MENU_DESC reply). A tab's rows follow each other in MI order (tests/ui_test.c checks it); at
@@ -52,7 +52,7 @@ static const uint8_t MI_TAB[MI_COUNT] = {
     MTAB_MIDI,                                                              /* MIDI IN (1.2) */
     MTAB_MIDI,                                                              /* LEARN CLEAR (1.5) */
     MTAB_SYSTEM, MTAB_SYSTEM, MTAB_SYSTEM,                                  /* USB SERIAL, RESTORE LAST, HELP (1.5) */
-    MTAB_SYSTEM, MTAB_SYSTEM, MTAB_SYSTEM,                                  /* CALIBRATION, INFO (1.2), ABOUT */
+    MTAB_SYSTEM, MTAB_SYSTEM, MTAB_SYSTEM, MTAB_SYSTEM,                     /* SCENE, CALIBRATION, INFO (1.2), ABOUT */
 };
 /* TUNE: the project's tuning in cents (G_TUNE, -50..+50); as a row its values 0..TUNE_N - 1 (value - TUNE_MIN). The
  * editor gets it as a number (EDM_INT: the cents, min..max, its unit) */
@@ -147,7 +147,7 @@ static uint32_t menu_n(uint32_t row)
 {
     return row == MI_COLOR ? NPALETTES : row == MI_LOWCUT || (row >= MI_CLICK && row <= MI_COUNTIN) ? 3u :
            row == MI_HOLD ? 4u : row == MI_LEDS ? LEDS_COUNT : row == MI_SCROFF ? NELEM(SCROFF_N) :
-           row == MI_TUNE ? TUNE_N : row == MI_MIDIIN ? NELEM(N_ROUTE) : row == MI_ANIM ? 3u : row == MI_HOME ? HV_COUNT : 2u;
+           row == MI_SCENE ? GB_NSCENE : row == MI_TUNE ? TUNE_N : row == MI_MIDIIN ? NELEM(N_ROUTE) : row == MI_ANIM ? 3u : row == MI_HOME ? HV_COUNT : 2u;
 }
 static uint32_t menu_get(uint32_t row)
 {
@@ -166,6 +166,7 @@ static uint32_t menu_get(uint32_t row)
     case MI_CLICK: case MI_CLKLVL: case MI_COUNTIN: return rp_get(row - MI_CLICK);
     case MI_TUNE: return (uint32_t)(clamp(song.g[G_TUNE], TUNE_MIN, TUNE_MIN + (int32_t)TUNE_N - 1) - TUNE_MIN);
     case MI_MIDIIN: return (uint32_t)clamp(song.g[G_ROUTE], 0, (int32_t)NELEM(N_ROUTE) - 1);
+    case MI_SCENE: return ui_scene < GB_NSCENE ? ui_scene : 0u;   /* (a later version's: DUNGEON, as played) */
     case MI_LEDS:
         while (i + 1u < LEDS_COUNT && LEDS_MENU[i] != settings_leds)
             i++;
@@ -189,6 +190,7 @@ static const char *menu_vname(uint32_t row, uint32_t v)
     case MI_SCROFF: return SCROFF_N[v % NELEM(SCROFF_N)];
     case MI_ANIM: return ANIM_N[v % 3u];
     case MI_HOME: return HOME_N[v % HV_COUNT];
+    case MI_SCENE: return GB_SCENES[v % GB_NSCENE].name;
     case MI_LEDS: return LEDS_NAME[LEDS_MENU[v % LEDS_COUNT]];
     case MI_MIDIIN: return N_ROUTE[v % NELEM(N_ROUTE)];
     case MI_TUNE: {                                    /* the cents, signed ("+12", "0", "-7"; the menu adds "ct") */
@@ -238,6 +240,7 @@ static void menu_put(uint32_t row, uint32_t v)
         ui_home_view = (uint8_t)(v < HV_COUNT ? v : HV_SCOPE);
         ui.force = 1;
         break;
+    case MI_SCENE: ui_scene = (uint8_t)v; break;      /* (played at the next power-on: main.c felucca_init) */
     case MI_LEDS: settings_leds = LEDS_MENU[v]; break;
     case MI_CLICK: case MI_CLKLVL: case MI_COUNTIN: rp_put(row - MI_CLICK, v); break;   /* (at once: click.c, seq.c) */
     case MI_TUNE: song.g[G_TUNE] = (int16_t)((int32_t)v + TUNE_MIN); break;

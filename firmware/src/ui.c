@@ -104,6 +104,7 @@ static void rp_put(uint32_t f, uint32_t v)
  * 0 in older ones = FLAT; 2, the retired PIXEL (1.0.1), reads as LINE; anything else unknown as FLAT (settings_persist.c). gfx.c draws from its copy, ux.style
  * (ui_draw.c style_apply) */
 #define ui_style (favorites.factory[15][29])
+#define ui_scene (favorites.factory[15][12]) /* Separate from Felucca SCREEN OFF at [27]. */
 static void draw_gaps(uint32_t y, uint32_t h);        /* (ui_draw.c) */
 
 static uint8_t sync_reload;                  /* engine / preset / project / user preset loaded: editor RELOAD push */
@@ -1243,7 +1244,8 @@ static void apply_preset_to(track_t *t, uint32_t pi)
 #endif
     if (t->eng_req % NENGINES == ENGI_SAMPLE && pi == SMP_SET_PERC) {   /* SAMPLE preset 4 was PERC (retired, a stored */
         set_engine_of(t, ENGI_DRUM);                  /* number: the editor's PRESET, a favourite): DRUM's kit */
-        return;                                       /* (core.h drum_from_perc) */
+        apply_preset_to(t, 0);                        /* (core.h drum_from_perc). GHOULBOX: its STD kit, not the first */
+        return;                                       /* preset browsing shows (CRYPT KIT): the sound it was */
     }
     load_begin(t, UNDO_SOUND);
     panic_req |= (uint8_t)(1u << trk_index(t));       /* MONO/POLY may change: release what sounds */
@@ -1325,7 +1327,7 @@ static void midi_pc_load(track_t *t, uint32_t n)
             t->p[P_E7] = (int16_t)s;
         return;
     }
-    for (k = 0; preset_orig(ENGINES[e], k) != k || n--; k++)   /* the n-th shown preset */
+    for (k = 0; preset_hidden(ENGINES[e], k) || n--; k++)   /* the n-th shown preset */
         ;
     apply_preset_to(t, k);
 }
@@ -1350,6 +1352,40 @@ static void track_defaults(track_t *t)
     for (i = 0; i < P_E0; i++)
         t->p[i] = TP[i].def;
     track_defaults_steps(t);
+}
+
+/* GHOULBOX: power-on scene s (engines.c GB_SCENES; one out of range, from a later version, plays DUNGEON): the globals'
+ * defaults, each part's sound and pattern at 1/8, the scene's tempo, HALL and TAPE (main.c felucca_init) */
+static void gb_scene_load(uint32_t s)
+{
+    uint32_t i;
+    if (s >= GB_NSCENE)
+        s = 0;
+    for (i = 0; i < G_COUNT; i++)
+        song.g[i] = GP[i].def;
+    undo_depth++;                             /* (no undo copy of the power-on loads) */
+    for (i = 0; i < NTRK; i++) {
+        track_t *t = &trk[i];
+        const uint8_t *p = GB_SCENES[s].part[i % NPART];
+        track_defaults(t);
+        set_engine_of(t, p[0]);
+        apply_preset_to(t, p[1]);             /* with its sends */
+        t->engine = t->eng_req;
+        eng_mem_claim(t);
+        track_defaults_steps(t);              /* (a sound load never touches them) */
+        if (p[2])
+            load_pat16(t, PATTERNS[p[2] - 1u].note, PATTERNS[p[2] - 1u].flags);
+        pat_sig[i] = steps_sig(t);            /* a default pattern, not the user's */
+        pat_last[i] = p[2];
+        t->p[P_SDIV] = 1;                     /* 1/8, a slow scene */
+    }
+    undo_depth--;
+    song.sel = 0;
+    song.g[G_BPM] = GB_SCENES[s].bpm;
+    song.g[G_RTYPE] = 2;                      /* HALL */
+    song.g[G_TAPE] = GB_SCENES[s].tape;
+    ui.home = 1;
+    ui.force = 1;
 }
 
 /* switch engine (its defaults + first preset) and say so */

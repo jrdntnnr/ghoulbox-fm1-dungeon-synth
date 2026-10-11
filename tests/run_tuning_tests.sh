@@ -10,7 +10,7 @@ python3 tools/gen_scales.py --check
 if [ ! -f build/gen/ui_fonts.h ] || [ ! -f build/gen/felucca_samples.h ]; then
     python3 -c 'import sys; sys.path.insert(0,"tools"); import build; build.generate()'
 fi
-for name in tuning scale project chord motion ratchet midi_control ui persistence backup editor; do
+for name in tuning chord_tuning integration_format scale project chord motion ratchet midi_control ui persistence backup editor; do
     "$CC" -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/${name}_test" "tests/${name}_test.c" -lm
     if "$OUT/${name}_test" > "build/assessment/tuning-${name}.log" 2>&1; then
         echo "$name: passed"
@@ -28,4 +28,5 @@ mkdir -p build/ui_tuning/ppm build/ui_tuning_slot
 "$OUT/descdump" > "$OUT/desc.json"
 node web/test_web.mjs > build/assessment/tuning-web.log
 node web/test_backup.mjs > build/assessment/tuning-web-backup.log
+node web/test_scala.mjs > build/assessment/tuning-scala.log
 echo "Microtuning host checks passed. Hardware build and on-device checks are separate."

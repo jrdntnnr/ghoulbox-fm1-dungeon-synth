@@ -224,8 +224,13 @@ if [ -f build/gen/felucca_tables.h ]; then
     python3 tools/gen_scales.py --check
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/tuning_test" tests/tuning_test.c -lm
     run "microtuning: pitch, polyphony, input, frozen project/preset migration" "$OUT/tuning_test"
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/integration_format_test" tests/integration_format_test.c -lm
+    run "compact projects and legacy microtuning migration" "$OUT/integration_format_test"
+    run "explicit legacy settings conversion" python3 tests/settings_migration_test.py
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/scale_test" tests/scale_test.c -lm
     run "scales: white-key mapping and note lifecycle" "$OUT/scale_test"
+    $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/chord_tuning_test" tests/chord_tuning_test.c -lm
+    run "maqam chord tuning: actual simultaneous pitches, all voicings, MIDI, arp, recording, CUSTOM" "$OUT/chord_tuning_test"
     $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/chord_test" tests/chord_test.c -lm
     run "chord keys: diatonic and fixed chords, voicings, MONO root, releases, recording, ARP, MIDI IN, kits" "$OUT/chord_test"
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/speaker_test" tests/speaker_test.c -lm
@@ -425,6 +430,7 @@ run "installer CLI (fm1_install.py) against a simulated FM-1" python3 tests/inst
 if command -v node >/dev/null 2>&1; then
     run "web pages: editor protocol + samples, package builder, update protocol" node web/test_web.mjs
     run "web backup: capture, validation before writes, restore order" node web/test_backup.mjs
+    run "Scala import: ratios, cents, octave maps, invalid files" node web/test_scala.mjs
 else
     echo "== skip web tests (no node)"
 fi

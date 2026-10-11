@@ -1364,8 +1364,47 @@ static void ui_notices(void)
     }
 }
 
+/* GHOULBOX: the MIDI CCs midi_control.c noted (MIDI_CC_MAP), applied here in the main loop as the editor's SET
+ * applies a value: into the control's range, past an alias, captured by automation while it records */
+static void midi_cc_apply(void)
+{
+    uint32_t t, i;
+    for (t = 0; t < NTRK; t++)
+        for (i = 0; i < NMIDI_CC; i++) {
+            uint32_t f = motion_guard(), q = midi_cc_q[t][i], kind = MIDI_CC_MAP[i].kind, id = MIDI_CC_MAP[i].id;
+            const param_desc_t *d;
+            const uint8_t *o;
+            int32_t v;
+            midi_cc_q[t][i] = 0;                        /* (read and clear together: a CC between them is kept) */
+            motion_unguard(f);
+            if (!q)
+                continue;
+            q -= 1u;
+            if (kind == MC_F) {
+                perf_k[0] = (int8_t)(q == 64u ? 0 : clamp(((int32_t)q - 64) * 100 / 63, -100, 100));
+                continue;
+            }
+            if (kind == MC_K)
+                id = ENGINES[trk[t].eng_req % NENGINES]->knob[id & 3u];
+            d = kind == MC_G ? &GP[id] : track_desc(&trk[t], id);
+            if (d->max <= d->min)
+                continue;
+            v = ((d->max - d->min) * (int32_t)q + 63) / 127;   /* the place along the range, */
+            o = enum_order(d);
+            v = enum_orig(d, d->min + (o ? o[v] : v));     /* in the shown order (1.3: delay TIME by length, as its knob) */
+            if (kind == MC_G) {
+                song.g[id] = (int16_t)v;
+            } else {
+                trk[t].p[id] = (int16_t)v;
+                (void)motion_capture(&trk[t], id, trk[t].p[id]);
+            }
+            ui.force = 1;
+        }
+}
+
 static void ui_input(void)
 {
+    midi_cc_apply();                                  /* GHOULBOX: MIDI CCs, in the main loop */
     uint32_t pressed = fm1_input_edges(0), notes = fm1_input_note_edges(), now = fm1_ticks(), id, b, k;
     uint32_t home, rec, save;
     uint32_t oct;

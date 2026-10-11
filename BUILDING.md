@@ -61,7 +61,7 @@ Build options (environment, `0` or `1`; defaults in `firmware/src/felucca.c`, `c
 | `FELUCCA_UAC_48K` | 1 | `0`: the USB audio input at 44.1 kHz only, as up to 1.0.5.2 (`firmware/src/usb.c`) |
 | `FELUCCA_UAC_AS_FIRST` | 1 | the audio control header lists the audio streaming interface before the MIDI one, so the USB audio driver of older macOS (up to 15) finds it; `0`: 1.0 to 1.5's order, byte for byte (`firmware/src/usb.c`) |
 | `FELUCCA_UART` | 1 | TRS MIDI IN |
-| `FELUCCA_SLICE` | 1 | the SLICE engine |
+| `FELUCCA_SLICE` | 0 | target dungeon profile omits the already-hidden SLICE engine to fit flash; `1` exceeds the current slot |
 | `FELUCCA_ICONS` | 1 | parameter icons on the knob cards |
 | `FELUCCA_FM4` | 0 | the retired DIGITAL engine (4-operator FM) instead of its FM6 conversion |
 
@@ -115,7 +115,7 @@ does the same for the cost files.
 ## Install
 
 Use the web installer in Chrome or Edge:
-<https://hugelton.github.io/Felucca/webapp/installer/>. It installs the released package.
+<https://jrdntnnr.github.io/ghoulbox-fm1-dungeon-synth/webapp/installer/>. It installs this fork’s development preview; see [validation status](docs/INTEGRATION-STATUS.md).
 
 From the command line (needs `pip3 install mido python-rtmidi`):
 
@@ -135,3 +135,17 @@ cd /tmp/felucca-site && python3 -m http.server 8000
 
 Installing firmware is at your own risk. If an install fails and the FM-1 no longer
 starts, recovery needs [FM-1-transporter](https://github.com/kurogedelic/FM-1-transporter).
+
+## Microtonal dungeon profile
+
+The target builder defaults to `FELUCCA_SLICE=0`. Engine ID 13 remains reserved; this profile cannot play old SLICE tracks. SAMPLE, GRAIN, GURDY, DRUM/CRYPT, all dungeon sounds and the SLICER effect remain available. Native host tests can generate full sample fixtures with `python3 -c 'import sys; sys.path.insert(0,"tools"); import build; build.generate()'`.
+
+On Apple silicon, a Lima VM with Rosetta/binfmt and an amd64 Debian container also works. Point a `docker` wrapper at `limactl shell ghoul nerdctl`, with your own `LIMA_HOME`, then use:
+
+```sh
+JIELI_TOOLCHAIN=/path/to/jieli/toolchain python3 tools/build.py --sdk /path/to/ac79-sdk
+```
+
+The three SDK assets are checked against SHA-256 hashes in `tools/build.py`. The tested toolchain is `jieli-linux-toolchains-20260730.1`. Do not publish the downloaded compiler or the local VM.
+
+For the package built with SLICE omitted, run the static target check with `FELUCCA_SLICE=0 python3 tests/target_budget.py`. This only permits those two SLICE functions to be absent; other missing or over-budget functions still fail.

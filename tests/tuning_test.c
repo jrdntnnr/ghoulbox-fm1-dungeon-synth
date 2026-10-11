@@ -197,4 +197,6 @@ static void persistence_test(void)
     u.ver=4; assert(!up_valid(&u));
     puts("tuning: frozen GHOULBOX 1.1 project/preset migration, FM6, motion IDs, tuned round trip and corrupt data pass");
 }
+#ifndef TUNING_TEST_NO_MAIN
 int main(void) { pitch_math(); audio_test(); independent_rates(); input_test(); persistence_test(); return 0; }
+#endif

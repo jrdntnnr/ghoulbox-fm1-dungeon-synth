@@ -11,7 +11,7 @@ gb = set()                                           # GHOULBOX's own presets: t
 for m in re.finditer(r'\("([A-Z0-9 ]+)", \[', (ROOT / "tools/ghoulbox_presets.py").read_text()):
     gb.add(m.group(1))
 gb |= {"FRENCH HORN", "VIRGINAL", "GLASS CHOIR", "DARK STRINGS", "LOFI FLUTE", "PIPE ORGAN", "TUBA",
-       "BOWED PSALT", "REN ORGAN", "TENOR RECORD", "FOLK HARP"}
+       "BOWED PSALT", "REN ORGAN", "TENOR RECORD", "FOLK HARP", "CRYPT KIT", "TOMB DRUMS"}
 hidden = {}
 for e, n in d["HIDDEN"]:
     hidden.setdefault(e, set()).add(n)
@@ -31,7 +31,7 @@ for name in d["ORDER"]:
     total += len(cells)
     rows.append(f'<tr><td><span class="k">{name}</span><br><span class="small">{WHAT.get(name, "")}</span></td>'
                 f'<td>{" · ".join(cells)}</td></tr>')
-assert total == 55, total
+assert total == 59, total
 table = '<table><tr><th>Engine</th><th>Sounds (in PRESETS order)</th></tr>' + "".join(rows) + "</table>"
 src = (HERE / "guide.html").read_text().replace("{{SOUNDS}}", table)
 tmp = HERE / ".guide.build.html"

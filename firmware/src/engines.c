@@ -125,8 +125,9 @@ static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
     2, 3, 4, 5, 6, 7, 8, 9,      /* PHASE LOFI SAMPLE VOICE TRIO WHEEL GRAIN PHYS (SAMPLE: GHOULBOX 1.1's CC0 sets) */
     14,                          /* GURDY (GHOULBOX) */
     11,                          /* NOISE */
-};                               /* GHOULBOX: SLICE and DRUM not offered (every preset retired, GB_HIDDEN); they
-                                  * still play what a project or a user preset holds (eng_ok) */
+    10,                          /* DRUM (GHOULBOX 1.2: its CRYPT kit) */
+};                               /* GHOULBOX: SLICE not offered (every preset retired, GB_HIDDEN); it still plays
+                                  * what a project or a user preset holds (eng_ok) */
 
 /* GHOULBOX: factory presets the owner retired. Kept in their engines (a stored preset number - a project, a user
  * preset, an old format - still loads its sound) but not browsed: PRESETS, the knob, favourites, the editor
@@ -214,6 +215,18 @@ static const struct {
      {1, T_, T_, 0, 0, 0, 1, T_, 0, T_, T_, 0, 0, T_, T_, T_}},
     {"PEDAL", {38, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},                    /* 17 one D, held */
      {1, T_, T_, T_, T_, T_, T_, T_, T_, T_, T_, T_, T_, T_, T_, T_}},
+    /* GHOULBOX 1.2: more in D minor over the scene's chords (Dm Bb C A), appended (18..21) */
+    {"MARCH", {38, 0, 45, 0, 34, 0, 41, 0, 36, 0, 43, 0, 33, 0, 40, 0},             /* 18 the bass's march: root, fifth, a chord a bar */
+     {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0}},
+    {"LAMENT", {69, 0, 67, 65, 64, 0, 62, 0, 65, 64, 62, 61, 62, 0, 0, 0},          /* 19 a falling line, A down to D */
+     {1, T_, 0, 0, 0, T_, 0, T_, 0, 0, 0, 0, 1, T_, T_, T_}},
+    {"ARPEGGIO", {50, 53, 57, 62, 46, 50, 53, 58, 48, 52, 55, 60, 45, 49, 52, 57},  /* 20 each chord broken upward (harp, lute) */
+     {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0}},
+    {"ANTIPHON", {62, 0, 65, 64, 62, 0, 0, 0, 50, 0, 53, 52, 50, 0, 0, 0},          /* 21 a call, answered an octave down */
+     {1, T_, 0, 0, 0, T_, T_, 0, 1, T_, 0, 0, 0, T_, T_, 0}},
+    /* GHOULBOX 1.2: for the DRUM engine's CRYPT kit (GM notes: its FRAME, SHAKR, TIMP, ROPE, SLAP lanes) */
+    {"TOMBBEAT", {36, 42, 0, 42, 45, 42, 36, 42, 36, 42, 45, 45, 38, 42, 39, 42},       /* 22 a procession */
+     {1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0}},
 };
 #undef T_
 #define NPATTERNS (sizeof PATTERNS / sizeof PATTERNS[0])
@@ -221,8 +234,21 @@ static const struct {
 /* the parts at power-on (engine, preset, PATTERNS[n - 1] in the sequencer, 0 = empty: all are): bass, pad, lead, drums */
 static const uint8_t TRK_DEF[NPART][3] = {{0, 4, 0}, {ENGI_FM6, 4, 0}, {3, 0, 0}, {ENGI_DRUM, 0, 0}}; /* ANALOG ACID,
                                                                        * FM6 PAD (was DIGITAL PAD), LOFI PULSE LD, DRUM KIT */
-/* GHOULBOX: what felucca_init plays instead (TRK_DEF stays Felucca's: an old project's missing parts are those):
- * melody, pad, choir, drone, in D minor; felucca_init also sets 72 BPM, HALL, TAPE 40 and 1/8 steps */
-static const uint8_t GB_SCENE[NPART][3] = {{ENGI_GURDY, 0, 15}, {0, 12, 14}, {5, 4, 16}, {ENGI_GURDY, 1, 17}}; /* GURDY
-                                                * HURDY GURDY, ANALOG CRYPT PAD, VOICE MONKS, GURDY DRONE WHEEL */
+/* GHOULBOX: what felucca_init plays instead (TRK_DEF stays Felucca's: an old project's missing parts are those), in D
+ * minor, 1/8 steps, HALL (ui.c gb_scene_load). 1.3: MENU > SYSTEM > SCENE picks one (ui_scene; append-only: a saved
+ * value keeps its scene, an unknown one plays DUNGEON). The patterns are the dungeon nine (PATTERNS[n - 1]) */
+#define GB_NSCENE 5u
+static const struct { const char *name; uint8_t bpm, tape, part[NPART][3]; } GB_SCENES[GB_NSCENE] = {
+    {"DUNGEON", 72, 40, {{ENGI_GURDY, 0, 15}, {0, 12, 14}, {5, 4, 16}, {ENGI_GURDY, 1, 17}}},   /* HURDY GURDY BALLAD,
+                                    * CRYPT PAD DIRGE, MONKS CHANT, DRONE WHEEL PEDAL: the scene up to 1.2 */
+    {"CRYPT", 60, 55, {{5, 7, 17}, {5, 5, 14}, {11, 4, 17}, {ENGI_DRUM, 2, 22}}},              /* LOW DRONE PEDAL,
+                                    * CRYPT CHOIR DIRGE, CAVE WIND PEDAL, TOMB DRUMS TOMBBEAT */
+    {"TAVERN", 96, 30, {{ENGI_GURDY, 2, 15}, {ENGI_PHYS, 11, 20}, {ENGI_PHYS, 9, 18}, {ENGI_DRUM, 1, 22}}},   /* DANCE
+                                    * GURDY BALLAD, DUNGEON HARP ARPEGGIO, LUTE MARCH, CRYPT KIT TOMBBEAT */
+    {"CHAPEL", 66, 40, {{7, 6, 14}, {5, 4, 16}, {ENGI_SAMPLE, 7, 19}, {ENGI_GURDY, 4, 21}}},     /* CATHEDRAL DIRGE,
+                                    * MONKS CHANT, TENOR RECORD LAMENT, VIELLE ANTIPHON */
+    {"BLANK", 72, 40, {{ENGI_GURDY, 0, 0}, {0, 12, 0}, {5, 4, 0}, {ENGI_GURDY, 1, 0}}},         /* DUNGEON's sounds, no
+                                    * notes: a clean start */
+};
+#define GB_SCENE (GB_SCENES[0].part)   /* (the scene up to 1.2: tests/descdump.c, tests/ghoulbox_shots.c) */
 static uint32_t trk_def_engine(uint32_t i) { return TRK_DEF[i % NPART][0]; }

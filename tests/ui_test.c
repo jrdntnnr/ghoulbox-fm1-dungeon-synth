@@ -179,6 +179,7 @@ static void ui_power_on(void)
     proj_cur = PROJ_NO_SLOT;
     memset(&favorites, 0, sizeof favorites);
     ml_off();                                     /* (MIDI LEARN off, nothing learned) */
+    favorites.factory[15][13] = GB_MIG_SERIAL;
     memset(&undo, 0, sizeof undo);
     fop_op = fop_stg = 0;                         /* (FM6's operator pages: OP 1, stage 1, as at power-on) */
     memset(pat_last, 0, sizeof pat_last);
@@ -1227,6 +1228,7 @@ static int test_grid(void)
     uint32_t i, k, leds, ok;
     ui_power_on();
     set_engine_of(t, ENGI_DRUM);
+    apply_preset_to(t, 0);                        /* (DRUM KIT, the STD kit: GHOULBOX's DRUM opens on CRYPT KIT) */
     t->engine = t->eng_req;
     open_family(FAM_SEQ);
     frame();
@@ -1518,11 +1520,11 @@ static int test_categories(void)
     turn(EN_K4, 1);
     pos = preset_pos(&total);
     for (n = 0, e = 0; e < NENGINES; e++)
-        for (k = 0; eng_ok(e) && k < preset_shown(e); k++)
-            n += preset_cat(e, k) == CAT_BASS;
+        for (k = 0; eng_ok(e) && k < ENGINES[e]->npresets; k++)
+            n += !preset_hidden(ENGINES[e], k) && preset_cat(e, k) == CAT_BASS;
     bad += check("  KNOB 4: ALL, FAV, then BASS: the list holds the factory basses only, the sound not loaded",
                  list_mode() == 2u && str_eq(list_name(list_mode()), "BASS") && !favorites.filter && ui_lcat == CAT_BASS &&
-                 total == n && n >= 6u && pos == total && TSEL->eng_req == 0u && TSEL->preset == 0u);
+                 total == n && n == 4u && pos == total && TSEL->eng_req == 0u && TSEL->preset == 0u);
     ok = 1;
     for (i = 0; i < total; i++) {
         turn(EN_PRESET, 1);
@@ -1628,7 +1630,7 @@ static int test_categories(void)
         ok = up_rename_cat(9, "OLD KIT", CAT_FX) != 1;
         up_values(r, v1);
         bad += check("  a version 2 record: listed by its engine (DRUM); a rename with a category makes it version 4, same sound",
-                     c0 == CAT_DRUM && ok && r->ver == UP_VER && up_cat(9) == CAT_FX && !memcmp(v0, v1, sizeof v0));
+                     c0 == CAT_DRUM && ok && r->ver == 4u && up_cat(9) == CAT_FX && !memcmp(v0, v1, sizeof v0));
         r->ver = 1; r->engine = ENGI_PHYS;
         bad += check("  a version 1 PHYS record keeps its version (MODEL 2 = DUST): no category",
                      (up_set_cat(r, CAT_PAD), r->ver == 1u && up_cat(9) == cat_of_engine(ENGI_PHYS)));
@@ -1740,7 +1742,7 @@ static int test_menu_tabs(void)
                  "constant (S, LARGE)",
                  ok && MTAB_COUNT == 5u && str_eq(MTAB_NAME[0], "DISPLAY") && str_eq(MTAB_NAME[MTAB_MIDI], "MIDI") &&
                  mtab_rows(MTAB_DISPLAY) == 8u && MI_TAB[MI_HOME] == MTAB_DISPLAY && mtab_rows(MTAB_CONTROL) == 7u && mtab_rows(MTAB_AUDIO) == 6u &&
-                 mtab_rows(MTAB_MIDI) == 2u && MI_TAB[MI_LCLEAR] == MTAB_MIDI && mtab_rows(MTAB_SYSTEM) == 6u && MI_TAB[MI_TUNE] == MTAB_AUDIO &&   /* (1.5: LEARN CLEAR, HELP) */
+                 mtab_rows(MTAB_MIDI) == 2u && MI_TAB[MI_LCLEAR] == MTAB_MIDI && mtab_rows(MTAB_SYSTEM) == 7u && MI_TAB[MI_TUNE] == MTAB_AUDIO &&   /* (1.5: LEARN CLEAR, HELP) */
                  MI_TAB[MI_MIDIIN] == MTAB_MIDI && MI_TAB[MI_INFO] == MTAB_SYSTEM && MI_INFO >= MI_VALUES);
 
     ui_power_on();
@@ -1758,11 +1760,11 @@ static int test_menu_tabs(void)
     turn(EN_ALGO, 1); ok &= ui.menu_sel == MI_MIDIIN && menu_tab() == MTAB_MIDI;   /* (1.2) */
     turn(EN_PRESET, 1); ok &= ui.menu_sel == MI_LCLEAR;  /* (1.5: LEARN CLEAR, then round) */
     turn(EN_PRESET, 1); ok &= ui.menu_sel == MI_MIDIIN;
-    turn(EN_ALGO, 1); ok &= ui.menu_sel == MI_SERIAL && menu_tab() == MTAB_SYSTEM;
+    turn(EN_ALGO, 1); ok &= ui.menu_sel == MI_SCENE && menu_tab() == MTAB_SYSTEM;
     turn(EN_ALGO, -1); turn(EN_ALGO, -1); ok &= ui.menu_sel == MI_LOWCUT;
     turn(EN_ALGO, -1); ok &= ui.menu_sel == MI_LATCH;   /* (back at the row left there) */
     turn(EN_ALGO, -1); ok &= ui.menu_sel == MI_LEDS;
-    turn(EN_ALGO, -1); ok &= ui.menu_sel == MI_SERIAL && menu_tab() == MTAB_SYSTEM;   /* (wraps) */
+    turn(EN_ALGO, -1); ok &= ui.menu_sel == MI_SCENE && menu_tab() == MTAB_SYSTEM;   /* (wraps; 1.3: SCENE its first row) */
     turn(EN_ALGO, 1); ok &= ui.menu_sel == MI_LEDS;
     bad += check("MENU: ALGORITHM steps between the tabs and wraps, each tab back at its last row", ok && ui.menu == 1);
     turn(EN_ALGO, 1); turn(EN_PRESET, -1);            /* CONTROL: from FX LATCH up to KNOB ACCEL */
@@ -2643,7 +2645,7 @@ static int test_song_timeline(void)
     song_layout(&L);
     x = SG_X0 + L.x[1] + 4;
     ok = sg_px(SG_X0 + L.x[0] + 4, SG_Y + SG_LH - 2) == T_THEME && sg_px(SG_X0 + L.x[2] + 4, SG_Y + SG_LH - 2) == T_RAISE;
-    ok &= sg_px(x, SG_Y) == T_DIM && sg_px(x, SG_Y + SG_LH - 3) == T_SURF && sg_px(SG_X0 + L.x[1], SG_Y + 3) == T_DIM;
+    ok &= sg_px(x, SG_Y) == T_DIM && sg_px(SG_X0 + L.x[2] - SG_GAP - 3, SG_Y + SG_LH - 3) == T_SURF && sg_px(SG_X0 + L.x[1], SG_Y + 3) == T_DIM;
     bad += check("SONG timeline: selected THEME, others RAISE, a slot not saved only outlined (DIM)", ok);
     x = SG_X0 + L.x[3];
     bad += check("SONG timeline: + ADD's slot dashed (DIM), THEME when selected",
@@ -4093,11 +4095,11 @@ static int test_quick_layers(void)
     key_down(white(1)); key_up(white(1)); frame();
     ok &= TSEL->eng_req == ENGI_FM6;                    /* (G3: FM6, second in ENGINE_ORDER) */
     key_down(white(NENG_SHOWN - 1u)); key_up(white(NENG_SHOWN - 1u)); frame();
-    ok &= TSEL->eng_req == 11u;                         /* (the last key: NOISE; GHOULBOX offers no DRUM) */
+    ok &= TSEL->eng_req == ENGI_DRUM;                   /* (the last key: DRUM, back in GHOULBOX 1.2) */
     ok &= !memcmp(TSEL->step, before.step, sizeof before.step) && TSEL->p[P_SLEN] == before.p[P_SLEN] &&
           TSEL->p[P_SLCR] == SL_STUT;
     btn_up(B_EDIT); frame();
-    bad += check("EDIT + white key n: the n-th engine shown (FM6 2nd, NOISE last), while playing; steps, LEN, SLICER stay", ok);
+    bad += check("EDIT + white key n: the n-th engine shown (FM6 2nd, DRUM last), while playing; steps, LEN, SLICER stay", ok);
     hold(B_SAVE);
     bad += check("  SAVE held: UNDO back to before the layer's loads, the steps untouched",
                  TSEL->eng_req == 0u && TSEL->preset == before.preset && !memcmp(TSEL->step, before.step, sizeof before.step));
@@ -5096,9 +5098,9 @@ static int test_fm4_retired(void)
         if (e < NENGINES)
             seen |= 1u << e;
     }
-    all &= ~(1u << ENGI_DRUM | 1u << ENGI_SLICE);   /* (GHOULBOX: not offered) */
-    bad += check("PRESETS: the list holds every engine's presets but DIGITAL's, DRUM's and SLICE's",
-                 seen == all && NENG_SHOWN == NENGINES - 3u);
+    all &= ~(1u << ENGI_SLICE);   /* (GHOULBOX: not offered) */
+    bad += check("PRESETS: the list holds every engine's presets but DIGITAL's and SLICE's",
+                 seen == all && NENG_SHOWN == NENGINES - 2u);
     go_page(GR_BROWSE);
     set_engine_of(TSEL, 0);
     for (i = 0, seen = 0; i < NENG_SHOWN; i++) {
@@ -5107,10 +5109,10 @@ static int test_fm4_retired(void)
     }
     bad += check("PRESETS KNOB 2: the engines in order, DIGITAL skipped, back to the first",
                  seen == all && TSEL->eng_req == 0u && eng_step(0, 1) == ENGI_FM6 && eng_step(ENGI_FM6, 1) == 2u &&
-                 eng_step(ENGI_FM6, -1) == 0u && eng_step(0, -1) == 11u);
+                 eng_step(ENGI_FM6, -1) == 0u && eng_step(0, -1) == ENGI_DRUM);
     {   /* the display order (engines.c ENGINE_ORDER): every engine one can pick once; the PRESETS list follows it */
         static const char *const ORDER[] = {"ANALOG", "FM6", "PHASE", "LOFI", "SAMPLE", "VOICE", "TRIO", "WHEEL", "GRAIN",
-                                            "PHYS", "GURDY", "NOISE"};
+                                            "PHYS", "GURDY", "NOISE", "DRUM"};
         uint32_t last = 0xFFu, r = 0, n = 0;
         ok = NENG_SHOWN == NELEM(ORDER);
         for (i = 0; ok && i < NENG_SHOWN; i++)
@@ -6655,6 +6657,7 @@ static void tl_drum(void)
     TSEL->engine = TSEL->eng_req;
     track_defaults_steps(TSEL);
     TSEL->p[P_SLEN] = 16;
+    TSEL->p[P_E0] = DK_STD; /* test the standard kit's CLAP / SNARE labels */
 }
 
 static int test_seq_tools(void)
@@ -7722,7 +7725,7 @@ static int test_knob_accel(void)
         ok = settings_import(&p, (int)sizeof p) == 1 && ui_prefs == PREF_ACCEL;
         memset(&p.favorites, 0, sizeof p.favorites);
         p.magic = 0x50455233u;
-        ok &= settings_import(&p, (int)(sizeof p - sizeof p.favorites)) == 2 && !ui_prefs;
+        ok &= settings_import(&p, (int)(sizeof p - sizeof p.favorites)) == 2 && ui_prefs == PREF_SERIAL_OFF;   /* (GHOULBOX: older settings: SERIAL OFF once) */
         bad += check("#52 KNOB ACCEL saved with the settings; settings from before it: OFF", ok);
     }
     ui_prefs = 0;
@@ -7792,7 +7795,7 @@ static int test_usb_level(void)
         ok &= settings_import(&p, (int)sizeof p) == 1 && ui_prefs == PREF_USB_FIXED;
         memset(&p.favorites, 0, sizeof p.favorites);
         p.magic = 0x50455233u;
-        ok &= settings_import(&p, (int)(sizeof p - sizeof p.favorites)) == 2 && !ui_prefs;
+        ok &= settings_import(&p, (int)(sizeof p - sizeof p.favorites)) == 2 && ui_prefs == PREF_SERIAL_OFF;   /* (GHOULBOX: older settings: SERIAL OFF once) */
         frame();
         ok &= !fx_usb_fixed;
     }
@@ -7966,13 +7969,14 @@ static int test_usb_serial(void)
         usb.up = 0;
         usb_serial_apply();
         ok &= !usb_cdc_on && !usb.up && plain_desc();
-        memset(&p.favorites, 0, sizeof p.favorites);   /* settings from before it (PER3): ON */
+        memset(&p.favorites, 0, sizeof p.favorites);   /* settings from before it (PER3): GHOULBOX turns the console OFF */
         p.magic = 0x50455233u;
-        ok &= settings_import(&p, (int)(sizeof p - sizeof p.favorites)) == 2 && !(ui_prefs & PREF_SERIAL_OFF);
+        ok &= settings_import(&p, (int)(sizeof p - sizeof p.favorites)) == 2 && (ui_prefs & PREF_SERIAL_OFF);
+        usb_cdc_on = 1;
         usb_serial_apply();
-        ok &= usb_cdc_on && dev_is(DEV_DESC);
+        ok &= !usb_cdc_on && plain_desc();
     }
-    bad += check("  saved with the settings (older ones: ON); at boot the device enumerates with the saved choice", ok);
+    bad += check("  saved with the settings (older ones: OFF, GHOULBOX); at boot the device enumerates with the saved choice", ok);
     {   /* OFF: the soft key and the update frames still come in (USB-MIDI SysEx, EP1) */
         static const uint8_t KEY[8] = {0x04, 0xF0, 0x22, 0x24, 0x07, 0x35, 0x7D, 0xF7};
         ui_prefs = PREF_SERIAL_OFF;
@@ -8079,9 +8083,9 @@ static int test_bpm_lock(void)
         ok &= settings_import(&q, (int)sizeof q) == 1 && ui_prefs == PREF_BPM_LOCK && !memcmp(&p, &q, sizeof p);
         memset(&p.favorites, 0, sizeof p.favorites);
         p.magic = 0x50455233u;                                        /* (PER3: before the favorites record) */
-        ok &= settings_import(&p, (int)(sizeof p - sizeof p.favorites)) == 2 && !ui_prefs;
+        ok &= settings_import(&p, (int)(sizeof p - sizeof p.favorites)) == 2 && ui_prefs == PREF_SERIAL_OFF;   /* (GHOULBOX: older settings: SERIAL OFF once) */
         q = p;
-        ok &= settings_import(&q, (int)sizeof q) == 1 && !ui_prefs;
+        ok &= settings_import(&q, (int)sizeof q) == 1 && ui_prefs == PREF_SERIAL_OFF;
         frame();
         b0 = song.g[G_BPM];
         go_home(); frame();
@@ -8189,9 +8193,9 @@ static int test_large(void)
         ok &= settings_import(&q, (int)sizeof q) == 1 && ui_prefs == PREF_LARGE && !memcmp(&p, &q, sizeof p);
         memset(&p.favorites, 0, sizeof p.favorites);
         p.magic = 0x50455233u;                                    /* (PER3: before the favorites record) */
-        ok &= settings_import(&p, (int)(sizeof p - sizeof p.favorites)) == 2 && !ui_prefs;
+        ok &= settings_import(&p, (int)(sizeof p - sizeof p.favorites)) == 2 && ui_prefs == PREF_SERIAL_OFF;   /* (GHOULBOX: older settings: SERIAL OFF once) */
         q = p;
-        ok &= settings_import(&q, (int)sizeof q) == 1 && !ui_prefs;
+        ok &= settings_import(&q, (int)sizeof q) == 1 && ui_prefs == PREF_SERIAL_OFF;
         ui.force = 1; frame();
         ok &= large_kind() == LK_OFF && lg_px(30, Y_SEP_END + 1) == T_BG;
         bad += check("#15 LARGE saved with the settings; settings from before it: OFF (idempotent)", ok);
@@ -8275,7 +8279,7 @@ static int test_menu_prefs(void)
         ok = settings_import(&p, (int)sizeof p) == 1 && (ui_prefs & PREF_ANIM_OFF);
         memset(&p.favorites, 0, sizeof p.favorites);
         p.magic = 0x50455233u;
-        ok &= settings_import(&p, (int)(sizeof p - sizeof p.favorites)) == 2 && !ui_prefs;
+        ok &= settings_import(&p, (int)(sizeof p - sizeof p.favorites)) == 2 && ui_prefs == PREF_SERIAL_OFF;   /* (GHOULBOX: older settings: SERIAL OFF once) */
         bad += check("#46 ANIM saved with the settings; settings from before it: ON", ok);
     }
     ui_prefs = 0;
@@ -9671,20 +9675,20 @@ static int test_hidden_presets(void)
     bad += check("hidden presets: 54 names (PIANO covers SAMPLE's two), each one a real preset",
                  ok && NELEM(GB_HIDDEN) == 54u);
     preset_all_pos(&total);
-    ok = total == 55u + (FELUCCA_FM4 ? ENGINES[ENGI_DIGITAL]->npresets : 0u);   /* (+ DIGITAL's, built in; 1.1: + 4 CC0, BAGPIPE) */
+    ok = total == 59u + (FELUCCA_FM4 ? ENGINES[ENGI_DIGITAL]->npresets : 0u);   /* (+ DIGITAL's, built in; 1.1: + 4 CC0, BAGPIPE) */
     for (i = 0; i < total; i++) {
         e = preset_all_at(i, &k);
         ok &= e < NENGINES && !preset_hidden(ENGINES[e], k);
         for (uint32_t j = 0; j < NELEM(KEEP); j++)
             shown += str_eq(ENGINES[e]->presets[k].name, KEEP[j]);
     }
-    bad += check("hidden presets: the PRESETS list holds the 55 kept, none hidden", ok && shown >= NELEM(KEEP));
-    ok = NENG_SHOWN == 12u + FELUCCA_FM4 && eng_ok(ENGI_DRUM) && eng_ok(ENGI_SLICE);
+    bad += check("hidden presets: the PRESETS list holds the 59 kept, none hidden", ok && shown >= NELEM(KEEP));
+    ok = NENG_SHOWN == 13u + FELUCCA_FM4 && eng_ok(ENGI_SLICE);
     for (i = 0, k = 0; i < NENG_SHOWN; i++) {
-        ok &= eng_vis(i) != ENGI_DRUM && eng_vis(i) != ENGI_SLICE;
+        ok &= eng_vis(i) != ENGI_SLICE;
         k |= eng_vis(i) == ENGI_SAMPLE;
     }
-    bad += check("hidden engines: DRUM, SLICE not offered, still playable; 1.1: SAMPLE offered again (12 engines)", ok && k);
+    bad += check("hidden engines: SLICE not offered, still playable; SAMPLE (1.1) and DRUM (1.2) offered again (13 engines)", ok && k);
     select_engine(ENGI_SAMPLE);
     bad += check("1.1: picking SAMPLE loads BOWED PSALT (its first kept preset), SET 8",
                  str_eq(ENGINES[ENGI_SAMPLE]->presets[TSEL->preset].name, "BOWED PSALT") && TSEL->p[P_E0] == 8);
@@ -9703,6 +9707,32 @@ static int test_hidden_presets(void)
                          param_turn(gd, 1, 1) == 3 && param_turn(gd, 4, 1) == 3 && param_turn(gd, 1, -1) == 3 &&
                          param_turn(gd, 4, -1) == 3);
         }
+        {   /* 1.2: LOW DRONE (VOICE) and SHAWM (TRIO), browsable */
+            uint32_t a2, b2;
+            for (a2 = 0; a2 < ENGINES[5]->npresets && !str_eq(ENGINES[5]->presets[a2].name, "LOW DRONE"); a2++)
+                ;
+            for (b2 = 0; b2 < ENGINES[6]->npresets && !str_eq(ENGINES[6]->presets[b2].name, "SHAWM"); b2++)
+                ;
+            bad += check("1.2: VOICE has LOW DRONE, TRIO has SHAWM, both browsable", a2 < ENGINES[5]->npresets &&
+                         b2 < ENGINES[6]->npresets && !preset_hidden(ENGINES[5], a2) && !preset_hidden(ENGINES[6], b2));
+        }
+        {   /* 1.2: the CRYPT drum kit: DRUM offered again with CRYPT KIT and TOMB DRUMS, on TOMBBEAT (pattern 22) */
+            uint32_t c2, t2, e2, sh = 0;
+            for (c2 = 0; c2 < ENGINES[ENGI_DRUM]->npresets && !str_eq(ENGINES[ENGI_DRUM]->presets[c2].name, "CRYPT KIT"); c2++)
+                ;
+            for (t2 = 0; t2 < ENGINES[ENGI_DRUM]->npresets && !str_eq(ENGINES[ENGI_DRUM]->presets[t2].name, "TOMB DRUMS"); t2++)
+                ;
+            for (e2 = 0; e2 < NENG_SHOWN; e2++)
+                sh |= eng_vis(e2) == ENGI_DRUM;
+            bad += check("1.2: DRUM offered with CRYPT KIT and TOMB DRUMS (KIT CRYPT), suggesting TOMBBEAT (22)", sh &&
+                         c2 < ENGINES[ENGI_DRUM]->npresets && t2 < ENGINES[ENGI_DRUM]->npresets &&
+                         !preset_hidden(ENGINES[ENGI_DRUM], c2) && !preset_hidden(ENGINES[ENGI_DRUM], t2) &&
+                         ENGINES[ENGI_DRUM]->presets[c2].e[0] == DK_CRYPT && ENGINES[ENGI_DRUM]->presets[c2].pat == 22u &&
+                         NPATTERNS == 22u && str_eq(PATTERNS[21].name, "TOMBBEAT"));
+        }
+        bad += check("1.2: patterns 18..21 MARCH LAMENT ARPEGGIO ANTIPHON, after 1.0's (none renumbered)", NPATTERNS >= 21u &&
+                     str_eq(PATTERNS[13].name, "DIRGE") && str_eq(PATTERNS[16].name, "PEDAL") && str_eq(PATTERNS[17].name, "MARCH") &&
+                     str_eq(PATTERNS[18].name, "LAMENT") && str_eq(PATTERNS[19].name, "ARPEGGIO") && str_eq(PATTERNS[20].name, "ANTIPHON"));
         bad += check("1.1: the SET knob never stops on an alias (1, 4)", param_turn(sd, 3, 1) == 3 && param_turn(sd, 3, 2) == 3 &&
                      param_turn(sd, 0, 1) == 2 && param_turn(sd, 2, -1) == 0);
     }
@@ -9721,7 +9751,7 @@ static int test_hidden_presets(void)
     apply_preset(4);
     turn(EN_PRESET, 1);
     ok &= TSEL->preset == 7u;                               /* SUB BASS */
-    set_engine_of(TSEL, ENGI_DRUM);                         /* (an old project's DRUM track) */
+    set_engine_of(TSEL, ENGI_SLICE);                        /* (an old project's SLICE track: still not offered) */
     turn(EN_PRESET, 1);
     ok &= TSEL->eng_req == 0u && str_eq(ENGINES[0]->presets[TSEL->preset].name, "SOFT PAD");
     bad += check("hidden presets: from a retired sound or engine, browsing steps to the kept one beside it", ok);
@@ -9757,6 +9787,148 @@ static int test_sample_values(void)
     return check("SAMPLE SET values: 0..4 the 1.0 sets, USR1..3 at 5..7, later sets after them", ok);
 }
 
+/* GHOULBOX 1.2: MIDI CCs set a track's controls (the channel's track), applied in the main loop, as the editor's SET */
+/* 1.3: MENU > SYSTEM > SCENE, the power-on scene (engines.c GB_SCENES, ui.c gb_scene_load; main.c felucca_init) */
+static int test_scenes(void)
+{
+    static const char *const WANT[GB_NSCENE][NTRK] = {
+        {"HURDY GURDY", "CRYPT PAD", "MONKS", "DRONE WHEEL"},
+        {"LOW DRONE", "CRYPT CHOIR", "CAVE WIND", "TOMB DRUMS"},
+        {"DANCE GURDY", "DUNGEON HARP", "LUTE", "CRYPT KIT"},
+        {"CATHEDRAL", "MONKS", "TENOR RECORD", "VIELLE"},
+        {"HURDY GURDY", "CRYPT PAD", "MONKS", "DRONE WHEEL"},
+    };
+    static const char *const PAT[GB_NSCENE][NTRK] = {
+        {"BALLAD", "DIRGE", "CHANT", "PEDAL"}, {"PEDAL", "DIRGE", "PEDAL", "TOMBBEAT"},
+        {"BALLAD", "ARPEGGIO", "MARCH", "TOMBBEAT"}, {"DIRGE", "CHANT", "LAMENT", "ANTIPHON"}, {0, 0, 0, 0},
+    };
+    static const int16_t BPM[GB_NSCENE] = {72, 60, 96, 66, 72};
+    int bad = 0, ok = 1;
+    uint32_t s, i, k, row = MI_SCENE;
+    for (s = 0; s < GB_NSCENE; s++) {
+        ui_power_on();
+        gb_scene_load(s);
+        ok &= song.g[G_BPM] == BPM[s] && song.g[G_RTYPE] == 2 && ui.home;
+        for (i = 0; i < NTRK; i++) {
+            const track_t *t = &trk[i];
+            ok &= t->engine == t->eng_req && !strcmp(ENGINES[t->engine]->presets[t->preset].name, WANT[s][i]) &&
+                  t->p[P_SDIV] == 1;
+            if (PAT[s][i])
+                ok &= pat_last[i] && !strcmp(PATTERNS[pat_last[i] - 1u].name, PAT[s][i]) && pat_sig[i] == steps_sig(t);
+            else
+                for (k = 0; k < NSTEP; k++)
+                    ok &= !t->step[k].n && !t->step[k].hit;
+        }
+    }
+    bad += check("1.3 SCENE: DUNGEON CRYPT TAVERN CHAPEL BLANK load their sounds, patterns (BLANK: none), tempo, HALL", ok);
+    ui_power_on();
+    ok = MI_TAB[row] == MTAB_SYSTEM && MI_TAB[row + 1u] == MTAB_SYSTEM && row + 1u == MI_SERIAL &&
+         menu_n(row) == GB_NSCENE && str_eq(MI_NAME[row], "SCENE") && menu_get(row) == 0 &&
+         str_eq(menu_vname(row, 0), "DUNGEON") && str_eq(menu_vname(row, 4), "BLANK");
+    menu_put(row, 2);
+    ok &= menu_get(row) == 2 && ui_scene == 2 && menu_step(row, 1) == 3 && menu_step(row, -1) == 1;
+    menu_put(row, 4);
+    ok &= menu_step(row, 1) == 4;                              /* (stops at the end) */
+    ui_scene = 200;                                            /* a value from a later version: DUNGEON */
+    ok &= menu_get(row) == 0;
+    gb_scene_load(ui_scene);
+    ok &= !strcmp(ENGINES[trk[0].engine]->presets[trk[0].preset].name, "HURDY GURDY") && song.g[G_BPM] == 72;
+    bad += check("1.3 SCENE: MENU > SYSTEM row (5 names, stops at the ends); a later version's value plays DUNGEON", ok);
+    {   /* the row redraws at once when its value changes (ui_menu.c: the menu signature holds ui_scene) */
+        static uint16_t before[240 * 240];
+        ui_power_on();
+        ui_prefs |= PREF_ANIM_OFF;                     /* (no rolling digits: a frame is final) */
+        hold(B_HOME);
+        ui.menu_sel = (uint8_t)row;
+        frame(); frame();
+        turn(EN_K1, 1);
+        frame(); frame();
+        memcpy(before, host_screen, sizeof before);   /* what the menu shows after the turn, */
+        ui.force = 1;
+        frame();                                       /* .. against a full redraw: the same (no stale value) */
+        bad += check("1.4 SCENE: a knob on the row shows the new scene at once (not only after leaving the row)",
+                     ui.menu == 1 && ui_scene == 1u && !memcmp(before, host_screen, sizeof before));
+    }
+    ui_power_on();
+    return bad;
+}
+
+static int test_midi_cc(void)
+{
+    int bad = 0, ok;
+    const param_desc_t *d;
+    uint32_t k0;
+    ui_power_on();
+    song.g[G_ROUTE] = 0;                                        /* ROUT CH1-4: channel 2 plays track 2 */
+    trk[1].p[P_ATK] = 0;
+    midi_event(0xB0u, 1, 73, 127);                              /* CC73 attack, full, on channel 2 */
+    ok = trk[1].p[P_ATK] == 0;                                  /* (not in the audio interrupt) */
+    frame();
+    d = track_desc(&trk[1], P_ATK);
+    ok &= trk[1].p[P_ATK] == d->max && trk[0].p[P_ATK] != d->max;
+    bad += check("1.2 MIDI CC: CC73 on channel 2 sets track 2's ATK in the main loop, not track 1's", ok);
+    midi_event(0xB0u, 0, 7, 0);
+    midi_event(0xB0u, 0, 91, 127);
+    midi_event(0xB0u, 0, 21, 127);
+    frame();
+    k0 = ENGINES[trk[0].eng_req % NENGINES]->knob[0];
+    ok = trk[0].p[P_LEVEL] == track_desc(&trk[0], P_LEVEL)->min && trk[0].p[P_REV] == track_desc(&trk[0], P_REV)->max &&
+         trk[0].p[k0] == track_desc(&trk[0], k0)->max;
+    bad += check("1.2 MIDI CC: CC7 level, CC91 reverb send, CC21 HOME knob 1 (the engine's own)", ok);
+    midi_event(0xB0u, 0, 85, 127);
+    midi_event(0xB0u, 0, 86, 0);
+    midi_event(0xB0u, 0, 74, 0);
+    frame();
+    ok = song.g[G_CRSH] == GP[G_CRSH].max && song.g[G_TAPE] == GP[G_TAPE].min && perf_k[0] == -100;
+    midi_event(0xB0u, 0, 74, 64);
+    frame();
+    ok &= perf_k[0] == 0;
+    midi_event(0xB0u, 0, 74, 127);
+    frame();
+    ok &= perf_k[0] == 100;
+    perf_k[0] = 0;
+    bad += check("1.2 MIDI CC: CC85 CRSH, CC86 TAPE (globals); CC74 the filter (0 LP, 64 off, 127 HP)", ok);
+    trk[3].p[P_DEC] = 5;
+    midi_event(0xB0u, 9, 75, 127);                              /* channel 10: ignored under ROUT CH1-4 */
+    frame();
+    bad += check("1.2 MIDI CC: channels 5..16 ignored with ROUT CH1-4", trk[3].p[P_DEC] == 5 && trk[0].p[P_DEC] != track_desc(&trk[0], P_DEC)->max);
+    {   /* 1.3: the effects' own settings (globals) and the LFO (the channel's track) */
+        static const struct { uint8_t cc; uint16_t id; } G13[] = {
+            {102, G_RSIZE}, {103, G_RDAMP}, {105, G_DFDBK}, {106, G_DCOLOR}, {107, G_DMIX}, {108, G_CRATE}, {109, G_CDEPTH}};
+        static const struct { uint8_t cc; uint16_t id; } T13[] = {
+            {92, P_DIST}, {76, P_LRATE}, {77, P_LD_PIT}, {78, P_LFADE}, {110, P_LD_FLT}, {111, P_LD_AMP}};
+        uint32_t i;
+        ok = 1;
+        for (i = 0; i < NELEM(G13); i++) {
+            song.g[G13[i].id] = GP[G13[i].id].min;
+            midi_event(0xB0u, 0, G13[i].cc, 127);
+        }
+        for (i = 0; i < NELEM(T13); i++) {
+            trk[1].p[T13[i].id] = track_desc(&trk[1], T13[i].id)->min;
+            midi_event(0xB0u, 1, T13[i].cc, 127);
+        }
+        frame();
+        for (i = 0; i < NELEM(G13); i++)
+            ok &= song.g[G13[i].id] == GP[G13[i].id].max;
+        for (i = 0; i < NELEM(T13); i++)
+            ok &= trk[1].p[T13[i].id] == track_desc(&trk[1], T13[i].id)->max &&
+                  trk[0].p[T13[i].id] != track_desc(&trk[0], T13[i].id)->max;
+        bad += check("1.3 MIDI CC: 102..109 reverb, delay, chorus settings; 92 DST, 76 77 78 110 111 the LFO (channel 2: track 2)", ok);
+        midi_event(0xB0u, 0, 104, 0);                           /* delay TIME by length, as its knob: 0 the longest, */
+        frame();
+        ok = song.g[G_DTIME] == 9;                              /* 4BAR (params.c N_DIV), */
+        midi_event(0xB0u, 0, 104, 127);
+        frame();
+        ok &= song.g[G_DTIME] == 3;                             /* 127 the shortest, 1/32 */
+        midi_event(0xB0u, 0, 104, 57);                          /* (the middle: 1/4 .. 1/8, never a stored-order jump) */
+        frame();
+        ok &= song.g[G_DTIME] == 0 || song.g[G_DTIME] == 1;
+        bad += check("1.3 MIDI CC: 104 delay TIME in the order of length (0 4BAR .. 127 1/32)", ok);
+    }
+    ui_power_on();
+    return bad;
+}
+
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -9765,6 +9937,8 @@ int main(void)
     bad += test_sound_loads();
     bad += test_hidden_presets();
     bad += test_sample_values();
+    bad += test_midi_cc();
+    bad += test_scenes();
     bad += test_patterns();
     bad += test_rec();
     bad += test_step_rec();

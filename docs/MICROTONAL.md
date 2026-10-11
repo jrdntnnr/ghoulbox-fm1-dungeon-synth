@@ -1,6 +1,6 @@
-# Microtonal tuning — GHOULBOX 1.2-dev
+# Microtonal GHOULBOX
 
-This development branch adds 40 scale entries and real per-voice microtonal pitch to the GHOULBOX 1.1 sound engine. It preserves the dungeon presets, samples, GURDY and effects. It does **not** yet incorporate Felucca 1.5. Native audio and UI tests run without hardware; a JieLi target build and an FM-1 listening test are still required before installation. No new installable firmware is supplied here.
+This branch combines GHOULBOX 1.4 (`b61a931`) and Felucca 1.5.1 (`a4d7ca2`) with 40 factory scales, one custom scale and real per-voice tuning. The JieLi target build succeeds with the hidden SLICE engine omitted. Physical FM-1 validation remains pending; see [integration status](INTEGRATION-STATUS.md).
 
 ## Play Rast or Bayati
 
@@ -21,6 +21,22 @@ The tuning pages show **additional trims**, not the factory offset. In C Rast, t
 | TUNE 3 | b6, 6, b7, 7 |
 
 The selected root rotates both factory offsets and trims. Transpose moves note identities first; the resulting notes use the current root's tuning map. Recorded steps keep those note identities, so changing a track's tuning also retunes its existing sequence. Different tracks can use different tunings. Sound presets keep the track's tuning, like the existing SCL settings; use projects to recall a complete tuning setup. The web editor exposes the same controls when connected to this firmware.
+
+## Built-in chord generator
+
+Choose a polyphonic engine such as ANALOG or FM6. GURDY retains its one-voice instrument limit; it cannot sound a complete generated chord. Set **VOICE POLY**, then **SCL > CHORD > DIA3** (triads) or **DIA7** (sevenths). Each generated note uses the selected scale's own tuning plus its cent trim, independently and in every octave. CLOSE, OPEN, INV1, INV2 and +OCT keep that tuning. MONO, LEGATO and UNISON retain Felucca's root-only chord behavior.
+
+For C Rast, DIA7 on C plays C, E half-flat, G and B half-flat. Set the **3** trim to +13 ct and only E changes from −50 to −37 cents. For D Bayati, a generated chord on E includes the half-flat E; the tonic D triad does not contain that second degree. The screen says **C TUNED** when a voiced note has a cent offset, and arrows mark altered keys. This avoids calling a neutral-third chord ordinary C major.
+
+MAJ/MIN/DOM7 and the other fixed shapes retain their fixed key intervals, with the track's tuning applied afterwards. Use DIA3/DIA7 for scale-derived harmonization. The generator is a creative chord tool, not a model of traditional maqam harmony or melodic development.
+
+Keyboard, incoming MIDI, chord/UP arpeggiation, chord recording and sequencer playback are covered by automated tests. The test renders every simultaneous oscillator voice across 7,560 combinations of nine maqam presets, twelve roots, seven degrees, two chord types and five voicings, with custom trims. All measured errors are below 0.5 cents. The dedicated test also passes ASan/UBSan. External MIDI output remains ordinary note numbers.
+
+## Scala import
+
+In the web editor, connect to this firmware, select a pitched track and choose **Import Scala tuning**. An octave-repeating `.scl` with 1–12 degrees is mapped to distinct keyboard identities and cent trims, then selects CUSTOM. ROOT stays as selected; choose WHITE to play successive scale degrees on white keys. The imported tuning is saved in the project.
+
+The importer accepts ratios and decimal cents. It validates the entire file before writing, rejects non-octave periods, more than twelve notes and mappings requiring a trim outside ±63 cents, and rounds accepted values to integer cents. `.kbm` files and arbitrary-period tuning are not supported. A disconnected transfer is reported as incomplete and should be retried.
 
 ## Included scales
 
@@ -43,19 +59,26 @@ The other additions are HIJAZ, HIJAZKAR, NIKRIZ, HARM MAJ, DOR b2, LYD AUG, LYD 
 
 ## Limits of this milestone
 
-- The model uses twelve MIDI key identities per repeating octave, with scale masks and cent offsets. Scala `.scl`/`.kbm` import, arbitrary period sizes, more than twelve independent keys per octave, named custom tuning banks and scale favorites are future work.
+- The model uses twelve MIDI key identities per repeating octave, with scale masks and cent offsets. Scala `.scl` import is supported as described above; `.kbm`, arbitrary periods, more than twelve independent keys per octave, named tuning banks and scale favorites are not.
 - Pitched voices receive their own tuning, including keyboard, incoming MIDI, chords, arpeggios and sequence playback. DRUM and SLICE retain their trigger maps. Fixed internal intervals and inharmonic resonances remain characteristics of their instruments. GURDY's drones use their own root-relative offsets.
 - **MIDI output still sends ordinary note numbers.** External synths will not reproduce the tuning automatically. MPE, MIDI Tuning Standard and per-note outgoing pitch bends are not implemented.
 - Live changes follow the existing glide mechanism for coarse pitch, with the sub-step correction applied each render block. This is not a new continuous high-resolution glide engine. Sample playback and granular pitch still have the engines' existing range limits.
-- The fork's existing HALL delay-length/CPU concerns from the assessment are unchanged.
+- HALL uses Felucca 1.5.1's implementation; the dungeon TAPE/CRSH effects remain.
 
 ## File compatibility
 
-Projects now use numeric magic `0x47424D31` (GBM1), 3,648 bytes, 103 parameters per track. Tuning parameters occupy 83–94; engine parameters move to 95–102. New presets use record versions 6 (notes) and 7 (drum grid), with the existing 192-byte record size.
+Projects use numeric magic `0x47424D32` (GBM2), 3,840 bytes. The compact parameter encoding fits the existing flash sector and preserves Felucca's FM6 patch, song chain, automation, drum lanes and step details. There are 125 parameters per track: cent trims 103–114, CUSTOM mask 115–116, engine parameters 117–124. New presets use versions 8/9, still 192 bytes.
 
-Original GHOULBOX 1.1 FUN8 projects (3,584 bytes), older FUN1–FUN7 projects, and old user presets load with zero extra trims. Engine parameter values and their motion-event IDs are remapped. Original scale IDs remain stable. A frozen project and preset written by commit `c7891e0` test this migration independently of the new writer.
+Loaders support original GHOULBOX FUN8, our frozen GBM1 prototype and upstream Felucca FUNA projects, plus older supported FUN formats and presets. Missing tuning defaults to zero. Older firmware cannot read GBM2 or preset versions 8/9; keep original backups.
 
-Older firmware does not read the new project magic or new preset versions. Keep original backups if you need to return to 1.1. Compatibility with newer upstream Felucca project layouts is not claimed. Flash storage is read and repacked on load; a RAM-only retained cache may lose slots whose offsets move after an update.
+Settings use GBS1, separating MIDI-learn mappings from GURDY favorites and SCENE from screen timeout/metronome settings. An untagged PER4 record read on boot is treated as GHOULBOX. Felucca used the same record identifier for different fields: its source cannot reliably be inferred. Before restoring an older archive, explicitly convert its settings into a new file:
+
+```sh
+python3 tools/migrate_settings.py --source ghoulbox original.fm1backup converted.fm1backup
+# For a backup made by upstream Felucca, use --source felucca instead.
+```
+
+The converter verifies object checksums, changes only settings and refuses to overwrite an existing output. Projects and sample objects stay unchanged.
 
 ## Build and verify
 
@@ -65,8 +88,8 @@ From the repository root, with a C compiler, Python 3 (Pillow and fontTools) and
 sh tests/run_tuning_tests.sh
 ```
 
-The command generates missing local headers, checks the scale catalog, runs native pitch/input/project/UI/editor tests, compares the 134 original audio reference renders, checks UI layouts, and runs the web protocol and backup tests. It does not need the JieLi SDK, create a firmware package, or flash a device. Logs are in `build/assessment/`; UI renders are in `build/ui_tuning/`.
+The command generates missing local headers, checks the scale catalog, runs native pitch/input/project/UI/editor tests, compares the audio reference renders, checks UI layouts, and runs the web protocol and backup tests. It does not need the JieLi SDK, create a firmware package, or flash a device. Logs are in `build/assessment/`; UI renders are in `build/ui_tuning/`.
 
-The pitch test measures actual sine output for quarter-tones and fine adjustments, checks simultaneous C/E/G tuning, and sweeps all 40 scales, twelve roots, MIDI notes 12–115 and every permitted trim through the oscillator pitch calculation. The measured worst calculation error is below 0.5 cents. Additional tests inspect SAMPLE/GRAIN playback rates at ±1-cent and quarter-tone settings and GURDY's independent melody/drone phases. This is not an acoustic accuracy guarantee for every sampled or physical instrument.
+The pitch test measures actual sine output for quarter-tones and fine adjustments, checks simultaneous C/E/G tuning, and sweeps all 40 factory scales, twelve roots, MIDI notes 12–115 and every permitted trim through the oscillator pitch calculation. The measured worst calculation error is below 0.5 cents. Additional tests inspect SAMPLE/GRAIN playback rates at ±1-cent and quarter-tone settings and GURDY's independent melody/drone phases. This is not an acoustic accuracy guarantee for every sampled or physical instrument.
 
 The catalog lives in `assets/scales.json`. IDs are append-only. Regenerate `firmware/src/scales.h` with `python3 tools/gen_scales.py`; update the web mock's names too. The web test compares those names with the catalog and the firmware descriptors. The firmware build checks the generated header for staleness.

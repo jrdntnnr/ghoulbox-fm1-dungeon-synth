@@ -49,7 +49,7 @@ static uint32_t chord_tones(const track_t *t, uint32_t mode, int32_t *root, int3
     {
         uint32_t mask = scale_mask(t), deg[12], c = 0, at = 0, guard = 12;
         int32_t r = t->p[P_ROOT];
-        if (mask == 0xFFFu)
+        if (t->p[P_SCALE] == 0)
             mask = SCALE_MASK[1];                       /* CHR: no key of its own, the major scale of ROOT */
         while (guard-- && !((mask >> (uint32_t)((*root - r + 120) % 12)) & 1u))
             (*root)--;                                  /* outside the scale: the scale note below */
@@ -179,6 +179,22 @@ static void chord_name(char *b, uint32_t root, uint32_t mask)
         q = "5";
     str_cpy(b + str_len(b), q, 12 - str_len(b));
     str_cpy(b + str_len(b), x, 12 - str_len(b));
+}
+
+/* Western chord names describe equal-tempered intervals. Do not label a Rast
+ * neutral third "major" just because its key identity is E. Check the actual
+ * voiced notes, including octave displacements and the owner's cent trims. */
+static void chord_tuned_name(char *b, const track_t *t, uint32_t root, uint32_t mask,
+                             const uint8_t *notes, uint32_t n)
+{
+    uint32_t i;
+    for (i = 0; i < n; i++)
+        if (tuning_cents(t, notes[i])) {
+            str_cpy(b, N_NOTE[root % 12u], 12);
+            str_cpy(b + str_len(b), " TUNED", 12 - str_len(b));
+            return;
+        }
+    chord_name(b, root, mask);
 }
 
 /* the MIDI note (ch, src) of track id - 1 that plays a chord, 0 = none */

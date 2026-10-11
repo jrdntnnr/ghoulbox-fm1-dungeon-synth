@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* Shared PER4 layout: each feature updates only its own fields, preserving
+/* GBS1 settings layout (legacy PER4 is migrated): each feature updates only its own fields, preserving
  * the other feature's saved preferences when either is built independently.
  * PER1/PER2 are upstream; PER3 added bold; PER4 added favorites.
  * palette: UI_PAL_TAG + index; an old id (below 20, earlier firmware) is migrated on import.
@@ -21,7 +21,17 @@ typedef struct {
     uint32_t bold;
     struct { uint8_t factory[16][32]; uint32_t user, filter; uint8_t learned[32]; } favorites;
 } persist_t;
+_Static_assert(sizeof(persist_t) == 604u, "GBS1 layout must match tools/migrate_settings.py");
 #define PERSIST_MAGIC 0x47425331u /* GBS1: PER4 plus a separate 32-byte MIDI learn table */
+/* GHOULBOX: USB SERIAL OFF by default (MIDI host boxes and macOS's USB audio want no serial console). The MENU flag
+ * is a bit of favorites.factory[15][30] (ui.c ui_prefs, PREF_SERIAL_OFF); byte [15][13]
+ * marks GHOULBOX's one-time changes: settings saved without the mark get SERIAL OFF once, then keep what the
+ * owner chooses */
+#define GB_SERIAL_OFF 64u                           /* ui.c PREF_SERIAL_OFF */
+#define GB_MIG_SERIAL 1u
+#ifdef PREF_SERIAL_OFF
+_Static_assert(GB_SERIAL_OFF == PREF_SERIAL_OFF, "settings_persist.c GB_SERIAL_OFF is ui.c's PREF_SERIAL_OFF");
+#endif
 
 /* Normalize in place; 1 = current, 2 = migrated, 0 = invalid. */
 static int settings_import(persist_t *p, int n)
@@ -40,17 +50,21 @@ static int settings_import(persist_t *p, int n)
     }
     if (old1 || old2) p->bold = 0;
     if (old4) {
-        uint32_t i, learned = 0;
         memset(p->favorites.learned, 0, 32);
-        /* Upstream used row 14 for CC mappings; GHOULBOX used only its first
-         * six bits for GURDY favourites. A nonzero parameter code distinguishes them. */
-        for (i = 0; i < 16u; i++) learned |= p->favorites.factory[14][2u * i + 1u] & 0xFEu;
-        if (learned) {
-            memcpy(p->favorites.learned, p->favorites.factory[14], 32);
-            memset(p->favorites.factory[14], 0, 32);
-        }
+        /* Untagged PER4 on a GHOULBOX device is GHOULBOX's layout. Felucca
+         * used the same magic/size for different fields, so guessing from
+         * their values cannot be safe. Its backups must first be converted
+         * explicitly with tools/migrate_settings.py --source felucca. */
+        p->favorites.factory[15][12] = p->favorites.factory[15][27]; /* SCENE */
+        p->favorites.factory[15][13] = p->favorites.factory[15][28] & GB_MIG_SERIAL;
+        p->favorites.factory[15][27] = 0; /* new SCREEN OFF: never */
+        p->favorites.factory[15][28] = 0; /* new CLICK / COUNT-IN: off */
     }
     if (!current && !old4) memset(&p->favorites, 0, sizeof p->favorites);
+    if (!(p->favorites.factory[15][13] & GB_MIG_SERIAL)) {   /* GHOULBOX: once, settings from before (see above) */
+        p->favorites.factory[15][30] |= GB_SERIAL_OFF;
+        p->favorites.factory[15][13] |= GB_MIG_SERIAL;
+    }
     if (p->favorites.factory[15][29] > 1u)        /* STYLE (ui.c ui_style): 2, the retired PIXEL = LINE; unknown = FLAT */
         p->favorites.factory[15][29] = p->favorites.factory[15][29] == 2u ? 1u : 0u;
     {   /* CLICK, CLICK LEVEL, COUNT-IN (ui.c ui_rec_prefs): two bits each, 3 is no value: the default (0) */
@@ -94,6 +108,15 @@ static int settings_import(persist_t *p, int n)
 #endif
     if (p->panel.magic == PANEL_MAGIC) panel = p->panel;
     return current ? 1 : 2;
+}
+
+/* GHOULBOX: a device with no saved settings starts with USB SERIAL OFF (marked: the owner's later choice holds) */
+static void settings_fresh(void)
+{
+#ifdef FELUCCA_FAVORITES
+    favorites.factory[15][30] |= GB_SERIAL_OFF;
+    favorites.factory[15][13] |= GB_MIG_SERIAL;
+#endif
 }
 
 /* Start with the last imported/saved object, including fields owned by a

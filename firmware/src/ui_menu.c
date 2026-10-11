@@ -322,7 +322,7 @@ static void menu_row(uint32_t k, uint32_t row)
         b[2] = (char)('0' + HOLD_MS[settings_hold % 4u] / 100u);
         GFX_HOOK_ALIGN(0, y, 0, y + h, AL_V, "menu row value centred up/down");
         GFX_HOOK_ALIGN(0, 0, 0, vy + AF_M.asc, AL_B, "menu row unit on its value's baseline");
-        cv_text_r(cv_text_r(MR_VR, vy + AF_M.asc - AF_S.asc, &AF_S, row == MI_TUNE ? "ct" : "s", sel ? T_INK : T_MID, bg) - 3,
+        cv_text_r(cv_text_r(MR_VR, vy + AF_M.asc - AF_S.asc, &AF_S, row == MI_TUNE ? "ct" : "s", sel ? T_ACCENT : T_MID, bg) - 3,
                   vy, &AF_M, row == MI_TUNE ? v : b, val, bg);
         return;
     }
@@ -412,6 +412,7 @@ static void draw_menu(void)
         mt_follow();
     sig = ui.menu * 7u + ui.menu_sel * 131u + settings.palette * 1009u + settings.lowcut * 7919u + settings_hold * 3511u +
           settings_leds * 6151u + ui_prefs * 4099u + ui_style * 257u + song.rec * 65537u + song.sel * 13u +
+          ui_scene * 104729u +
           ui_rec_prefs * 92821u + ui_scr * 131071u +          /* (#157: SCREEN OFF's value redraws its row) */
           ui_prefs2 * 524287u + ui_idle * 1048573u +      /* (1.2: ANIM IDLE's value redraws its row) */
           ui_home_view * 7340033u +    /* (1.3: HOME) */

@@ -136,7 +136,7 @@ def measure(f, font_hi, s):
         if ch == " " or not e[4]:
             d.append(None)
             continue
-        pen = (font_hi.getlength(s[:i + 1], features=NOLIGA) - font_hi.getlength(s[i])) / SS
+        pen = ((font_hi.getlength(s[:i + 1], features=NOLIGA) if font_hi.layout_engine == 1 else sum(font_hi.getlength(c) for c in s[:i + 1])) - font_hi.getlength(s[i])) / SS
         w = int(pen + font_hi.getlength(s[i]) / SS) + 3 * f["h"]
         img = ar.render_cell(font_hi, ch, (w * SS, 3 * f["h"] * SS), round((x0 + pen) * SS), 2 * f["h"] * SS)
         a = img.reduce(SS)                               # box-filtered coverage on the pixel grid

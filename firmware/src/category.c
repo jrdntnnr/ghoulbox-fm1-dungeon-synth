@@ -19,22 +19,23 @@ static uint32_t cat_of_engine(uint32_t e) { return e == 10u || e == 13u ? CAT_DR
  * only; SAMPLE's retired PERC, past SMP_NPRESETS): its engine's (cat_of_engine). tests/ui_test.c checks every string
  * against its engine's preset count. A preset's category is a hint for browsing: nothing else reads it */
 static const char *const PRESET_CAT[16] = {
-    "LPBPBKLBULLP",              /* 0 ANALOG: SAW LEAD, SOFT PAD, SQR BASS, PWM STR, ACID, SINE KEY, RAVE, SUB BASS,
+    "LPBPBKLBULLPPPLB",              /* 0 ANALOG: SAW LEAD, SOFT PAD, SQR BASS, PWM STR, ACID, SINE KEY, RAVE, SUB BASS,
                                   * PLUCK, BRASS, WIND, STRINGS */
     "",                          /* 1 DIGITAL (retired) */
-    "LKPLUU",                    /* 2 PHASE: BRASS, ORGAN, STRING, RESO, BELL, WIRE */
-    "LBLLL",                     /* 3 LOFI: PULSE LD, WAVE BASS, ARP 8BIT, WAVE LEAD, STEP LEAD */
-    "KKLL",                      /* 4 SAMPLE: PIANO, (PIANO: the retired TRANH's alias), FLUTE, SAX */
-    "PLBF",                      /* 5 VOICE: CHOIR AAH, VOX LEAD, WOW BASS, WHISPER */
-    "BLLUP",                     /* 6 TRIO: FAT BASS, ARP LEAD, SYNC LEAD, RING BELL, CHIP CHOIR */
-    "KKKKK",                     /* 7 WHEEL: the organs */
+    "LKPLUUL",                    /* 2 PHASE: BRASS, ORGAN, STRING, RESO, BELL, WIRE */
+    "LBLLLLPL",                     /* 3 LOFI: PULSE LD, WAVE BASS, ARP 8BIT, WAVE LEAD, STEP LEAD */
+    "KKLLKPKLU",                      /* 4 SAMPLE: PIANO, (PIANO: the retired TRANH's alias), FLUTE, SAX */
+    "PLBFPPFB",                      /* 5 VOICE: CHOIR AAH, VOX LEAD, WOW BASS, WHISPER */
+    "BLLUPPLPL",                     /* 6 TRIO: FAT BASS, ARP LEAD, SYNC LEAD, RING BELL, CHIP CHOIR */
+    "KKKKKKKKL",                     /* 7 WHEEL: the organs */
     "PFPP",                      /* 8 GRAIN: CLOUD PAD, GLITCH, FROZEN, SHIMMER */
-    "UUUPUDDPU",                 /* 9 PHYS: BELL TREE, MARIMBA, PLUCK, BOWED METAL, KALIMBA, HAND DRUM, TOMS, DRONE
+    "UUUPUDDPUUKUP",                 /* 9 PHYS: BELL TREE, MARIMBA, PLUCK, BOWED METAL, KALIMBA, HAND DRUM, TOMS, DRONE
                                   * STRING, HARP */
-    "D",                         /* 10 DRUM: DRUM KIT */
-    "FFFF",                      /* 11 NOISE: WIND, RAIN, ARCADE, METAL */
-    "KUBLPUKU",                  /* 12 FM6: TINE EP, BELL, FM BASS, BRASS, PAD, MARIMBA, ORGAN, PLUCK */
+    "DDD",                         /* 10 DRUM: DRUM KIT */
+    "FFFFFF",                      /* 11 NOISE: WIND, RAIN, ARCADE, METAL */
+    "KUBLPUKULKPPLKB",                  /* 12 FM6: TINE EP, BELL, FM BASS, BRASS, PAD, MARIMBA, ORGAN, PLUCK */
     "DD",                        /* 13 SLICE: CHOP, STUTTER */
+    "LPLLLL",                    /* 14 GURDY: HURDY, DRONE, DANCE, TROMPETTE, VIELLE, BAGPIPE */
 };
 static uint32_t preset_cat(uint32_t e, uint32_t k)    /* factory preset k of engine e */
 {

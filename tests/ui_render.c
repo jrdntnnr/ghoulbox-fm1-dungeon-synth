@@ -763,7 +763,7 @@ enum { S_HOME, S_HOME_IDLE, S_MESSAGE, S_MESSAGE_KEY, S_MESSAGE_NOFILE, S_PRESET
        S_ENV_SYNC, S_ENV_DEST_SYNC, S_FILTER,
        S_LEARN_WAIT, S_LEARN_PICK, S_LEARN_SET, S_LEARN_LONG, S_GLO_LEARN, S_MENU_LCLEAR, S_MENU_LCLEAR_NONE,
        S_DLY_DOT, S_DLY_DOT16, S_FX_THROW,
-       S_DETAIL, S_DETAIL_PLAYING, S_DETAIL_REST, S_DETAIL_DRUM, S_ROLL_MARKS, S_DRUM_MARKS, S_HELP_DETAIL, S_COUNT };
+       S_DETAIL, S_DETAIL_PLAYING, S_DETAIL_REST, S_DETAIL_DRUM, S_ROLL_MARKS, S_DRUM_MARKS, S_HELP_DETAIL, S_RAST, S_TUNE1, S_TUNE2, S_TUNE3, S_CHORD_RAST, S_HEAD_MSG, S_COUNT };
 static const char *const S_NAME[S_COUNT] = {"home", "home_idle", "message", "message_key", "message_nofile", "presets", "presets_nofav", "user",
     "phrases", "project", "tools", "song_empty", "song", "step", "auto_steps", "auto_add_chance", "automation", "drum",
     "drum_hand", "drum_cym", "mixer", "mixer_from_home", "mixer_pan", "env", "env_dest", "lfo", "mod", "fx", "slicer", "dly", "scl", "chord", "chord_wide", "chord_off", "chord_kit", "arp",
@@ -790,7 +790,7 @@ static const char *const S_NAME[S_COUNT] = {"home", "home_idle", "message", "mes
     "env_sync", "env_dest_sync", "filter",
     "learn_wait", "learn_pick", "learn_set", "learn_long", "layer_glo_learn", "menu_learn_clear", "menu_learn_clear_none",
     "dly_dotted", "dly_dotted_16", "perform_throw",
-    "detail", "detail_playing", "detail_rest", "detail_drum", "roll_marks", "drum_marks", "help_detail"};
+    "detail", "detail_playing", "detail_rest", "detail_drum", "roll_marks", "drum_marks", "help_detail", "rast", "tune1", "tune2", "tune3", "chord_rast", "head_msg"};
 
 /* the STEP page's piano roll (ui_graph.c graph_roll) on track 1, stopped unless said: an empty pattern; ACID in
  * A minor; POLY chords (Am7 F C G, tied); a line with ties, slides and accents in C major; LEN 32 on its second
@@ -1116,6 +1116,11 @@ static void setup(int s)
         chord_build(TSEL, s == S_CHORD ? 71u : 68u, out);
         go_title("CHORD"); ui.hot_col = 0; ui.hot_t = 30;
         break;
+    }
+    case S_CHORD_RAST: {
+        uint8_t out[4]; TSEL->p[P_VOICE]=V_POLY; TSEL->p[P_ROOT]=0;
+        TSEL->p[P_SCALE]=16; TSEL->p[P_CHRD]=CH_DIA7; TSEL->p[P_TC4]=13;
+        chord_build(TSEL,60,out); go_title("CHORD"); break;
     }
     case S_CHORD_OFF: go_title("CHORD"); break;
     case S_CHORD_KIT: eng(ENGI_DRUM); TSEL->p[P_CHRD] = CH_DIA3; go_title("CHORD"); break;

@@ -212,7 +212,7 @@ static int midi_track_held(uint32_t track)
  * of them (RP-015: they are the sound's) */
 #define MCC_CUT 0xFEu
 #define MCC_RES 0xFFu
-static const uint8_t MIDI_CC_MAP[][2] = {
+static const uint8_t MIDI_STANDARD_MAP[][2] = {
     {5, P_GLIDE}, {7, P_LEVEL}, {10, P_PAN}, {71, MCC_RES}, {72, P_REL}, {73, P_ATK}, {74, MCC_CUT}, {75, P_DEC},
     {91, P_REV}, {93, P_CHOR}, {94, P_DLY},
 };
@@ -221,9 +221,7 @@ static const uint8_t MIDI_CC_ENG[NENGINES] = {
     0x56, 0x00, 0x30, 0x80, 0x50, 0x07, 0x67, 0x00,   /* ANALOG CUT RES, -, PHASE DCW, LOFI TONE, SAMPLE CUT, VOICE Q,
                                                        * TRIO CUT RES, WHEEL - */
     0x80, 0x30, 0x30, 0x34, 0x30,                     /* GRAIN TONE, PHYS BRIT, DRUM TONE, NOISE FREQ RES, FM6 MLVL */
-#if FELUCCA_SLICE
-    0x80,                                             /* SLICE TONE */
-#endif
+    0x80, 0x40,                                      /* SLICE TONE, GURDY TONE */
 };
 /* a CC sets parameter id of track t as a knob would: 0..127 over its range */
 static void midi_cc_set(track_t *t, uint32_t id, uint32_t value)
@@ -287,9 +285,9 @@ static void __attribute__((noinline)) midi_cc_map(track_t *t, uint32_t cc, uint3
     uint32_t i, id = 0xFFFFu, e;
     if (midi_learned(cc, value))                /* (a learned CC is the user's: not the map's) */
         return;
-    for (i = 0; i < NELEM(MIDI_CC_MAP); i++)
-        if (MIDI_CC_MAP[i][0] == cc)
-            id = MIDI_CC_MAP[i][1];
+    for (i = 0; i < NELEM(MIDI_STANDARD_MAP); i++)
+        if (MIDI_STANDARD_MAP[i][0] == cc)
+            id = MIDI_STANDARD_MAP[i][1];
     if (id >= MCC_CUT) {
         if (id == 0xFFFFu)
             return;
@@ -301,10 +299,40 @@ static void __attribute__((noinline)) midi_cc_map(track_t *t, uint32_t cc, uint3
     midi_cc_set(t, id, value);
 }
 
+/* GHOULBOX: CCs that set a sound's controls on the channel's track (MIDI_CC_MAP). Here, in the audio interrupt,
+ * the value is only noted; ui_input.c midi_cc_apply sets it in the main loop, as the editor's SET does (range, alias,
+ * automation capture). MC_T a track parameter, MC_K a HOME knob (the engine's own), MC_G a global, MC_F the FX
+ * layer's filter (master: below 64 low-pass, above high-pass) */
+enum { MC_T, MC_K, MC_G, MC_F };
+static const struct { uint8_t cc, kind, id; } MIDI_CC_MAP[] = {
+    {7, MC_T, P_LEVEL}, {10, MC_T, P_PAN}, {73, MC_T, P_ATK}, {75, MC_T, P_DEC}, {79, MC_T, P_SUS}, {72, MC_T, P_REL},
+    {91, MC_T, P_REV}, {93, MC_T, P_CHOR}, {94, MC_T, P_DLY},
+    {21, MC_K, 0}, {22, MC_K, 1}, {23, MC_K, 2}, {24, MC_K, 3},
+    {85, MC_G, G_CRSH}, {86, MC_G, G_TAPE}, {74, MC_F, 0},
+    /* 1.3: the distortion send, the LFO (76 77 78: GM2's vibrato rate, depth, delay), the effects' own settings */
+    {92, MC_T, P_DIST}, {76, MC_T, P_LRATE}, {77, MC_T, P_LD_PIT}, {78, MC_T, P_LFADE}, {110, MC_T, P_LD_FLT},
+    {111, MC_T, P_LD_AMP},
+    {102, MC_G, G_RSIZE}, {103, MC_G, G_RDAMP}, {104, MC_G, G_DTIME}, {105, MC_G, G_DFDBK}, {106, MC_G, G_DCOLOR},
+    {107, MC_G, G_DMIX}, {108, MC_G, G_CRATE}, {109, MC_G, G_CDEPTH},
+};
+#define NMIDI_CC (sizeof MIDI_CC_MAP / sizeof MIDI_CC_MAP[0])
+static volatile uint8_t midi_cc_q[NTRK][NMIDI_CC];       /* the latest value + 1 per track and CC, 0 = none pending */
+static int midi_cc_note(uint32_t ch, uint32_t cc, uint32_t value)
+{
+    uint32_t i;
+    for (i = 0; i < NMIDI_CC; i++)
+        if (MIDI_CC_MAP[i].cc == cc) {
+            midi_cc_q[trk_index(midi_track(ch))][i] = (uint8_t)(value + 1u);
+            return 1;
+        }
+    return 0;
+}
+
 static void midi_control(uint32_t ch, uint32_t cc, uint32_t value)
 {
     midi_channel_t *c = midi_channel(ch);
     uint32_t i, mask;
+    if (midi_learned(cc, value & 127u) || midi_cc_note(ch, cc, value & 127u)) return;
     switch (cc) {
     case 1:
         c->wheel = (uint8_t)value;

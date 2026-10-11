@@ -15,3 +15,13 @@ cmp tests/fixtures/ghoulbox-1.1.up4 build/legacy-fixture/preset.up4
 ```
 
 Keep the fixtures frozen; do not regenerate them with the new serializer to make a failing migration test pass.
+
+
+`ghoulbox-prototype.gbm1` and `ghoulbox-prototype.up6` were written by the
+microtuning prototype at `5a8438a`, before the Felucca integration. They carry
+nonzero trims, root/scale choices and engine automation, and are read by
+`tests/integration_format_test.c`. `generate_prototype.c` records their generator.
+Compile it against that commit’s `tests/tuning_test.c` and generated headers,
+with its tests directory on the include path; run from a disposable checkout
+containing the original GHOULBOX 1.1 fixture. It writes into `tests/fixtures/`.
+Never generate these fixtures using the current serializer.

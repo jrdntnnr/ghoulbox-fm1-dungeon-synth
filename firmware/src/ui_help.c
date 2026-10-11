@@ -26,15 +26,19 @@ static const struct { const char *title, *hint; } HELP_PAGE[] = {
     {"INSERT 2", "[K1]DRY / WET[FX]DLY"},
     {"DLY", "[K1-4]ALL TRACKS[FX]REVERB"},
     {"REVERB", "[K1]ROOM SPRING HALL[FX]CHORUS"},
+    {"TAPE", "[K1]TAPE[K2]CRUSH[FX]SENDS"},
     {"CHORUS", "[K1-4]ALL TRACKS[FX]FX"},
     {"SCL", "[K2]SCALE[K3]QUANTIZE[SCL]CHORDS"},
-    {"CHORD", "[K1]CHORD[KEYS]ONE FINGER[SCL]SCL"},
+    {"CHORD", "[K1]CHORD[KEYS]PLAY[SCL]TUNE"},
+    {"TUNE 1", "[K1-4]CENTS[SCL]NEXT KEYS"},
+    {"TUNE 2", "[K1-4]CENTS[SCL]NEXT KEYS"},
+    {"TUNE 3", "[K1-4]CENTS[SCL]SCALE"},
     {"EDIT 1", H_EDIT},
     {"EDIT 2", H_EDIT},
     {"FILTER", "[K1]LP BP HP[K2]CUTOFF[EDIT]VOICE"},
     {"LANES", H_LANES},
     {"LANES 2", H_LANES},
-    {"SLICES", "[K1]SLICE[K2]MOVE[OCT+]SPLIT, JOIN"},
+    {"SLICES", "[K1]SLICE[K2]MOVE[OCT+]SPLIT/JOIN"},
     {"OPERATOR", H_FMOP},
     {"OP ENV", H_FMOP},
     {"OPERATOR 2", H_FMOP},
@@ -60,7 +64,7 @@ static const struct { const char *title, *hint; } HELP_PAGE[] = {
 #define H_GRID "[KEYS]STEPS[K2]LANE[SEQ]RATCH"
 /* a layer's (LAYER_*): what its footer row (LAYERS[].foot) does not say */
 static const char *const HELP_LAYER[LAYER_N] = {
-    "", "[KEYS]BLACK: MUTES[FX]2 TAPS: LOCK", "[KEYS]SOLO MUTE TAP[K1-4]LEVELS", "[KEYS]ROOT[K1-4]ROOT SCL CHORD",
+    "", "[KEYS]BLACK: MUTE[FX]2 TAPS: LOCK", "[KEYS]SOLO MUTE TAP[K1-4]LEVELS", "[KEYS]ROOT[K1-4]ROOT SCL CHORD",
     "[K1]ENGINE[K2]SOUND[K3]FAV", "[K1]LENGTH[K3]SWING[K4]GATE", "[K1]CLICK[K2]COUNT-IN[K3]LEVEL",
 };
 

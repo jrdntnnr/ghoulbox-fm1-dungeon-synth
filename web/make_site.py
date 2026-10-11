@@ -75,13 +75,13 @@ def main(pkg, version, out):
     for doc in ("LICENSE", "LICENSING.md"):
         shutil.copy(HERE.parent / doc, fw / doc)
     shutil.copy(HERE / "editor.html", ed / "index.html")
-    for f in ("fukiai.ttf", "FUKIAI-LICENSE.txt", "fm1backup.js"):
+    for f in ("fukiai.ttf", "FUKIAI-LICENSE.txt", "fm1backup.js", "scala.js"):
         if (HERE / f).exists():
             shutil.copy(HERE / f, ed / f)
     (out / "index.html").write_text(
-        '<!doctype html><meta charset="utf-8"><title>Felucca</title>'
+        '<!doctype html><meta charset="utf-8"><title>GHOULBOX</title>'
         '<meta http-equiv="refresh" content="0; url=webapp/installer/">'
-        '<a href="webapp/installer/">Felucca installer</a>\n', encoding="utf-8")
+        '<a href="webapp/installer/">GHOULBOX installer</a>\n', encoding="utf-8")
     print(f"site: {out}: webapp/installer ({len(html)} B), webapp/editor, firmware/{name} ({len(raw)} B, {product})")
 
 

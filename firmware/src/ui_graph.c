@@ -267,7 +267,7 @@ static void graph_grid(const track_t *t, uint16_t c)
 {
     uint32_t l, i, len = (uint32_t)t->p[P_SLEN], base = ui.bank * 16u, mute = drum_mute[trk_index(t) % NPART];
     uint64_t locks = motion_lock_steps(trk_index(t));
-    int32_t y0 = 6;
+    int32_t y0 = 5;
     for (i = 0; i < 16u && base + i < len; i++) {   /* a parameter lock: a mark over the step; CHANCE / RATCH / */
         if ((locks >> (base + i)) & 1u)               /* NUDGE set (1.5.1, DETAIL): a dot under it */
             cv_rect(41 + (int32_t)i * 12, 1, 8, 2, T_ACCENT);
@@ -418,7 +418,7 @@ static void graph_chord(const track_t *t, uint16_t c)
     }
     if (trk_vmode(t) != V_POLY)
         cap = "ROOT ONLY";                              /* MONO / LEGATO / UNISON */
-    chord_name(b, (uint32_t)r, mask);
+    chord_tuned_name(b, t, (uint32_t)r, mask, nn, n);
     cv_text_on(14, 8, &AF_M, b, T_TEXT, T_SURF);
     GFX_HOOK_ALIGN(0, 0, 0, 8 + AF_M.asc, AL_B, "chord caption on the name's baseline");
     cv_text_r(226, 8 + AF_M.asc - AF_S.asc, &AF_S, cap, T_MID, T_SURF);   /* on the name's baseline */
@@ -433,6 +433,12 @@ static void graph_chord(const track_t *t, uint16_t c)
             on |= nn[j] == note;
         cv_rrect(x, BLACK[note % 12u] ? 36 : 62, (int32_t)w - 2, 48, w > 6u ? 3 : 2,
                  !on ? T_RAISE : note % 12u == (uint32_t)r % 12u ? T_ACCENT : c, T_SURF);
+        if (on && tuning_cents(t, note)) {
+            int32_t mid = x + ((int32_t)w - 2) / 2;
+            int32_t y = BLACK[note % 12u] ? 49 : 75, dy = tuning_cents(t, note) < 0 ? 2 : -2;
+            cv_line(mid - 1, y, mid, y + dy, T_SURF);
+            cv_line(mid, y + dy, mid + 1, y, T_SURF);
+        }
     }
 }
 /* the four sends as faders under their cards: a RAISE slot, the THEME fill from the bottom, a cap */
@@ -2223,7 +2229,7 @@ static void graph_song(void)
     } else {                                           /* + ADD: how */
         for (i = 0; i < 4u && !graph_project_used(i); i++)
             ;
-        cv_free_hint(SG_X0, ly + AF_M_CAP_Y + AF_M_CAP_H - AF_S_CAP_Y - AF_S_CAP_H,   /* (a key hint: S) */
+        cv_free_hint(SG_X0, ly + AF_M_CAP_Y + AF_M_CAP_H - AF_S_CAP_Y - AF_S_CAP_H - 1,   /* (a key hint: S) */
                      i < 4u ? "[K3] ADD SECTION" : "[SAVE] PROJECT A-D", T_MID, T_SURF, x0 - 10 - SG_X0);
     }
 }
