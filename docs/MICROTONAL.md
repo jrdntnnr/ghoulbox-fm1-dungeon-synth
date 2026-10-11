@@ -75,6 +75,8 @@ Audition, on the device or in the web editor:
 3. Hold A (the G key) and switch to **SCL SHUR2**. The held note follows the new tuning (LIVE); there is no per-note snapshot yet.
 4. Save the project, reload it and confirm SCL still reads SHUR2.
 
+Without a device, [SHUR_REVIEW.md](SHUR_REVIEW.md) renders the same comparisons to audio files for a reviewer.
+
 **Compatibility:** selecting SHUR1/2 needs no new project format; GBM2 stores the scale ID. Firmware without these rows clamps IDs 41–42 to CUSTOM when loading. With no custom mask saved, SNAP and WHITE then play only the tonic. Keep the project on this firmware or later.
 
 ## Other added scales

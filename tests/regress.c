@@ -161,7 +161,7 @@ static void phrase(track_t *t, uint32_t base)
 }
 
 /* ------------------------------------------------------------- jobs --- */
-enum { J_PRESET, J_MODE, J_SENDS, J_DRUMS, J_SONG, J_CPU, J_CHECK, J_SLICER };
+enum { J_PRESET, J_MODE, J_SENDS, J_DRUMS, J_SONG, J_CPU, J_CHECK, J_SLICER, J_TUNED };
 typedef struct {
     char name[64];
     uint8_t kind, e, pi, arg, cpu_notes;
@@ -245,6 +245,44 @@ static void job_slicer(const job_t *j)
     for (i = 0; i < 4u; i++)
         t->p[P_SLCR + i] = S[j->arg][i];
     phrase(t, 60);
+}
+
+/* a factory scale's ID by its display name (appended IDs are never hard-coded) */
+static uint8_t scale_named(const char *name)
+{
+    uint32_t i;
+    for (i = 0; i < NELEM(N_SCALE); i++)
+        if (!strcmp(N_SCALE[i], name))
+            return (uint8_t)i;
+    fprintf(stderr, "no scale %s\n", name);
+    exit(1);
+}
+
+/* a tuned scale on ROOT D, QNT OFF (the keys as played): D up to D an eighth each, then D A D E held, so the
+ * koron second (E) and the fifth (A, lowered in SHUR2) both sound alone and in a chord. arg: the scale ID */
+static void job_tuned(const job_t *j)
+{
+    static const uint8_t UP[8] = {62, 64, 65, 67, 69, 70, 72, 74}, CH[4] = {50, 57, 62, 64};
+    track_t *t = &trk[0];
+    uint32_t i;
+    host_tracks_init();
+    host_preset(t, j->e, j->pi);
+    t->p[P_AMODE] = 0;
+    t->p[P_ROOT] = 2;
+    t->p[P_SCALE] = j->arg;
+    for (i = 0; i < 8u; i++) {
+        input_on(t, UP[i], 100);
+        run_to(at(0.15 * (i + 1)));
+        input_off(t, UP[i]);
+    }
+    for (i = 0; i < 4u; i++)
+        input_on(t, CH[i], 90);
+    run_to(at(2.00));
+    for (i = 0; i < 4u; i++)
+        input_off(t, CH[i]);
+    rel_at = fpos;
+    dc_end = fpos + FS / 2u;
+    finish();
 }
 
 /* the 4-track mix: T1 ANALOG ACID, T2 the power-on pad (TRK_DEF: FM6 PAD since DIGITAL was retired; DIGITAL PAD
@@ -388,6 +426,9 @@ static int run_job_body(job_t *j)
         break;
     case J_SLICER:
         job_slicer(j);
+        break;
+    case J_TUNED:
+        job_tuned(j);
         break;
     case J_CPU:
         job_cpu(j);
@@ -1071,6 +1112,19 @@ int main(int argc, char **argv)
         j->e = 1, j->pi = 5, j->arg = 1;
 #endif
         add(J_SONG, "slicer/song_gate_stut")->arg = 1;
+    }
+    {   /* tuned scales: the oscillator (ANALOG SAW LEAD) and the sample-rate path (SAMPLE, its first set) */
+        static const char *const SC[] = {"SHUR1", "SHUR2"}, *const SL[] = {"SHUR1", "SHUR2"};
+        static const uint8_t TE[2] = {0, ENGI_SAMPLE};
+        for (i = 0; i < 2u; i++)
+            for (k0 = 0; k0 < 2u; k0++) {
+                job_t *j;
+                snprintf(name, sizeof name, "tuned/%s/%s", ENGINES[TE[i]]->name, SL[k0]);
+                j = add(J_TUNED, name);
+                j->e = TE[i];
+                j->pi = 0;
+                j->arg = scale_named(SC[k0]);
+            }
     }
     g1 = nj;
     {   /* determinism: the first preset render once more */

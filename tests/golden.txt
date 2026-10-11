@@ -145,3 +145,8 @@ preset/PHYS/13_DESERT_OUD f49648ace939c108
 preset/PHYS/14_BRASS_QANUN d35c5b7a0757184c
 preset/DRUM/03_DUNE_DRUMS ef18e989a9f73e94
 preset/NOISE/06_SAND_WIND 6ad3b0bec3b0a918
+# SARDAB Shur pilot: appended tuned renders only; prior hashes unchanged.
+tuned/ANALOG/SHUR1 223b3c58e5dc1290
+tuned/ANALOG/SHUR2 20ca3c17a3bb80a8
+tuned/SAMPLE/SHUR1 aa7d8e8a1af1def0
+tuned/SAMPLE/SHUR2 d8659bc65797a99c

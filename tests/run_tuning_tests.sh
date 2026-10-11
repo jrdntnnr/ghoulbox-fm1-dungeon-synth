@@ -19,6 +19,8 @@ for name in tuning chord_tuning desert integration_format scale project chord mo
         exit 1
     fi
 done
+# the Shur review renderer (docs/SHUR_REVIEW.md): built so it cannot rot, not run
+"$CC" -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/shur_review" tests/shur_review.c -lm
 "$CC" -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/regress" tests/regress.c -lm
 "$OUT/regress" tests/golden.txt tests/cpu_baseline.txt > build/assessment/tuning-regress.log
 "$CC" -O2 -w -Ibuild/gen -Ifirmware/src -Itests -o "$OUT/ui_render" tests/ui_render.c -lm
