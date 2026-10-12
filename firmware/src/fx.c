@@ -113,14 +113,90 @@ static void track_dist(track_t *t, int32_t *b, uint32_t n)
     }
 }
 
-/* master: peak limiter in front of the soft clipper. Fast attack (~0.1 ms),
- * ~150 ms release, threshold where tanh is still nearly linear, so chords
- * get quieter instead of crushed. */
+/* master: peak limiter in front of the soft clipper, threshold where tanh is still nearly linear, so chords get
+ * quieter instead of crushed. After SLOOP 2.6 (isod89): it looks one block ahead (lim_block). The output is the mix
+ * CTL samples late (0.73 ms) and the gain glides over each block to what the loudest sample of it and of the next
+ * needs, so a hot kick is already turned down when it comes. Before, the gain caught up in ~4 samples and the first
+ * ones went through the knee at up to 4x: a crackle on the beats with MASTER up. A 35 ms hold, then ~46 ms release */
 #define LIM_T 18000
-static int32_t lim_env = LIM_T;
-/* MENU > USB LEVEL FIXED (for #42: record over USB with the speaker turned down): the mix goes to master_out at the
+#define LIM_HOLD 48u                    /* blocks: a held bass (down to ~29 Hz) keeps one gain, no dip every cycle */
+#define LIM_REL 11                      /* the release after the hold: ~46 ms */
+typedef struct {
+    int32_t dl[CTL], dr[CTL];           /* the mix of the last block (the delay) */
+    uint32_t w;                         /* its oldest sample (the next out) */
+    int32_t env;                        /* the peak the gain fits under LIM_T (LIM_T: none) */
+    int32_t g;                          /* the gain at the end of the last block, Q15 (32768: 1) */
+    uint32_t hold;                      /* blocks before the release starts */
+} lim_t;
+static lim_t lim = {.env = LIM_T, .g = 32768};
+static void lim_reset(void)             /* power-on state (tests: runs compare) */
+{
+    memset(&lim, 0, sizeof lim);
+    lim.env = LIM_T;
+    lim.g = 32768;
+}
+/* l, r: n (<= CTL) samples in; out: the n samples of CTL before, limited (before the knee) */
+static void lim_block(lim_t *s, int32_t *l, int32_t *r, uint32_t n)
+{
+    uint32_t i, w = s->w;
+    int32_t pk = 0, a, g0 = s->g, g1, dg, e = s->env;
+
+    /* the peak of what goes out now and of what follows it: CTL ahead */
+    for (i = 0; i < CTL; i++) {
+        a = s->dl[i] < 0 ? -s->dl[i] : s->dl[i], pk = a > pk ? a : pk;
+        a = s->dr[i] < 0 ? -s->dr[i] : s->dr[i], pk = a > pk ? a : pk;
+    }
+    for (i = 0; i < n; i++) {
+        a = l[i] < 0 ? -l[i] : l[i], pk = a > pk ? a : pk;
+        a = r[i] < 0 ? -r[i] : r[i], pk = a > pk ? a : pk;
+    }
+
+    /* the envelope: up at once, held while peaks come near it, then released a block at a time */
+    if ((int64_t)pk * 17 >= (int64_t)e * 16) {
+        s->hold = LIM_HOLD;
+    }
+    if (s->hold) {
+        s->hold--;
+    } else if (e > LIM_T) {
+        e -= (int32_t)((((int64_t)(e - LIM_T) * (int32_t)n) >> LIM_REL) + 1);
+    }
+    if (e < LIM_T) {
+        e = LIM_T;
+    }
+    if (pk > e) {
+        e = pk, s->hold = LIM_HOLD;
+    }
+    s->env = e;
+
+    /* the gain glides from the last block's to this one's; 64-bit: every bit of the limited signal kept */
+    g1 = e > LIM_T ? (int32_t)(((uint32_t)LIM_T << 15) / (uint32_t)e) : 32768;
+    s->g = g1;
+    if (g0 == 32768 && g1 == 32768) {                   /* not limiting (most blocks): the delay only */
+        for (i = 0; i < n; i++) {
+            int32_t xl = s->dl[w], xr = s->dr[w];
+            s->dl[w] = l[i], s->dr[w] = r[i];
+            w = (w + 1u) & (CTL - 1u);
+            l[i] = xl, r[i] = xr;
+        }
+        s->w = w;
+        return;
+    }
+    dg = (g1 - g0) / (int32_t)(n ? n : 1u);
+    for (i = 0; i < n; i++) {
+        int32_t xl = s->dl[w], xr = s->dr[w], g = i + 1u == n ? g1 : g0 + dg * (int32_t)(i + 1u);
+        s->dl[w] = l[i], s->dr[w] = r[i];
+        w = (w + 1u) & (CTL - 1u);
+        if (g < 32768) {
+            xl = (int32_t)(((int64_t)xl * g) >> 15);
+            xr = (int32_t)(((int64_t)xr * g) >> 15);
+        }
+        l[i] = xl, r[i] = xr;
+    }
+    s->w = w;
+}
+/* MENU > USB LEVEL FIXED (for #42: record over USB with the speaker turned down): the mix goes to master_block at the
  * full MASTER level, USB audio takes that (audio.c uac_tap), and only then does MASTER scale what the DAC gets
- * (usb_fixed_dac). MASTER (0, the default): MASTER before master_out, as always (USB follows the knob) */
+ * (usb_fixed_dac). MASTER (0, the default): MASTER before master_block, as always (USB follows the knob) */
 static volatile uint8_t fx_usb_fixed;
 #define MASTER_FULL 4096                /* main.c: the MASTER knob's top, Q12 */
 /* the MASTER pot (ADC 0..1023, smoothed in main.c) to its level, square law: 0 .. 4088 (Q12) */
@@ -184,9 +260,9 @@ static inline int32_t spk_bass(int32_t m)
     return sb_hl + (sb_hl >> 1);      /* x1.5 (#180: x3 peaked at 1.5 .. 3.5 x a full-scale kick, the limiter */
 }                                     /* pulled the mix down up to 16 dB on each hit and the buzz took over) */
 
-static inline void master_out(int32_t *l, int32_t *r)
+/* the output stage before the limiter: the DC blocker, the speaker EQ */
+static inline void master_pre(int32_t *l, int32_t *r)
 {
-    int32_t al, ar, a;
     *l = dc_block(*l, &dc_l, &dce_l);
     *r = dc_block(*r, &dc_r, &dce_r);
     if (fx_lowcut) {                  /* two one-pole high-passes, error feedback as dc_block (the */
@@ -197,20 +273,20 @@ static inline void master_out(int32_t *l, int32_t *r)
         *r = lowcut1(*r, &lc_r1, &lce[2], sh);
         *r = lowcut1(*r, &lc_r2, &lce[3], sh) + b;
     }
-    al = *l < 0 ? -*l : *l;
-    ar = *r < 0 ? -*r : *r;
-    a = al > ar ? al : ar;
-    if (a > lim_env)
-        lim_env += (a - lim_env) >> 2;
-    else if (lim_env > LIM_T)
-        lim_env -= ((lim_env - LIM_T) >> 12) + 1;
-    if (lim_env > LIM_T) {
-        int32_t g = (int32_t)(((uint32_t)LIM_T << 15) / (uint32_t)lim_env);   /* < 32768 */
-        *l = ((*l >> 4) * g) >> 11;                      /* >> 4 first: |l| may be far above Q15 */
-        *r = ((*r >> 4) * g) >> 11;
+}
+
+/* the master: n (<= CTL) samples of the mix in, out CTL samples late, limited and soft-clipped */
+static void master_block(int32_t *l, int32_t *r, uint32_t n)
+{
+    uint32_t i;
+    for (i = 0; i < n; i++) {
+        master_pre(&l[i], &r[i]);
     }
-    *l = softclip(*l);
-    *r = softclip(*r);
+    lim_block(&lim, l, r, n);
+    for (i = 0; i < n; i++) {
+        l[i] = softclip(l[i]);
+        r[i] = softclip(r[i]);
+    }
 }
 
 /* length of one division (N_DIV order) in samples at the song tempo */
@@ -240,6 +316,14 @@ static uint32_t delay_samples(void)
     return s < 16u ? 16u : s >= DLY_LEN ? DLY_LEN - 1u : s;
 }
 
+/* x * y >> 15 rounded toward 0: a feedback loop's tail dies out instead of settling at a few LSB (floor rounding kept
+ * ROOM at +-41 for ever) */
+static inline int32_t mulq15z(int32_t a, int32_t b)
+{
+    int32_t p = a * b;
+    return (p + ((p >> 31) & 32767)) >> 15;
+}
+
 /* ROOM (G_RTYPE 0): 4 damped combs + 2 allpasses (Freeverb-like, mono), added to out */
 static __attribute__((noinline)) void rev_room(const int32_t *rev_in, int32_t *out, uint32_t n)
 {
@@ -251,8 +335,8 @@ static __attribute__((noinline)) void rev_room(const int32_t *rev_in, int32_t *o
         int32_t in = mulq15(rev_in[i], 2580);           /* 1/8 at -4 dB: level as before the allpass fix */
         for (k = 0; k < 4u; k++) {
             int32_t o = c[fx.comb_i[k]];
-            fx.comb_lp[k] = o + mulq15(fx.comb_lp[k] - o, 32767 - damp);
-            c[fx.comb_i[k]] = (int16_t)clamp(in + mulq15(fx.comb_lp[k], size), -32768, 32767);
+            fx.comb_lp[k] = o + mulq15z(fx.comb_lp[k] - o, 32767 - damp);
+            c[fx.comb_i[k]] = (int16_t)clamp(in + mulq15z(fx.comb_lp[k], size), -32768, 32767);
             if (++fx.comb_i[k] >= REV_COMB[k])
                 fx.comb_i[k] = 0;
             a += o;
@@ -261,7 +345,7 @@ static __attribute__((noinline)) void rev_room(const int32_t *rev_in, int32_t *o
         c = rev_ap;
         for (k = 0; k < 2u; k++) {
             int32_t o = c[fx.ap_i[k]];
-            int32_t v = a + (o >> 1);
+            int32_t v = a + ((o + (o < 0)) >> 1);       /* (o / 2 toward 0, see mulq15z; no divide) */
             c[fx.ap_i[k]] = (int16_t)clamp(v, -32768, 32767);
             a = o - a;                                  /* Freeverb: out = buf - in (o - v is a notch comb) */
             if (++fx.ap_i[k] >= REV_AP[k])
@@ -529,6 +613,44 @@ static __attribute__((noinline)) void rev_switch(const int32_t *rev_in, int32_t 
     fx.rtype = (uint8_t)rt;
 }
 
+/* a bus with nothing to do is skipped: its input 0 a block and, for long enough before, its state at most BUS_QUIET
+ * (-84 dBFS). The chorus: its buffer all 0 (exact); the delay: every sample of its buffer read; a reverb: a second.
+ * Skipped, the state stays as it was (a leftover of +-BUS_QUIET at most, under what comes next) */
+enum { BUS_CHO, BUS_DLY, BUS_REV, BUS_N };
+#define BUS_QUIET 2
+static const uint32_t BUS_HOLD[BUS_N] = {CHO_LEN, DLY_LEN, FS};
+static uint32_t bus_q[BUS_N];                         /* samples each has been quiet (input 0, state <= BUS_QUIET) */
+static uint8_t bus_skip = 1;                          /* 0: every bus always runs (tests: the reference) */
+static int32_t rev_tmp[CTL];
+
+static int blk_zero(const int32_t *x, uint32_t n)
+{
+    int32_t a = 0;
+    uint32_t i;
+    for (i = 0; i < n; i++) {
+        a |= x[i];
+    }
+    return !a;
+}
+/* bus b, its input zero or not this block: skip it? */
+static int bus_idle(uint32_t b, int zero)
+{
+    if (!zero) {
+        bus_q[b] = 0;
+    }
+    return bus_skip && zero && bus_q[b] >= BUS_HOLD[b];
+}
+/* .. after it ran: its state this block at most BUS_QUIET (loud 0) or not */
+static void bus_settle(uint32_t b, int zero, int loud, uint32_t n)
+{
+    if (!zero || loud) {
+        bus_q[b] = 0;
+        return;
+    }
+    if (bus_q[b] < BUS_HOLD[b]) {
+        bus_q[b] += n;
+    }
+}
 /* process the three buses for one block; sends in, wet stereo-equal out */
 static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t *rev_in, int32_t *wet,
                      uint32_t n)
@@ -538,42 +660,89 @@ static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t
     int32_t dmix = song.g[G_DMIX] * 258;
     int32_t cdepth = song.g[G_CDEPTH] * 6, rt;
     uint32_t cinc = LFO_INC[song.g[G_CRATE] & 127] / CTL;
+    int zc = blk_zero(cho_in, n), zd = blk_zero(dly_in, n), zr = blk_zero(rev_in, n);
     if (pf.ew1 && fb < THR_FB)
         fb += mulq16(THR_FB - fb, (uint32_t)pf.ew1 << 1);   /* ECHO THROW (perform.c): more feedback while held, 0.7
                                                              * at most (the loop's gain below 1: it never runs away) */
     for (i = 0; i < n; i++) {
-        int32_t y = 0, x, r;
-        /* chorus: modulated short delay, 5..15 ms */
-        cho_buf[fx.cho_w & (CHO_LEN - 1u)] = (int16_t)clamp(cho_in[i] >> 1, -32768, 32767);
-        fx.cho_ph += cinc;
-        r = (400 << 8) + ((osc_sine(fx.cho_ph) + 32768) * cdepth >> 8);   /* Q8 delay: read between samples */
-        {
-            uint32_t ri = (uint32_t)r >> 8;
-            int32_t f = r & 255, c0 = cho_buf[(fx.cho_w - ri) & (CHO_LEN - 1u)];
-            int32_t c1 = cho_buf[(fx.cho_w - ri - 1u) & (CHO_LEN - 1u)];
-            y += (c0 + (((c1 - c0) * f) >> 8)) << 1;
-        }
-        fx.cho_w++;
-        /* delay with a low-passed feedback */
-        x = dly_buf[(fx.dly_w - dl) & (DLY_LEN - 1u)];
-        fx.dly_lp += mulq15(x - fx.dly_lp, col);
-        dly_buf[fx.dly_w & (DLY_LEN - 1u)] =
-            (int16_t)clamp((dly_in[i] >> 1) + mulq15(fx.dly_lp, fb), -32768, 32767);
-        fx.dly_w++;
-        y += mulq15(x << 1, dmix);
-        wet[i] = y;
+        wet[i] = 0;
     }
+
+    /* chorus: modulated short delay, 5..15 ms */
+    if (bus_idle(BUS_CHO, zc)) {
+        fx.cho_ph += cinc * n;
+        fx.cho_w += n;
+    } else {
+        for (i = 0; i < n; i++) {
+            int32_t r, f, c0, c1;
+            uint32_t ri;
+            cho_buf[fx.cho_w & (CHO_LEN - 1u)] = (int16_t)clamp(cho_in[i] >> 1, -32768, 32767);
+            fx.cho_ph += cinc;
+            r = (400 << 8) + ((osc_sine(fx.cho_ph) + 32768) * cdepth >> 8);   /* Q8 delay: read between samples */
+            ri = (uint32_t)r >> 8;
+            f = r & 255;
+            c0 = cho_buf[(fx.cho_w - ri) & (CHO_LEN - 1u)];
+            c1 = cho_buf[(fx.cho_w - ri - 1u) & (CHO_LEN - 1u)];
+            wet[i] += (c0 + (((c1 - c0) * f) >> 8)) << 1;
+            fx.cho_w++;
+        }
+        bus_settle(BUS_CHO, zc, 0, n);                  /* (its buffer 0 once its input was 0 for CHO_LEN) */
+    }
+
+    /* delay with a low-passed feedback; loud: what it read was above BUS_QUIET */
+    if (bus_idle(BUS_DLY, zd)) {
+        fx.dly_w += n;
+    } else {
+        uint32_t loud = 0;
+        for (i = 0; i < n; i++) {
+            int32_t x = dly_buf[(fx.dly_w - dl) & (DLY_LEN - 1u)];
+            fx.dly_lp += mulq15(x - fx.dly_lp, col);
+            dly_buf[fx.dly_w & (DLY_LEN - 1u)] =
+                (int16_t)clamp((dly_in[i] >> 1) + mulq15(fx.dly_lp, fb), -32768, 32767);
+            fx.dly_w++;
+            loud |= (uint32_t)(x + BUS_QUIET) > 2u * BUS_QUIET;
+            wet[i] += mulq15(x << 1, dmix);
+        }
+        bus_settle(BUS_DLY, zd, (int)loud, n);
+    }
+
+    /* the reverb: its input 0, into rev_tmp first to see whether it is quiet */
     rt = song.g[G_RTYPE];
     rt = rt == 1 || rt == 2 ? rt : 0;
     hl.side = 0;
-    if (rt != fx.rtype)
+    if (rt != fx.rtype) {
+        bus_q[BUS_REV] = 0;
         rev_switch(rev_in, wet, n, rt);
-    else if (rt == 2)
-        rev_hall(rev_in, wet, n);
-    else if (rt)
-        rev_spring(rev_in, wet, n);
-    else
-        rev_room(rev_in, wet, n);
+        return;
+    }
+    if (bus_idle(BUS_REV, zr)) {
+        return;
+    }
+    {
+        int32_t *o = zr ? rev_tmp : wet;
+        uint32_t loud = 0;
+        if (zr) {
+            for (i = 0; i < n; i++) {
+                o[i] = 0;
+            }
+        }
+        if (rt == 2)
+            rev_hall(rev_in, o, n);
+        else if (rt)
+            rev_spring(rev_in, o, n);
+        else
+            rev_room(rev_in, o, n);
+        if (zr) {
+            for (i = 0; i < n; i++) {
+                loud |= (uint32_t)(o[i] + BUS_QUIET) > 2u * BUS_QUIET;
+                wet[i] += o[i];
+            }
+            for (i = 0; hl.side && i < n; i++) {        /* (HALL: its stereo difference too) */
+                loud |= (uint32_t)(rev_side[i] + BUS_QUIET) > 2u * BUS_QUIET;
+            }
+        }
+        bus_settle(BUS_REV, zr, (int)loud, n);
+    }
 }
 
 /* after the buses: HALL's stereo difference to the left and from the right of the dry mix (the wet bus adds the
@@ -831,7 +1000,24 @@ static __attribute__((noinline)) void mix_spread(track_t *t, int32_t *b, uint32_
 
 /* one synth part into the dry mix and the sends; a part with no voice sounding costs
  * the LFO tick and a cleared buffer only (after the DIST tail has run out) */
+static void mix_part_run(track_t *t, uint32_t n);
+static int32_t send_top[NTRK], send_lim[NTRK];        /* mix_part_run: a part's largest send, 0x7FFFFFFF / it */
+/* a sound's fade (voice.c sound_change): the whole part rendered with the sound it had, then the new one back */
 static void mix_part(track_t *t, uint32_t n)
+{
+    static int16_t pnew[P_COUNT];
+    uint32_t k = (uint32_t)(t - trk) % NTRK;
+    if (!(snd_is_fading(t) && t->xf_on && t->xf)) {
+        mix_part_run(t, n);
+        return;
+    }
+    memcpy(pnew, t->p, sizeof pnew);
+    memcpy(t->p, snd_old[k], sizeof t->p);
+    mix_part_run(t, n);
+    memcpy(t->p, pnew, sizeof pnew);
+}
+
+static void mix_part_run(track_t *t, uint32_t n)
 {
     int32_t *b = part_buf;
     uint32_t i;
@@ -863,8 +1049,13 @@ static void mix_part(track_t *t, uint32_t n)
         int32_t lvl = LEVEL_Q12[t->p[P_LEVEL] & 127], pan = t->p[P_PAN];
         int32_t gl = 4096 - (pan > 0 ? pan * 64 : 0), gr = 4096 + (pan < 0 ? pan * 64 : 0);
         int32_t c = t->p[P_CHOR] * 258, d = t->p[P_DLY] * 258, r = t->p[P_REV] * 258, pk = t->peak;
-        int32_t xmax = c > d ? c : d;
-        xmax = 0x7FFFFFFF / ((xmax > r ? xmax : r) | 1);   /* sends: loud chords at a high LEVEL */
+        int32_t xmax = c > d ? c : d, k = (int32_t)((uint32_t)(t - trk) % NTRK);
+        xmax = (xmax > r ? xmax : r) | 1;
+        if (xmax != send_top[k]) {                      /* (the divide only when a send moved) */
+            send_top[k] = xmax;
+            send_lim[k] = 0x7FFFFFFF / xmax;
+        }
+        xmax = send_lim[k];                             /* sends: loud chords at a high LEVEL */
         for (i = 0; i < n; i++) {
             int32_t x = ((b[i] >> 2) * lvl) >> 10, a = x < 0 ? -x : x;   /* pre-shift: 8 loud voices */
             int32_t xs = clamp(x, -xmax, xmax);         /* sends: mulq15 would overflow */
@@ -902,7 +1093,7 @@ static __attribute__((noinline)) void scope_take_mix(uint32_t n)
         scope_buf[scope_w++ & (SCOPE_N - 1u)] = (int16_t)clamp(mix_l[i] + wet[i], -32767, 32767);
 }
 
-/* the master with the FX layer's effects between its level and master_out (perform.c) */
+/* the master with the FX layer's effects between its level and master_block (perform.c) */
 static __attribute__((noinline)) void perf_master(int32_t *out, uint32_t n)
 {
     uint32_t i;
@@ -912,12 +1103,266 @@ static __attribute__((noinline)) void perf_master(int32_t *out, uint32_t n)
         mix_r[i] = ((mix_r[i] >> 2) * mg) >> 10;
     }
     perf_block(mix_l, mix_r, n);
+    master_block(mix_l, mix_r, n);
     for (i = 0; i < n; i++) {
-        int32_t l = mix_l[i], r = mix_r[i];
-        master_out(&l, &r);
-        out[2u * i] = l;
-        out[2u * i + 1u] = r;
+        out[2u * i] = mix_l[i];
+        out[2u * i + 1u] = mix_r[i];
     }
+}
+
+/* ---- TEXTURE (after SLOOP 2.6 by isod89, GPL-3.0; FX > TEXTURE): a looping bed under the mix, the glue of lo-fi
+ * and ambient tracks, without taking a track. SRC: a generated noise (no memory, nothing to load) or a user sample slot looped (USR1..4, its first
+ * zone at its own pitch; a looped zone from its loop, else whole), LEVEL, TONE (left a low-pass, right a high-pass:
+ * tx_tone), MOVE: how much it breathes over RATE (1 .. 16 bars of the tempo; its level and brightness, a sine from the
+ * transport's start), WHEN: PLAY (fades in and out with the transport) or ALWAYS. Into the dry mix (no sends), before
+ * the TAPE and the master.
+ *   VINYL  hiss, rumble, crackle and the odd pop, each crackle somewhere left to right
+ *   TAPE   hiss tilted dark, its level drifting slowly (flutter)
+ *   RAIN   a soft bed and droplets, left and right apart
+ *   WIND   noise through two resonant low-passes wandering slowly, gusts
+ *   RADIO  a band of static (500 Hz .. 3 kHz), coarse, in bursts that come and go
+ *   ROOM   room tone: a low rumble and a little air
+ * Its level: x * LEVEL^2 / 16384 into the mix (the sources at about 8000 rms: LEVEL 64 about -30 dBFS rms out, 127
+ * about -18). Off (and faded out): nothing runs, the mix bit for bit as without */
+enum { TX_OFF, TX_VINYL, TX_TAPE, TX_RAIN, TX_WIND, TX_RADIO, TX_ROOM, TX_USR1, TX_N = TX_USR1 + 4 };
+static struct {
+    int32_t rnd;                                        /* noise state (never 0) */
+    int32_t g;                                          /* gain now (Q15 of the LEVEL target), ramped a block */
+    uint8_t src, play;                                  /* the source running; the transport as last seen */
+    uint32_t ph;                                        /* MOVE's phase (a turn per RATE) */
+    int32_t a[2], b[2], c[2], d[2], e[2];               /* per side: the sources' states (see texture_gen) */
+    int32_t lpm[2];                                     /* MOVE's brightness (one-pole) */
+    int32_t t0, t1, t2;                                 /* slow random walks / timers */
+    tsvf_t wc[2];                                       /* WIND: this block's filters */
+    int32_t wz[2][2];
+    uint32_t upos, ufrac;                               /* USR: the read position, Q16 fraction */
+    int32_t up, ui, us0, us1;                           /* USR: ADPCM predictor, step index, the two samples interpolated */
+    uint32_t ugen;                                      /* USR: the slots' scan count (an upload restarts it) */
+    int32_t ulast, uoff;                                /* USR: the last value out; the step at a wrap, gliding to 0
+                                                         * (a sample that does not end where it starts: no click) */
+    uint8_t uwrap;                                      /* USR: tx_usr_next went round */
+    int32_t zl[2], zh[2];                               /* TONE: its low-pass, the high-pass's low-pass */
+} tx = {.rnd = 0x2545F491};
+static inline int32_t tx_n16(void) { return (int32_t)(noise32(&tx.rnd) >> 16) - 32768; }   /* -32768 .. 32767 */
+static void texture_reset(uint32_t src)
+{
+    int32_t rnd = tx.rnd, g = tx.g;
+    uint32_t ph = tx.ph;
+    uint8_t play = tx.play;
+    memset(&tx, 0, sizeof tx);
+    tx.rnd = rnd ? rnd : 0x2545F491;
+    tx.g = g, tx.ph = ph, tx.play = play;
+    tx.src = (uint8_t)src;
+    tx.t0 = 50 << 8, tx.t1 = 60 << 8;                  /* (WIND: the two cutoffs, RADIO / TAPE: the level) */
+    tx.ugen = smp_user_gen - 1u;                        /* (USR: the zone looked up on the first block) */
+}
+/* USR k: the next sample of its first zone, looped (sample_next's decoder, its own state) */
+static inline int32_t tx_usr_next(const smp_zone_t *z)
+{
+    uint32_t pos = tx.upos, b = SMP_DATA[z->off + (pos >> 1)];
+    uint32_t code = (pos & 1u) ? (b >> 4) : (b & 15u);
+    int32_t step = IMA_STEP[(uint32_t)tx.ui <= 88u ? tx.ui : 88], vd = step >> 3;
+    if (code & 4u) vd += step;
+    if (code & 2u) vd += step >> 1;
+    if (code & 1u) vd += step >> 2;
+    tx.up = clamp(tx.up + ((code & 8u) ? -vd : vd), -32768, 32767);
+    tx.ui = clamp(tx.ui + IMA_IDX[code & 7u], 0, 88);
+    if (++pos > (z->looped ? z->le : z->n - 1u)) {      /* round again: from the loop (its state), or the top */
+        pos = z->looped ? z->ls : 0u;
+        tx.up = z->looped ? z->pred : 0;
+        tx.ui = z->looped ? z->idx : 0;
+        tx.uwrap = 1;
+    }
+    tx.upos = pos;
+    return tx.up;
+}
+/* n samples of source src (both sides) into l, r, at about 8000 rms */
+static __attribute__((noinline)) void texture_gen(uint32_t src, int32_t *l, int32_t *r, uint32_t n)
+{
+    uint32_t i, k;
+    if (src >= TX_USR1) {
+        uint32_t s = src - TX_USR1;
+        const smp_zone_t *z = usr_nz[s] ? &usr_zone[s][0] : 0;
+        if (!z || !z->n) {
+            for (i = 0; i < n; i++)
+                l[i] = r[i] = 0;
+            return;
+        }
+        if (tx.ugen != smp_user_gen) {                  /* a new upload (or the first block): from the top */
+            tx.ugen = smp_user_gen;
+            tx.upos = 0, tx.ufrac = 0, tx.up = tx.ui = 0;
+            tx.us0 = 0, tx.us1 = tx_usr_next(z);
+            tx.uwrap = 1;                               /* (from where the old one was: no click) */
+        }
+        for (i = 0; i < n; i++) {
+            int32_t v;
+            tx.ufrac += z->rate;                        /* (its own rate: Q16 of 44.1 kHz) */
+            while (tx.ufrac >= 65536u) {
+                tx.ufrac -= 65536u;
+                tx.us0 = tx.us1;
+                tx.us1 = tx_usr_next(z);
+            }
+            v = (tx.us0 + (((tx.us1 - tx.us0) * (int32_t)(tx.ufrac >> 1)) >> 15)) >> 1;
+            if (tx.uwrap) {                             /* (2.6) round again: from the value it was at */
+                tx.uwrap = 0;
+                tx.uoff = tx.ulast - v;
+            }
+            tx.uoff -= (tx.uoff >> 6) + (tx.uoff > 0) - (tx.uoff < 0);   /* (~1.5 ms) */
+            l[i] = r[i] = tx.ulast = v + tx.uoff;
+        }
+        return;
+    }
+    switch (src) {
+    case TX_VINYL:                                      /* a: rumble, b: crackle, c: its decay, d: hiss tilt */
+        for (i = 0; i < n; i++) {
+            uint32_t z = noise32(&tx.rnd);
+            int32_t w = (int32_t)(z >> 16) - 32768, h;
+            tx.a[0] += (w >> 5) - (tx.a[0] >> 7);       /* rumble: integrated, leaky */
+            if ((z & 0xFFFFu) < 60u) {                  /* crackle, ~40 a second, anywhere left to right */
+                int32_t amp = 6000 + (int32_t)((z >> 8) & 0x3FFFu) + ((z & 1u) ? 0 : 12000 * ((z & 0x30u) == 0u));
+                int32_t pan = (int32_t)((z >> 20) & 0xFFu);
+                amp = (z & 0x100u) ? -amp : amp;
+                tx.b[0] = (amp * (256 - pan)) >> 8;
+                tx.b[1] = (amp * pan) >> 8;
+            }
+            for (k = 0; k < 2u; k++) {
+                h = (k ? (int32_t)(noise32(&tx.rnd) >> 16) - 32768 : w);
+                tx.d[k] += (h - tx.d[k]) >> 2;          /* the hiss: dark, low (the crackle on top) */
+                (k ? r : l)[i] = (tx.d[k] >> 4) + (tx.a[0] >> 2) + tx.b[k];
+                tx.b[k] -= tx.b[k] >> 2;                /* (a click: a few samples) */
+            }
+        }
+        break;
+    case TX_TAPE:                                       /* t0: the level drifting (Q8), t2: its next target */
+        if (!(tx.t1++ & 31))
+            tx.t2 = (24 << 8) + (int32_t)((noise32(&tx.rnd) >> 20) & 0x7FFu) * 4;
+        tx.t0 += (tx.t2 - tx.t0) >> 6;
+        for (i = 0; i < n; i++)
+            for (k = 0; k < 2u; k++) {
+                int32_t w = tx_n16();
+                tx.a[k] += (w - tx.a[k]) >> 2;          /* tilted dark: mostly the low-passed part */
+                (k ? r : l)[i] = (((tx.a[k] >> 1) + (w >> 3)) * (tx.t0 >> 8)) >> 5;
+            }
+        break;
+    case TX_RAIN:                                       /* a: the bed's low-pass, b: a droplet's level, c: its noise */
+        for (i = 0; i < n; i++)
+            for (k = 0; k < 2u; k++) {
+                uint32_t z = noise32(&tx.rnd);
+                int32_t w = (int32_t)(z >> 16) - 32768;
+                tx.a[k] += (w - tx.a[k]) >> 4;          /* the bed: ~450 Hz */
+                if ((z & 0xFFFFu) < 420u)               /* a droplet: ~280 a second a side */
+                    tx.b[k] = 4000 + (int32_t)((z >> 4) & 0x3FFFu);
+                tx.c[k] += (w - tx.c[k]) >> 1;
+                (k ? r : l)[i] = (tx.a[k] >> 1) + (((w - tx.c[k]) * tx.b[k]) >> 14);
+                tx.b[k] -= tx.b[k] >> 5;
+            }
+        break;
+    case TX_WIND: {                                     /* t0, t1: the cutoffs wandering (Q8 index), t2: their targets */
+        if (!(noise32(&tx.rnd) & 31u))
+            tx.t2 = (int32_t)(noise32(&tx.rnd) & 0xFFFFu);   /* new targets now and then: 34 .. 78 */
+        tx.t0 += (((34 << 8) + (tx.t2 & 0xFF) * 44) - tx.t0) >> 7;
+        tx.t1 += (((34 << 8) + (tx.t2 >> 8) * 44) - tx.t1) >> 7;
+        tsvf_coef(&tx.wc[0], tx.t0, 95);
+        tsvf_coef(&tx.wc[1], tx.t1, 95);
+        for (i = 0; i < n; i++)
+            for (k = 0; k < 2u; k++) {
+                int32_t y = tsvf_lp(&tx.wc[k], tx_n16() >> 2, &tx.wz[k][0], &tx.wz[k][1]);
+                (k ? r : l)[i] = clamp(y, -32767, 32767);
+            }
+        break;
+    }
+    case TX_RADIO:                                      /* a, b: the band's two low-passes, t0: the burst level (Q8),
+                                                         * t1: samples left of the burst, c: the held sample */
+        if ((tx.t1 -= (int32_t)n) <= 0) {
+            uint32_t z = noise32(&tx.rnd);
+            tx.t1 = 1500 + (int32_t)((z >> 8) & 0x3FFFu);   /* 35 .. 400 ms */
+            tx.t2 = (z & 3u) == 0u ? 40 << 8 : (110 + (int32_t)((z >> 24) & 0x7Fu)) << 8;   /* (a gap now and then) */
+        }
+        tx.t0 += (tx.t2 - tx.t0) >> 2;
+        for (i = 0; i < n; i++) {
+            int32_t w = tx_n16(), y;
+            if (!(i & 3u))
+                tx.c[0] = w;                            /* coarse: held four samples */
+            tx.a[0] += (tx.c[0] - tx.a[0]) >> 1;        /* < ~3 kHz */
+            tx.b[0] += (tx.a[0] - tx.b[0]) >> 4;        /* the lows taken out: > ~500 Hz */
+            y = (((tx.a[0] - tx.b[0]) >> 1) * (tx.t0 >> 8)) >> 6;
+            l[i] = y;
+            r[i] = y - (y >> 2);
+        }
+        break;
+    case TX_ROOM:                                       /* a: the rumble, b: its low-pass, c: air */
+        for (i = 0; i < n; i++)
+            for (k = 0; k < 2u; k++) {
+                int32_t w = tx_n16();
+                tx.a[k] += (w >> 4) - (tx.a[k] >> 8);
+                tx.b[k] += (tx.a[k] - tx.b[k]) >> 5;
+                (k ? r : l)[i] = (tx.b[k] >> 1) + (w >> 6);
+            }
+        break;
+    default:
+        for (i = 0; i < n; i++)
+            l[i] = r[i] = 0;
+        break;
+    }
+}
+/* TONE: below 0 a one-pole low-pass closing to ~220 Hz, above 0 a high-pass opening to ~3 kHz (the low-pass taken
+ * out), 0 open (the high-pass at ~3 Hz). Both always run: no jump crossing 0 */
+static void tx_tone(int32_t *x, uint32_t n, int32_t tone, int32_t *zl, int32_t *zh)
+{
+    int32_t u = 64 + (tone < 0 ? tone : 0), v = tone > 0 ? tone : 0;
+    int32_t al = clamp(1024 + u * u * 31 / 4, 0, 32767), ah = 16 + v * v * 7 / 2;
+    uint32_t i;
+    for (i = 0; i < n; i++) {
+        *zl += ((x[i] - *zl) >> 2) * al >> 13;          /* (>> 2 .. >> 13: no overflow at +-260000) */
+        *zh += ((*zl - *zh) >> 2) * ah >> 13;
+        x[i] = *zl - *zh;
+    }
+}
+static __attribute__((noinline)) void texture_mix(int32_t *l, int32_t *r, uint32_t n)   /* (out of the ISR: OFF costs a call a block) */
+{
+    static int32_t tl[CTL], tr[CTL];
+    static const uint8_t BARS[5] = {1, 2, 4, 8, 16};
+    uint32_t src = (uint32_t)clamp(song.g[G_TXSRC], 0, TX_N - 1), i, bar;
+    /* the sources to about 8000 rms (VINYL ~5000: its crackle peaks), Q8; the user slots as they are (/ 2) */
+    static const int16_t TX_SCALE[TX_USR1 + 1] = {0, 800, 301, 693, 1918, 149, 343, 256};
+    int32_t lvl = clamp(song.g[G_TXLVL], 0, 127), on, g0, g1, mv, depth, u, lfo, k0, k1, sc;
+    if (song.playing && !tx.play)
+        tx.ph = 0;                                      /* MOVE from the transport's start */
+    tx.play = (uint8_t)song.playing;
+    on = src && src == tx.src && (song.playing || song.g[G_TXWHEN]) && lvl;
+    if (!tx.g && !on) {                                 /* silent: nothing runs (and a new source starts from rest) */
+        if (src != tx.src)
+            texture_reset(src);
+        return;
+    }
+    if (n > CTL)
+        return;
+    g0 = tx.g;                                          /* fades over ~0.1 s (238 a block), as DUST's bed */
+    g1 = tx.g = clamp(tx.g + (on ? 238 : -238), 0, 32767);
+    bar = (uint32_t)FS * 240u / (uint32_t)clamp(song.g[G_BPM], 20, 300);   /* a bar of 4/4, samples */
+    tx.ph += (uint32_t)((0xFFFFFFFFu / (bar * BARS[clamp(song.g[G_TXRATE], 0, 4)])) * n);
+    lfo = sine_i(tx.ph - 0x40000000u);                  /* (from its top: a start at full) */
+    depth = clamp(song.g[G_TXMOVE], 0, 127) * 258;
+    u = mulq15(depth, (32767 - lfo) >> 1);              /* 0 .. depth, the dip */
+    mv = 32767 - mulq15(u, 21000);                      /* the level breathing: down to ~36 % */
+    k0 = 32767 - mulq15(u, 28000);                      /* the brightness: a one-pole closing */
+    texture_gen(tx.src, tl, tr, n);
+    sc = TX_SCALE[tx.src < TX_USR1 ? tx.src : TX_USR1];
+    for (i = 0; i < n; i++) {                           /* each source to its level, MOVE's colour (Q13: no overflow */
+        tx.lpm[0] += ((((tl[i] * sc) >> 8) - tx.lpm[0]) >> 2) * (k0 >> 2) >> 11;   /* up to +-260000) */
+        tx.lpm[1] += ((((tr[i] * sc) >> 8) - tx.lpm[1]) >> 2) * (k0 >> 2) >> 11;
+        tl[i] = tx.lpm[0], tr[i] = tx.lpm[1];
+    }
+    tx_tone(tl, n, clamp(song.g[G_TXTONE], -64, 63), &tx.zl[0], &tx.zh[0]);
+    tx_tone(tr, n, clamp(song.g[G_TXTONE], -64, 63), &tx.zl[1], &tx.zh[1]);
+    k1 = mulq15(lvl * lvl * 2, mv);                     /* LEVEL^2 (x 2: Q15 of 4096 at 127 .. ) x MOVE */
+    for (i = 0; i < n; i++) {
+        int32_t g = g0 + (((g1 - g0) * (int32_t)i) / (int32_t)CTL), gk = mulq15(g, k1);
+        l[i] += (tl[i] * (gk >> 4)) >> 11;              /* x LEVEL^2 / 16384: (x * gk / 32768) at full */
+        r[i] += (tr[i] * (gk >> 4)) >> 11;
+    }
+    if (!g1 && src != tx.src)
+        texture_reset(src);                             /* faded out: the new source from rest */
 }
 
 static void mix_block(int32_t *out, uint32_t n)
@@ -931,6 +1376,7 @@ static void mix_block(int32_t *out, uint32_t n)
     perf = perf_begin(n);                               /* the FX hold layer at work (perform.c) */
     for (i = 0; i < NPART; i++)
         mix_part(&trk[i], n);
+    texture_mix(mix_l, mix_r, n);                       /* TEXTURE: the bed, dry */
     if (perf)
         perf_pre(mix_l, mix_r, send_d, send_r, n);
     fx_buses(send_c, send_d, send_r, wet, n);
@@ -948,10 +1394,12 @@ static void mix_block(int32_t *out, uint32_t n)
         return;
     }
     for (i = 0; i < n; i++) {
-        int32_t l = ((mix_l[i] >> 2) * mg) >> 10;
-        int32_t r = ((mix_r[i] >> 2) * mg) >> 10;
-        master_out(&l, &r);
-        out[2u * i] = l;
-        out[2u * i + 1u] = r;
+        mix_l[i] = ((mix_l[i] >> 2) * mg) >> 10;
+        mix_r[i] = ((mix_r[i] >> 2) * mg) >> 10;
+    }
+    master_block(mix_l, mix_r, n);
+    for (i = 0; i < n; i++) {
+        out[2u * i] = mix_l[i];
+        out[2u * i + 1u] = mix_r[i];
     }
 }

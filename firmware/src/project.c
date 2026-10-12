@@ -108,6 +108,9 @@
 #define PROJ_MAGIC_V1 0x46554E31u              /* "FUN1": one instrument; loads into track 1 */
 #define PROJ_NP_V2 53u                         /* P_COUNT of formats 1 and 2 (P_E0 was 45) */
 #define PROJ_NG_V2 27u                         /* G_COUNT of formats 1 and 2 */
+#define PROJ_NG 27u                            /* the globals a project holds (FUN7 on); TEXTURE's past them
+                                                * ride in inert slots (proj_tx_put) */
+_Static_assert(G_TXSRC == PROJ_NG && G_COUNT == G_TXWHEN + 1u, "a project's globals, then TEXTURE's");
 #define PROJ_NP_V3 57u                         /* P_COUNT of format 3 (P_E0 was 49) */
 #define PROJ_NP_V4 69u                         /* P_COUNT of format 4 (P_E0 61) */
 #define PROJ_PHYS 2u                           /* project_t.phys: PHYS without DUST and DRUM (see the top) */
@@ -119,7 +122,7 @@ typedef struct {                               /* one track */
 } proj_trk_t;
 typedef struct {
     uint32_t magic, size;
-    int16_t g[G_COUNT];
+    int16_t g[PROJ_NG];
     uint8_t sel;                               /* the selected track */
     uint8_t parts;                             /* NPART; 0: track 4 is the old GM drum part (see the top) */
     uint8_t phys;                              /* PROJ_PHYS: PHYS MODEL values as today; 1: MODEL 4 was DRUM;
@@ -137,12 +140,12 @@ typedef struct { uint8_t note[4], n, time, flags, vel, hit, acc; } step10_t;
 typedef struct { int16_t p[69]; uint8_t engine, preset; step10_t step[NSTEP]; uint8_t lane[NLANE][5]; } proj_trk_v5_t;
 typedef struct {                               /* format 5, before the song chain */
     uint32_t magic, size;
-    int16_t g[G_COUNT];
+    int16_t g[PROJ_NG];
     uint8_t sel, parts, phys, rsv;
     proj_trk_v5_t t[NTRK];
     uint32_t sum;
 } project_v5_t;
-typedef struct { uint32_t magic, size; int16_t g[G_COUNT]; uint8_t sel, parts, phys, rsv;
+typedef struct { uint32_t magic, size; int16_t g[PROJ_NG]; uint8_t sel, parts, phys, rsv;
     proj_trk_v5_t t[NTRK]; chain_v9_t chain; uint32_t sum; } project_v6_t;
 _Static_assert(sizeof(project_v5_t) == 3352u && sizeof(project_v6_t) == 3388u, "frozen formats 5 / 6 sizes");
 /* Serialized FUN7 keeps the retained cache's exact extent. Params are biased
@@ -160,7 +163,7 @@ _Static_assert(sizeof(project_v5_t) == 3352u && sizeof(project_v6_t) == 3388u, "
 #define PROJ_NAME_OFF (PROJ_STORE_SIZE - 4u - PROJ_NAME_LEN)
 #define PROJ_FM6_OFF (PROJ_NAME_OFF - NTRK * FM6_PACKED)
 typedef union { uint32_t align; uint8_t raw[PROJ_STORE_SIZE]; } project_store_t;
-_Static_assert(G_COUNT == 27u, "FUN7 globals retain original IDs");
+_Static_assert(PROJ_NG == 27u, "FUN7 globals retain original IDs");
 _Static_assert(sizeof(project_store_t) == 3840u && PROJ_STORE_V7 == sizeof(project_v6_t), "FUN10 / FUN7 sizes");
 typedef struct {                               /* a track of format 4, read only */
     int16_t p[PROJ_NP_V4];
@@ -169,7 +172,7 @@ typedef struct {                               /* a track of format 4, read only
 } proj_trk_v4_t;
 typedef struct {                               /* format 4 (1.0 development builds), read only */
     uint32_t magic, size;
-    int16_t g[G_COUNT];
+    int16_t g[PROJ_NG];
     uint8_t sel, parts, phys, rsv;
     proj_trk_v4_t t[NTRK];
     uint32_t sum;
@@ -181,7 +184,7 @@ typedef struct {                               /* a track of format 3, read only
 } proj_trk_v3_t;
 typedef struct {                               /* format 3 (0.9 .. 1.0), read only */
     uint32_t magic, size;
-    int16_t g[G_COUNT];
+    int16_t g[PROJ_NG];
     uint8_t sel, parts, rsv[2];
     proj_trk_v3_t t[NTRK];
     uint32_t sum;
@@ -227,11 +230,43 @@ static int proj_ok(const project_t *q) { return q->magic == PROJ_MAGIC && q->siz
  * set it: ROOM, the only reverb they knew */
 static void proj_rtype_room(int16_t *g) { g[G_RTYPE] = 0; }
 
+/* TEXTURE in a project: in the slots of globals no project applies, 0 in every file before it (G_INFO, G_SYNC:
+ * 0..0; G_ENGGO: unused). g[G_INFO]: TX_THERE | SRC | WHEN << 4 | RATE << 5, g[G_ENGGO]: LEVEL | (TONE + 64) << 7,
+ * g[G_SYNC]: MOVE. Without TX_THERE (a project before it): the defaults, OFF */
+#define TX_THERE 0x4000
+static void proj_tx_put(project_t *p)
+{
+    p->g[G_INFO] = (int16_t)(TX_THERE | (song.g[G_TXSRC] & 15) | (song.g[G_TXWHEN] & 1) << 4 | (song.g[G_TXRATE] & 7) << 5);
+    p->g[G_ENGGO] = (int16_t)((song.g[G_TXLVL] & 127) | ((song.g[G_TXTONE] + 64) & 127) << 7);
+    p->g[G_SYNC] = song.g[G_TXMOVE];
+}
+static void proj_tx_get(const project_t *p)
+{
+    int32_t v[G_COUNT - PROJ_NG];
+    uint32_t i, a = (uint16_t)p->g[G_INFO], b = (uint16_t)p->g[G_ENGGO];
+
+    /* (an older project: the defaults) */
+    for (i = 0; i < G_COUNT - PROJ_NG; i++) {
+        v[i] = GP[PROJ_NG + i].def;
+    }
+    if (a & TX_THERE) {
+        v[G_TXSRC - PROJ_NG] = (int32_t)(a & 15u);
+        v[G_TXWHEN - PROJ_NG] = (int32_t)((a >> 4) & 1u);
+        v[G_TXRATE - PROJ_NG] = (int32_t)((a >> 5) & 7u);
+        v[G_TXLVL - PROJ_NG] = (int32_t)(b & 127u);
+        v[G_TXTONE - PROJ_NG] = (int32_t)((b >> 7) & 127u) - 64;
+        v[G_TXMOVE - PROJ_NG] = p->g[G_SYNC];
+    }
+    for (i = PROJ_NG; i < G_COUNT; i++) {
+        song.g[i] = (int16_t)clamp(v[i - PROJ_NG], GP[i].min, GP[i].max);
+    }
+}
+
 /* the globals of formats 1 and 2 (G_* unchanged since; any added later: their defaults) */
 static void proj_g_from_v2(int16_t *g, const int16_t *g2)
 {
     uint32_t i;
-    for (i = 0; i < G_COUNT; i++)
+    for (i = 0; i < PROJ_NG; i++)
         g[i] = i < PROJ_NG_V2 ? g2[i] : GP[i].def;
     proj_rtype_room(g);
 }
@@ -883,8 +918,9 @@ static void project_capture(project_t *p)
     memset(p, 0, sizeof *p);
     p->magic = PROJ_MAGIC;
     p->size = sizeof *p;
-    for (i = 0; i < G_COUNT; i++)
+    for (i = 0; i < PROJ_NG; i++)
         p->g[i] = song.g[i];
+    proj_tx_put(p);
     p->sel = song.sel;
     p->parts = NPART;
     p->phys = PROJ_PHYS;
@@ -1051,9 +1087,10 @@ static int project_restore_runtime(const project_t *input)
     memset(motion_active, 0, sizeof motion_active);
     motion_base_valid = 0;
     ui.song_row = 0;
-    for (i = 0; i < G_COUNT; i++)
-        if (i != G_SLOT && i != G_LOAD && i != G_SAVE)
+    for (i = 0; i < PROJ_NG; i++)
+        if (i != G_SLOT && i != G_LOAD && i != G_SAVE && i != G_ENGGO)
             song.g[i] = (int16_t)clamp(p->g[i], GP[i].min, GP[i].max);
+    proj_tx_get(p);
     for (k = 0; k < NTRK; k++) {
         track_t *t = &trk[k];
         const proj_trk_t *s = &p->t[k];

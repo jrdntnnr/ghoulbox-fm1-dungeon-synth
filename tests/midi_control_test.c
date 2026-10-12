@@ -287,11 +287,11 @@ static int route_test(void)
 static uint32_t out_last(void) { return mo_w != mo_r ? midi_out_q[(mo_w - 1u) % MQ] : 0u; }
 static int route_block_test(void)
 {
-    static const char *const NAME[5] = {"CH1-4", "SEL", "CH5-8", "CH9-12", "CH13-16"};
+    static const char *const NAME[6] = {"CH1-4", "SEL", "CH5-8", "CH9-12", "CH13-16", "TRACKS"};
     int bad = 0, ok = 1; uint32_t r, ch, i;
-    ok = GP[G_ROUTE].max == 4 && GP[G_ROUTE].def == 0;
-    for (r = 0; r < 5u; r++) ok &= str_eq(GP[G_ROUTE].names[r], NAME[r]);
-    bad += check("ROUT: CH1-4 SEL (stored 0 1, as before), CH5-8 CH9-12 CH13-16 appended", ok);
+    ok = GP[G_ROUTE].max == 5 && GP[G_ROUTE].def == 0;
+    for (r = 0; r < 6u; r++) ok &= str_eq(GP[G_ROUTE].names[r], NAME[r]);
+    bad += check("ROUT: CH1-4 SEL (stored 0 1, as before), CH5-8 CH9-12 CH13-16, TRACKS appended", ok);
     for (r = 2; r <= 4u; r++) {
         uint32_t b = (r - 1u) * 4u;
         midi_test_reset(); song.sel = 2; song.g[G_ROUTE] = (int16_t)r;
@@ -761,9 +761,61 @@ static int pc_test(void)
     bad += check("  MIDI LEARN waiting: a PC is not taken for a CC, it loads", ok);
     return bad;
 }
+/* ROUT TRACKS (after SLOOP 2.6): each track on a channel of its own (MENU > MIDI > T n CH), in and out; the channels
+ * no track has play the selected track (OTHER SEL) or nothing (OTHER OFF); a change of a track's channel lets go of
+ * the old one's notes; the menu never gives two tracks one channel */
+static int route_tracks_test(void)
+{
+    int bad = 0, ok;
+    uint32_t i;
+    midi_test_reset(); song.sel = 2; song.g[G_ROUTE] = ROUT_TRACKS;
+    trk[3].eng_req = trk[3].engine = 0u;
+    trk[2].p[P_VOICE] = V_POLY; trk[2].p[P_SUS] = 127;  /* (three notes held at once on track 3) */
+    menu_put(MI_T1CH, 9); menu_put(MI_T2CH, MIDI_CH_NONE); menu_put(MI_OTHER, 0);
+    events_block(CTL);
+    queued(0x99, 60, 100, 1);                           /* channel 10: track 1 */
+    queued(0x92, 62, 100, 1);                           /* channel 3: track 3's default */
+    queued(0x93, 64, 100, 2);                           /* channel 4: track 4's default */
+    queued(0x90, 65, 100, 1);                           /* channel 1: no track's (T1 is on 10): OTHER SEL, track 3 */
+    queued(0x91, 67, 100, 1);                           /* channel 2: T2 OFF, no track's: OTHER SEL, track 3 */
+    ok = gate_note(&trk[0], 60) && gate_note(&trk[2], 62) && gate_note(&trk[3], 64) && gate_note(&trk[2], 65) &&
+         gate_note(&trk[2], 67) && !gate_note(&trk[1], 67) && !gate_note(&trk[0], 65);
+    bad += check("TRACKS: T1 on channel 10, T3 and T4 on their own 3 and 4; channels 1 and 2 (no track's) play SEL", ok);
+    menu_put(MI_OTHER, 1); events_block(CTL);
+    ok = !gate_note(&trk[2], 65) && !gate_note(&trk[2], 67) && gate_note(&trk[2], 62) && gate_note(&trk[0], 60);
+    queued(0x90, 69, 100, 1); queued(0x9F, 70, 100, 2);
+    ok &= !gate_note(&trk[2], 69) && !gate_note(&trk[2], 70);
+    bad += check("TRACKS, OTHER OFF: the others' notes let go, new ones on channels 1 and 16 play nothing; 10 and 3 kept", ok);
+    menu_put(MI_T1CH, 4); events_block(CTL);
+    ok = !gate_note(&trk[0], 60) && !midi_owners[0];
+    queued(0x94, 72, 100, 1);
+    ok &= gate_note(&trk[0], 72);
+    bad += check("TRACKS: T1 moved 10 -> 5 lets go of channel 10's notes; channel 5 plays it", ok);
+    ok = menu_step(MI_T3CH, 1) == 5u && menu_step(MI_T3CH, -1) == 1u;   /* (T3 on 3: 4 T4's, 5 T1's, so 6; 2 free) */
+    bad += check("TRACKS: the menu skips the channels other tracks have", ok);
+    /* MIDI out: the keys on the selected track's channel; a track with OFF sends nothing */
+    usb.config = 1;
+    song.sel = 0; mo_r = mo_w; events_block(CTL);
+    fm1_in.notes = 1u << 7; events_block(CTL);
+    ok = ((out_last() >> 8) & 0xFFu) == 0x94u;
+    fm1_in.notes = 0; events_block(CTL);
+    ok &= ((out_last() >> 8) & 0xFFu) == 0x84u;
+    song.sel = 1; mo_r = mo_w; events_block(CTL);
+    fm1_in.notes = 1u << 7; events_block(CTL);
+    ok &= mo_w == mo_r;
+    fm1_in.notes = 0; events_block(CTL);
+    usb.config = 0; mo_r = mo_w;
+    bad += check("TRACKS, MIDI out: track 1's keys send on channel 5; track 2's (OFF) send nothing", ok);
+    for (i = 0; i < NTRK; i++) {
+        menu_put(MI_T1CH + i, i);
+    }
+    menu_put(MI_OTHER, 0);
+    song.g[G_ROUTE] = 0; song.sel = 0; events_block(CTL);
+    return bad;
+}
 int main(void)
 {
     int bad = controls_test() + sustain_test() + ownership_test() + clock_test(1) + clock_test(2) + clock_arp_and_boundaries() +
-              arp_ext_stop_test() + usb_burst_test() + route_test() + route_block_test() + cc_map_test() + learn_test() + pc_test();
+              arp_ext_stop_test() + usb_burst_test() + route_test() + route_block_test() + route_tracks_test() + cc_map_test() + learn_test() + pc_test();
     printf("%s\n", bad ? "MIDI CONTROL/CLOCK TEST FAILED" : "MIDI control/clock integration tests passed"); return bad != 0;
 }

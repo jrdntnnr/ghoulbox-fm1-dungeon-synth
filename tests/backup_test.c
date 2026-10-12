@@ -309,7 +309,7 @@ int main(void)
     memset(&v6, 0, sizeof v6);                           /* FUN6: 69 parameters, steps out of range */
     v6.magic = PROJ_MAGIC_V6;
     v6.size = sizeof v6;
-    for (uint32_t i = 0; i < G_COUNT; i++)
+    for (uint32_t i = 0; i < PROJ_NG; i++)
         v6.g[i] = GP[i].def;
     for (uint32_t i = 0; i < NTRK; i++)
         v6.t[i].engine = trk[i].engine;

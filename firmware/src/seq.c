@@ -35,16 +35,41 @@ static volatile uint8_t midi_hint;       /* MIDI IN played track n - 1, which is
 
 static uint32_t trk_index(const track_t *t) { return (uint32_t)(t - trk); }
 
+/* ROUT TRACKS (after SLOOP 2.6, isod89): each track on a channel of its own, MENU > MIDI > T1 CH .. T4 CH (settings of
+ * the FM-1, not of a project: menu_items.c), in and out. midi_tch[i]: 0 its default (channel i + 1), 1..16 that channel,
+ * MIDI_TCH_OFF none. The channels no track has: OTHER, the selected track (SEL) or nothing (OFF) */
+#define ROUT_TRACKS 5
+#define MIDI_TCH_OFF 17u
+#define MIDI_CH_NONE 16u                    /* trk_midi_ch: no channel (the track's T n CH is OFF) */
+enum { MIDI_OTHER_SEL, MIDI_OTHER_OFF };
+static uint8_t midi_tch[NTRK];
+static uint8_t midi_other;
+static uint32_t midi_tch_of(uint32_t i)    /* track i's channel with ROUT TRACKS, 0..15, or MIDI_CH_NONE */
+{
+    uint32_t v = midi_tch[i % NTRK];
+    if (!v) {
+        return i % NTRK;
+    }
+    return v < MIDI_TCH_OFF ? v - 1u : MIDI_CH_NONE;
+}
+
 /* MENU > MIDI > MIDI IN (G_ROUTE, up to 1.1.5 GLO > SYSTEM ROUT): the first channel (0..15) of the block of four that
  * plays tracks 1..4, -1 with SEL. Stored
- * 0 CH1-4, 1 SEL, then (1.2, Discussion #143) 2 CH5-8, 3 CH9-12, 4 CH13-16 */
+ * 0 CH1-4, 1 SEL, then (1.2, Discussion #143) 2 CH5-8, 3 CH9-12, 4 CH13-16, then 5 TRACKS (-1: midi_trk_of) */
 static int32_t midi_base(void)
 {
     uint32_t r = (uint32_t)song.g[G_ROUTE];
-    return r == 1u ? -1 : r ? (int32_t)(r - 1u) * 4 : 0;
+    return r == 1u || r == ROUT_TRACKS ? -1 : r ? (int32_t)(r - 1u) * 4 : 0;
 }
-/* MIDI channel 0..15 of track i (keys -> MIDI out): its channel in ROUT's block (SEL, CH1-4: 1..4) */
-static uint32_t trk_midi_ch(uint32_t i) { return (midi_base() > 0 ? (uint32_t)midi_base() : 0u) + i % NTRK; }
+/* MIDI channel of track i (keys -> MIDI out): its channel in ROUT's block (SEL, CH1-4: 1..4), with TRACKS its own
+ * (MIDI_CH_NONE: not sent) */
+static uint32_t trk_midi_ch(uint32_t i)
+{
+    if (song.g[G_ROUTE] == ROUT_TRACKS) {
+        return midi_tch_of(i);
+    }
+    return (midi_base() > 0 ? (uint32_t)midi_base() : 0u) + i % NTRK;
+}
 
 static int drum_track(const track_t *t) { return ENGINES[eng_idx(t->eng_req)] == &ENG_DRUM; }
 
@@ -699,7 +724,9 @@ static void key_on(uint32_t k, track_t *t)
         if (midi_local_held(t, x))
             continue;
         input_on(t, x, 100);
-        midi_out_event(0x09u | (0x90u | mc) << 8 | x << 16 | 100u << 24);
+        if (mc < MIDI_CH_NONE) {
+            midi_out_event(0x09u | (0x90u | mc) << 8 | x << 16 | 100u << 24);
+        }
     }
     in_key = 0;
     kb_chn[k] = (uint8_t)n;
@@ -716,7 +743,9 @@ static void key_off(uint32_t k, track_t *t)
         if (midi_local_held(t, x))
             continue;
         input_off(t, x);
-        midi_out_event(0x08u | (0x80u | mc) << 8 | x << 16);
+        if (mc < MIDI_CH_NONE) {
+            midi_out_event(0x08u | (0x80u | mc) << 8 | x << 16);
+        }
     }
 }
 
@@ -1108,13 +1137,44 @@ static void seq_tick(track_t *t, uint32_t n)
 /* MIDI in: the track a channel plays (0..15): G_ROUTE CH1-4 (0) channels 1..4 their parts (5..16 never get
  * here: midi_event drops them), SEL (1) every channel the selected track; CH5-8 .. CH13-16 (2..4) as CH1-4 on
  * their four channels (midi_base) */
-static uint8_t midi_route;                 /* the G_ROUTE events_block last saw (a change to a block: midi_route_block) */
-static int midi_in_block(uint32_t ch)      /* ch is one of ROUT's block (not with SEL) */
+static uint32_t midi_route;                /* the routing events_block last saw (a change to a block: midi_route_block) */
+static int32_t midi_trk_of(uint32_t ch)    /* the track channel ch plays (ROUT's block, TRACKS' channels), -1 none */
 {
     int32_t b = midi_base();
-    return b >= 0 && ch - (uint32_t)b < NPART;
+    uint32_t i;
+    if (song.g[G_ROUTE] == ROUT_TRACKS) {
+        for (i = 0; i < NPART; i++) {
+            if (midi_tch_of(i) == ch) {
+                return (int32_t)i;
+            }
+        }
+        return -1;
+    }
+    return b >= 0 && ch - (uint32_t)b < NPART ? (int32_t)(ch - (uint32_t)b) : -1;
 }
-static track_t *midi_track(uint32_t ch) { return midi_in_block(ch) ? &trk[ch - (uint32_t)midi_base()] : TSEL; }
+static uint32_t midi_route_sig(void)       /* ROUT and, with TRACKS, the tracks' channels and OTHER */
+{
+    uint32_t i, h = (uint32_t)song.g[G_ROUTE] & 255u;
+    if (h == ROUT_TRACKS) {
+        for (i = 0; i < NTRK; i++) {
+            h = h * 31u + midi_tch[i];
+        }
+        h = h * 31u + midi_other + 1u;
+    }
+    return h;
+}
+static int midi_in_block(uint32_t ch) { return midi_trk_of(ch) >= 0; }   /* ch plays a track of its own (not SEL) */
+/* ch is heard at all: SEL every channel; a block its four; TRACKS the tracks' channels, the others with OTHER SEL */
+static int midi_heard(uint32_t ch)
+{
+    return song.g[G_ROUTE] == 1 || midi_in_block(ch) ||
+           (song.g[G_ROUTE] == ROUT_TRACKS && midi_other == MIDI_OTHER_SEL);
+}
+static track_t *midi_track(uint32_t ch)
+{
+    int32_t k = midi_trk_of(ch);
+    return k >= 0 ? &trk[k] : TSEL;
+}
 
 #include "midi_control.c"
 #include "midi_clock.c"
@@ -1224,9 +1284,10 @@ static void events_block(uint32_t n)
         }
         transport_req = 0;
     }
-    if (midi_route != (uint8_t)song.g[G_ROUTE]) {     /* ROUT changed: a block lets go of the other channels */
-        midi_route = (uint8_t)song.g[G_ROUTE];
-        if (midi_route != 1u)
+    if (midi_route != midi_route_sig()) {             /* ROUT (or TRACKS' channels) changed: a block lets go of the
+                                                       * other channels */
+        midi_route = midi_route_sig();
+        if (song.g[G_ROUTE] != 1)
             midi_route_block();
     }
     pr = panic_req;

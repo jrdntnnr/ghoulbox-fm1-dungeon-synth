@@ -1767,13 +1767,17 @@ function makeMockDevice(opt = {}) {
     D("BPM", F.BPM, 40, 240, 120), D("SWG", F.PCT, 0, 100, 0), E("CLK", ["INT", "USB", "TRS"], 0), D("TUNE", F.INT, -50, 50, 0),
     E("TIME", [...NDIV, "1/8D", "1/16D", "1/4D"], 1), D("FDBK", F.PCT, 0, 120, 60), D("COLR", F.PCT, 0, 127, 70), D("MIX", F.PCT, 0, 127, 90),
     D("SIZE", F.PCT, 0, 127, 90), D("DAMP", F.PCT, 0, 127, 60), D("CRT", F.LFOHZ, 0, 127, 40), D("CDP", F.PCT, 0, 127, 60),
-    E("MIDI", ["USB", "TRS"], 0), E("SYNC", NDASH, 0), E("ROUT", ["CH1-4", "SEL", "CH5-8", "CH9-12", "CH13-16"], 0), D("CPU", F.INT, 0, 0, 0),
+    E("MIDI", ["USB", "TRS"], 0), E("SYNC", NDASH, 0), E("ROUT", ["CH1-4", "SEL", "CH5-8", "CH9-12", "CH13-16", "TRACKS"], 0), D("CPU", F.INT, 0, 0, 0),
     D("SLOT", F.INT, 1, 4, 1), E("NAME", NDASH, 0), E("LOAD", NGO, 0), E("SAVE", NGO, 0),
     E("ENG", ["ANALOG", "-", "PHASE", "LOFI", "SAMPLE", "VOICE", "TRIO", "WHEEL",
       "GRAIN", "PHYS", "DRUM", "NOISE", "FM6", "SLICE", "GURDY"], 0), E("SET", NGO, 0),
     E("CLRSQ", NGO, 0), E("INIT", NGO, 0),
     E("TYPE", ["ROOM", "SPRING", "HALL"], 2),       /* G_RTYPE (id 24, was G_DRCH): the reverb's model (HALL: 1.2) */
     D("TAPE", F.PCT, 0, 127, 0), D("CRSH", F.PCT, 0, 127, 0),
+    /* TEXTURE (fx.c texture_*, after SLOOP 2.6): SRC LEVEL TONE MOVE RATE WHEN */
+    E("SRC", ["OFF", "VINYL", "TAPE", "RAIN", "WIND", "RADIO", "ROOM", "USR1", "USR2", "USR3", "USR4"], 0), D("LEVEL", F.PCT, 0, 127, 64),
+    D("TONE", F.INT, -64, 63, 0), D("MOVE", F.PCT, 0, 127, 40), E("RATE", ["1BAR", "2BAR", "4BAR", "8BAR", "16BAR"], 2),
+    E("WHEN", ["PLAY", "ALWAYS"], 0),
   ];
   const NONE = D("-", F.INT, 0, 0, 0);
   const RATIO = [".5", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "14", "16"];
@@ -1925,7 +1929,7 @@ function makeMockDevice(opt = {}) {
   for (const l of ["1", "b2", "2", "b3", "3", "4", "b5", "5", "b6", "6", "b7", "7"])
     TP.push({...D(l, F.INT, -63, 63, 0), unit: "ct"});
   TP.push(D("MASK LO", F.INT, 0, 63, 63), D("MASK HI", F.INT, 0, 63, 63));
-  const P_COUNT = 125, G_COUNT = 27, NSTEP = 64, P_E0 = 117, G_ENGSEL = 20, P_SLCR = 45;
+  const P_COUNT = 125, G_COUNT = 33, NSTEP = 64, P_E0 = 117, G_ENGSEL = 20, P_SLCR = 45;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const enumOrig = (d, v) => d.fmt === F.ENUM && d.names ? aliasOf(d.names, v - d.min) + d.min : v;   /* params.c enum_orig */
   /* four tracks (firmware v3), four synth parts (1.0); engine / preset / p / step below are the selected track's */
@@ -2956,10 +2960,10 @@ function selfLoad(sound = false) {
 const stepEdit = new Map(); /* index -> time of the last edit */
 
 /* parameter ids (firmware/src/core.h); used only when P_COUNT / G_COUNT match */
-const EXPECT = { pcount: 125, gcount: 27, pe0: 117 };
+const EXPECT = { pcount: 125, gcount: [27, 33], pe0: 117 };   /* (33: TEXTURE's globals) */
 /* the same layout without the chord keys (P_COUNT 89, P_E0 81), the FM operator ENVs too (69, 61) or the matrix
    (firmware 1.0: 57, 49) */
-const knownLayout = (info) => info.gcount === EXPECT.gcount &&
+const knownLayout = (info) => EXPECT.gcount.includes(info.gcount) &&
   [[125, 117], [111, 103], [104, 96], [103, 95], [99, 91], [91, 83], [89, 81], [69, 61], [57, 49]].some(([c, e]) => info.pcount === c && info.pe0 === e);
 const P = { LEVEL: 0, SLEN: 29 };
 const LAYOUT = (pe0) => [
@@ -2973,7 +2977,7 @@ const LAYOUT = (pe0) => [
     ...[0, 1, 2, 3].map((k) => [`OP${k + 1}`, 0, [61 + 5 * k, 62 + 5 * k, 63 + 5 * k, 64 + 5 * k]]),
     ["OP LVL", 0, [65, 70, 75, 80]]] }] : []),
   { t: "VOICE", pages: [["LEVEL", 0, [0]], ["VOICE", 0, [37, 38, 41, 42]], ["VOICE 2", 0, [43, 44, 39, 40]]] },
-  { t: "FX", pages: [["FX", 0, [33, 34, 35, 36]], ["SLICER", 0, [45, 46, 47, 48]], ["DLY", 1, [4, 5, 6, 7]], ["REVERB", 1, [24, 8, 9]], ["CHORUS", 1, [10, 11]]] },   /* G_RTYPE 24: ROOM / SPRING / HALL */
+  { t: "FX", pages: [["FX", 0, [33, 34, 35, 36]], ["SLICER", 0, [45, 46, 47, 48]], ["DLY", 1, [4, 5, 6, 7]], ["REVERB", 1, [24, 8, 9]], ["CHORUS", 1, [10, 11]], ["TEXTURE", 1, [27, 28, 29, 30]], ["TEXTURE 2", 1, [31, 32]]] },   /* G_RTYPE 24: ROOM / SPRING / HALL */
   { t: "SCL", pages: [["SCL", 0, [25, 26, 27, 28]], ...(pe0 >= 83 ? [["CHORD", 0, P_CHORD]] : []),
     ...(pe0 === 117 ? [["TUNE 1", 0, [103,104,105,106]], ["TUNE 2", 0, [107,108,109,110]], ["TUNE 3", 0, [111,112,113,114]]] : [])] },   /* CHRD VOIC 81, 82 */
   { t: "ARP", pages: [["ARP", 0, [17, 18, 19, 20]], ["ARP 2", 0, [21, 22, 23, 24]]] },

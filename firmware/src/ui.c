@@ -78,6 +78,10 @@ static uint32_t up_gen;                      /* bumped on every user bank change
  * engine uses, saved with the settings; 0 in older settings = SCOPE; an unknown value (a later firmware's view) reads as
  * SCOPE and is kept as saved (1.3 / 1.4 read LEVELS so) */
 #define ui_home_view (favorites.factory[15][26])
+/* MENU > MIDI > T1 CH .. T4 CH and OTHER (MIDI IN TRACKS; menu_items.c): bytes 0..4 no engine uses, saved with the
+ * settings, as seq.c's midi_tch and midi_other (0 in older settings: each track on its own channel 1..4, OTHER SEL) */
+#define ui_midi_tch (favorites.factory[15])
+#define ui_midi_other (favorites.factory[15][4])
 enum { HV_SCOPE, HV_TRACKS, HV_LEVELS, HV_COUNT };
 static int home_tracks(void) { return ui_home_view == HV_TRACKS || ui_home_view == HV_LEVELS; }
 static int home_levels(void) { return ui_home_view == HV_LEVELS; }
@@ -965,6 +969,7 @@ static void undo_swap(void)
     fm1_irq_off();                                /* the audio ISR must not see half a sound */
     if (undo.what & UNDO_SOUND) {
         uint8_t e = t->eng_req, pr = t->preset, u = t->user;
+        sound_change(t);                          /* what sounds fades out with the sound it had, no click */
         panic_req |= (uint8_t)(1u << trk_index(t));
         t->eng_req = undo.eng;
         t->preset = undo.preset;
@@ -1215,6 +1220,7 @@ static void fm4_load_preset(track_t *t, uint32_t k)
 {
     int16_t p[P_COUNT];
     uint32_t i;
+    sound_change(t);                                  /* what sounds fades out with the sound it had, no click */
     load_begin(t, UNDO_SOUND);
     panic_req |= (uint8_t)(1u << trk_index(t));
     t->user = 0;
@@ -1247,6 +1253,7 @@ static void apply_preset_to(track_t *t, uint32_t pi)
         apply_preset_to(t, 0);                        /* (core.h drum_from_perc). GHOULBOX: its STD kit, not the first */
         return;                                       /* preset browsing shows (CRYPT KIT): the sound it was */
     }
+    sound_change(t);                                  /* what sounds fades out with the sound it had, no click */
     load_begin(t, UNDO_SOUND);
     panic_req |= (uint8_t)(1u << trk_index(t));       /* MONO/POLY may change: release what sounds */
     t->user = 0;
@@ -1291,6 +1298,7 @@ static void set_engine_of(track_t *t, uint32_t ei)
         return;
     }
 #endif
+    sound_change(t);                                  /* what sounds fades out with the sound it had, no click */
     load_begin(t, UNDO_SOUND);
     fm1_irq_off();
     t->eng_req = (uint8_t)(ei % NENGINES);

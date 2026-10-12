@@ -41,7 +41,7 @@
  * effect on, the next press turns it off (perf_latched; letting the key or FX go does nothing), the macros keep
  * their values when FX is let go, FX + OCT- turns everything off (ui_layer.c), so does the menu or a dialog.
  * Chain: [REPEAT / REVERSE / TAPE / FREEZE] -> LPF -> HPF -> CRUSH -> FLANGER -> PHASER, after the master level and
- * before master_out (the limiter); THROW and the mutes act before the buses (fx.c mix_block / mix_part).
+ * before master_block (the limiter); THROW and the mutes act before the buses (fx.c mix_block / mix_part).
  * Idle (no key, no knob, no ramp left) every stage is skipped: the output is bit-identical. */
 /* the effects (their numbers are stored: the key map in the settings, ui_layer.c perf_map_put; append-only, before
  * PF_M1), then the mutes of the black keys */

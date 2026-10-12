@@ -1421,6 +1421,10 @@ static void ui_input(void)
     perf_latch_on = fx_latch & 1u;                      /* (MENU > FX LATCH; a settings load sets it too) */
     fx_map_sync();                                      /* (the FX layer's key map: ui_layer.c, a settings load too) */
     fx_usb_fixed = (ui_prefs & PREF_USB_FIXED) != 0u;   /* (MENU > USB LEVEL: fx.c, audio.c) */
+    for (k = 0; k < NTRK; k++) {                        /* (MENU > MIDI > T n CH, OTHER: seq.c; a settings load too) */
+        midi_tch[k] = ui_midi_tch[k] <= MIDI_TCH_OFF ? ui_midi_tch[k] : 0u;
+    }
+    midi_other = ui_midi_other ? MIDI_OTHER_OFF : MIDI_OTHER_SEL;
     scope_mix = (ui_prefs2 & (PREF_SCOPE_MIX >> 16)) != 0u;   /* (MENU > SCOPE: fx.c, audio.c) */
     rp_apply();                                         /* (MENU > CLICK, CLICK LEVEL, COUNT-IN: click.c, seq.c) */
     if (!ui.menu)

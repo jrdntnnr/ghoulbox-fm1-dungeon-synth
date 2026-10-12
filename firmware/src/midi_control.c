@@ -401,6 +401,9 @@ static void __attribute__((noinline)) midi_route_block(void)
             midi_expression(midi_track(ch), c);
             continue;
         }
+        if (midi_heard(ch)) {                       /* (TRACKS, OTHER SEL: the others play the selected track) */
+            continue;
+        }
         for (note = 0; note < 128u; note++)
             if (midi_notes[ch][note])
                 midi_release(ch, note);
@@ -421,7 +424,7 @@ static volatile uint8_t *const mpc_io;
  * channel aftertouch, Program Change, so they stay free for other instruments. */
 static void __attribute__((noinline)) midi_event(uint32_t st, uint32_t ch, uint32_t d1, uint32_t d2)
 {
-    if (song.g[G_ROUTE] != 1 && !midi_in_block(ch))
+    if (!midi_heard(ch))
         return;
     if (st == 0x90u || st == 0x80u)
         midi_note_event(ch, d1, st == 0x90u ? d2 : 0);

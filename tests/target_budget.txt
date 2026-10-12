@@ -12,7 +12,7 @@ wheel_render 267
 wheel_block 102
 grain_render 1731
 grain_block 139
-phys_render 61
+phys_render 400
 drum_render 86
 noise_render 259
 fm6_render 372
@@ -38,7 +38,7 @@ dv_metal_mix 16
 slicer_track 632
 slice_render 453
 slc_rev 120
-fm1_alnk0_irq 37502
+fm1_alnk0_irq 11043
 fm1_timer5_irq 33387
 click_render 30
 mod_begin 158
@@ -52,10 +52,14 @@ perf_master 31
 perf_flanger 368
 perf_phaser 448
 perf_throw 52
-rev_room 218
+rev_room 249
 rev_spring 126
 rev_hall 1995
 rev_side_mix 9
 track_insert 3
 ins_drive 277
 ins_swept 230
+mix_part_run 1548
+master_block 257
+texture_mix 48
+texture_gen 946
