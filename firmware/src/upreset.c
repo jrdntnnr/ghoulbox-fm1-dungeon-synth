@@ -465,6 +465,7 @@ static int up_load(uint32_t k)
         return 1;
     r = up_rec(k);
     up_values(r, v);
+    sound_change(t);                                    /* what sounds fades out with the sound it had, no click */
     load_begin(t, UNDO_SOUND);                          /* (ui.c: the copy for SAVE held = undo) */
     panic_req |= (uint8_t)(1u << song.sel);
 #if !FELUCCA_FM4

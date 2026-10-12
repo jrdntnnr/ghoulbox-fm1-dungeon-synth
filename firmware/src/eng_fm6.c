@@ -218,10 +218,19 @@ static void fm6_adopt(uint32_t tr)
 }
 
 /* a factory sound load put a SLOT value in (a preset, an engine change): its patch (OWN: the patch stays) */
+static uint8_t fm6_pend;                        /* bit per track: a loaded sound's patch waiting for the fade */
 static void fm6_track_loaded(const track_t *t)
 {
     uint32_t tr = (uint32_t)(t - trk);
     if (tr < NTRK && t->eng_req == ENGI_FM6) {
+        uint32_t i, any = 0;
+        for (i = 0; i < NVOICE; i++) {
+            any |= t->v[i].active;
+        }
+        if (any && ((snd_fading >> tr) & 1u)) {        /* the old sound still fading out (voice.c sound_change):  */
+            fm6_pend |= (uint8_t)(1u << tr);           /* its patch stays until then (fm6_poll); the new notes */
+            return;                                     /* wait for it (voice.c engine_block) */
+        }
         fm6_own_ok &= (uint8_t)~(1u << tr);
         if (t->p[P_E7] >= 0 && t->p[P_E7] < (int32_t)FM6_NFACTORY)
             fm6_load_slot(tr, (uint32_t)t->p[P_E7]);
@@ -250,6 +259,14 @@ static void fm6_poll(void)
     uint32_t tr, bit;
     for (tr = 0; tr < NTRK; tr++) {
         int32_t s = trk[tr].p[P_E7];
+        if ((fm6_pend >> tr) & 1u) {                    /* a loaded sound's patch, once its fade is over */
+            if (((snd_fading >> tr) & 1u) && !(trk[tr].xf_on && !trk[tr].xf)) {
+                continue;
+            }
+            fm6_pend &= (uint8_t)~(1u << tr);
+            fm6_track_loaded(&trk[tr]);
+            continue;
+        }
         if (trk[tr].eng_req != ENGI_FM6 || s == fm6_slot[tr])
             continue;
         bit = 1u << tr;

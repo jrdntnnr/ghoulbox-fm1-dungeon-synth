@@ -287,7 +287,8 @@ static sine_run_t sine_run(uint32_t eng, int16_t src, uint32_t note)
     trk_note_off(t, note);
     blocks(FS * 3u / 10u / CTL);
     r.ended = !(v && v->active);
-    for (i = 1; i < n; i++) {
+    for (i = CTL + 1u; i < n; i++) {                  /* (the first block out is the run before's, cut off by
+                                                         * voices_off: the master's look-ahead delay) */
         uint32_t d = (uint32_t)abs(x[i] - x[i - 1u]), a = (uint32_t)abs(x[i]);
         r.step = d > r.step ? d : r.step;
         if (i >= n - FS * 2u / 5u) {                       /* the last 0.4 s held */

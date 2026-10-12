@@ -101,8 +101,8 @@ static void ref_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_
             int32_t in = mulq15(rev_in[i], 2580);
             for (k = 0; k < 4u; k++) {
                 int32_t o = c[rf.comb_i[k]];
-                rf.comb_lp[k] = o + mulq15(rf.comb_lp[k] - o, 32767 - damp);
-                c[rf.comb_i[k]] = (int16_t)clamp(in + mulq15(rf.comb_lp[k], size), -32768, 32767);
+                rf.comb_lp[k] = o + mulq15z(rf.comb_lp[k] - o, 32767 - damp);   /* (toward 0: the tail dies out) */
+                c[rf.comb_i[k]] = (int16_t)clamp(in + mulq15z(rf.comb_lp[k], size), -32768, 32767);
                 if (++rf.comb_i[k] >= REV_COMB[k])
                     rf.comb_i[k] = 0;
                 a += o;
@@ -111,7 +111,7 @@ static void ref_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_
             c = ref_ap;
             for (k = 0; k < 2u; k++) {
                 int32_t o = c[rf.ap_i[k]];
-                int32_t v = a + (o >> 1);
+                int32_t v = a + ((o + (o < 0)) >> 1);
                 c[rf.ap_i[k]] = (int16_t)clamp(v, -32768, 32767);
                 a = o - a;
                 if (++rf.ap_i[k] >= REV_AP[k])
@@ -129,6 +129,7 @@ static void test_room_identical(void)
     static int32_t c[CTL], d[CTL], r[CTL], w0[CTL], w1[CTL];
     uint32_t b, i, diff = 0, nb = 30u * FS / CTL;
     host_tracks_init();
+    bus_skip = 0;                                               /* (the buses' math: none skipped) */
     song.g[G_RTYPE] = 0;                                        /* (HALL is the default since 1.2) */
     for (b = 0; b < nb; b++) {
         if (b % 700u == 0u) {                                   /* the settings move now and then */
@@ -150,6 +151,7 @@ static void test_room_identical(void)
             diff += w0[i] != w1[i];
     }
     check("ROOM: the buses bit for bit as before SPRING (30 s of noise sends, settings changing)", !diff && !fx.rtype);
+    bus_skip = 1;
 }
 
 /* ------------------------------------------------------------- SPRING --- */
@@ -324,7 +326,8 @@ static void test_spring_identical(void)
     }
     xs = x0;
     snprintf(what, sizeof what, "SPRING (and ROOM <-> SPRING) bit for bit as before HALL: 20 s of sends, hash 0x%08x", h);
-    check(what, h == 0xdd93d2f8u);
+    check(what, h == 0x5969c967u);                              /* (0xdd93d2f8 until ROOM's tail rounded toward 0:
+                                                                 * the SPRING blocks unchanged) */
     song.g[G_RTYPE] = 0;
     rev_clear();
     fx.rtype = 0;
@@ -902,7 +905,7 @@ static void demo_block(int32_t *out, uint32_t n, int comb8_on)
     for (i = 0; i < n; i++) {
         int32_t l = (((mix_l[i] + wet[i]) >> 2) * mg) >> 10;
         int32_t r = (((mix_r[i] + wet[i]) >> 2) * mg) >> 10;
-        master_out(&l, &r);
+        master_block(&l, &r, 1);
         out[2u * i] = l;
         out[2u * i + 1u] = r;
     }

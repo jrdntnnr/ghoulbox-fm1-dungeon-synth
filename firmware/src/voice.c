@@ -360,12 +360,32 @@ static void mono_remove(track_t *t, uint32_t note)
     t->nmono = (uint8_t)k;
 }
 
+static uint32_t snd_is_fading(const track_t *t) { return (snd_fading >> ((uint32_t)(t - trk) % NTRK)) & 1u; }
+
+/* a sound (factory or user preset, undo) about to load on t, before its new values (UI, IRQ off): the sound as it is
+ * kept for the fade. The voices sounding then fade out over XF_BLOCKS rendered with it, the part's DIST, INSERT and
+ * sends included (fx.c mix_part), as for an engine switch: no jump of a waveform, a filter or a drive in the middle of
+ * a note (a click). A fade under way keeps the sound it started from. After SLOOP 2.6 (isod89) */
+static void sound_change(track_t *t)
+{
+    uint32_t k = (uint32_t)(t - trk) % NTRK, i, any = 0;
+    for (i = 0; i < NVOICE; i++) {
+        any |= t->v[i].active;
+    }
+    if (!any || snd_is_fading(t)) {                     /* (nothing sounding: nothing to fade) */
+        return;
+    }
+    memcpy(snd_old[k], t->p, sizeof snd_old[k]);
+    __asm__ volatile("" ::: "memory");                  /* (the ISR reads snd_old only once the bit is set) */
+    snd_fading |= (uint8_t)(1u << k);
+}
+
 static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
 {
     uint32_t any = 0, i, mode = trk_vmode(t);
     if (t->p[P_MUTE])
         return;
-    if (t->xf_on || t->eng_req != t->engine) {          /* engine switch under way: after the fade */
+    if (t->xf_on || t->eng_req != t->engine || snd_is_fading(t)) {   /* engine / sound switch under way: after the fade */
         for (i = 0; i < t->xp_n && t->xp_note[i] != note; i++)
             ;
         if (i == t->xp_n && t->xp_n < 4u)
@@ -458,11 +478,12 @@ static void trk_all_off(track_t *t)
  * parameters (pe_old: an engine never reads another engine's values, which index its tables); only
  * then the engine switches and the notes that came during the fade start on it. A part with nothing
  * sounding switches at once. */
-#define XF_BLOCKS 4u                                    /* 4 x 32 samples: 2.9 ms */
+#define XF_BLOCKS 8u                                    /* 8 x 32 samples: 5.8 ms (SLOOP 2.6: a bass fades without a
+                                                         * thump; 2.9 ms before) */
 static void engine_block(track_t *t)
 {
     uint32_t i, any = 0;
-    if (t->xf_on || t->eng_req != t->engine) {
+    if (t->xf_on || t->eng_req != t->engine || snd_is_fading(t)) {
         if (!t->xf_on) {
             for (i = 0; i < NVOICE; i++)
                 any |= t->v[i].active;
@@ -480,9 +501,13 @@ static void engine_block(track_t *t)
             v->stage = 0;
             v->env = v->env_out = 0;
         }
+        if (t->xf_on && t->eng_req == ENGI_FM6 && ((fm6_pend >> ((uint32_t)(t - trk) % NTRK)) & 1u)) {
+            return;                                     /* FM6: the new notes wait for the new patch (fm6_poll) */
+        }
         t->engine = eng_idx(t->eng_req);
         eng_mem_claim(t);                               /* its state region, before the waiting notes */
         t->xf_on = 0;
+        snd_fading &= (uint8_t)~(1u << ((uint32_t)(t - trk) % NTRK));
         t->nmono = 0;
         t->mono_note = 0;
         {

@@ -196,7 +196,7 @@ int main(void)
     ok = proj_import(&q, &buf, (int)sizeof v2);
     bad += check("FUN2 -> FUN6: converted, valid format 5 slot", ok && proj_ok(&q) && q.magic == PROJ_MAGIC);
     ok = q.sel == 2;
-    for (i = 0; i < G_COUNT; i++)
+    for (i = 0; i < PROJ_NG; i++)
         ok &= q.g[i] == (i == G_RTYPE || i == G_TAPE || i == G_CRSH ? 0 : (int16_t)(500 + i));
     bad += check("FUN2 -> FUN6: globals (id 24, the old drum channel: ROOM; 25, 26: TAPE / CRSH off) and selected track", ok);
     ok = 1;
@@ -216,7 +216,7 @@ int main(void)
     memset(&v3, 0, sizeof v3);
     v3.magic = PROJ_MAGIC_V3;
     v3.size = sizeof v3;
-    for (i = 0; i < G_COUNT; i++)
+    for (i = 0; i < PROJ_NG; i++)
         v3.g[i] = (int16_t)(600 + i);
     v3.sel = 3;
     v3.parts = NPART;
@@ -227,7 +227,7 @@ int main(void)
     memcpy(&buf, &v3, sizeof v3);
     ok = proj_import(&q, &buf, (int)sizeof v3) && proj_ok(&q) && q.magic == PROJ_MAGIC && q.sel == 3 &&
          q.parts == NPART;
-    for (i = 0; i < G_COUNT; i++)
+    for (i = 0; i < PROJ_NG; i++)
         ok &= q.g[i] == (i == G_RTYPE || i == G_TAPE || i == G_CRSH ? 0 : (int16_t)(600 + i));   /* (a parts-4 FUN3 too) */
     for (t = 0; t < NTRK; t++)
         ok &= track_v3_ok(&q.t[t], &v3.t[t], t);

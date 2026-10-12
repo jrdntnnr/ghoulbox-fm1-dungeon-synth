@@ -73,7 +73,7 @@ static void fresh(uint32_t e, uint32_t pi)        /* the boot state (no FX tails
     for (k = 0; k < NTRK; k++)
         pf.mg[k] = 32768;
     perf_held = perf_latched = 0;
-    lim_env = LIM_T;
+    lim_reset();
     dc_l = dc_r = dce_l = dce_r = 0;
     vage = 0;
     rng_state = 0x1234567u;

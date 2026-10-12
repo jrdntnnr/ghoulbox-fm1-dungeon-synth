@@ -237,6 +237,14 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "chord keys: diatonic and fixed chords, voicings, MONO root, releases, recording, ARP, MIDI IN, kits" "$OUT/chord_test"
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/speaker_test" tests/speaker_test.c -lm
     run "SPEAKER EQ: FLAT / LOWCUT / BASS+ responses, BASS+ harmonics of the bass, the sub cut, no offset after, headroom on a full-scale kick (#180)" "$OUT/speaker_test"
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/limiter_test" tests/limiter_test.c -lm
+    run "MASTER LIMITER: look-ahead, no overshoot on a hot onset, full precision on a held bass" "$OUT/limiter_test"
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/sound_change_test" tests/sound_change_test.c -lm
+    run "SOUND CHANGE: a preset loaded over a held note fades it out with its own sound, no click" "$OUT/sound_change_test"
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/texture_test" tests/texture_test.c -lm
+    run "TEXTURE: off bit for bit, each source in level, fade, TONE, kept in a project" "$OUT/texture_test"
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/bus_idle_test" tests/bus_idle_test.c -lm
+    run "IDLE FX BUSES: skipped once quiet, chorus bit for bit, tails within a few LSB, cheaper idle" "$OUT/bus_idle_test"
     run "DSP render (ANALOG preset 0)" "$OUT/hostsim" 0 0 1 "$OUT/render.wav"
     mkdir -p build/tracks_demo
     run "TRACKS: 4-track pattern, live recording (lengths, swing), voice budget, engine switch, cost" env TRACKS=build/tracks_demo "$OUT/hostsim" 0 0 1 "$OUT/tracks.wav"

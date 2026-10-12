@@ -257,7 +257,7 @@ int main(void)
         memset(&v3, 0, sizeof v3);
         v3.magic = PROJ_MAGIC_V3;
         v3.size = sizeof v3;
-        for (i = 0; i < G_COUNT; i++)
+        for (i = 0; i < PROJ_NG; i++)
             v3.g[i] = GP[i].def;
         v3.parts = NPART;
         for (t = 0; t < NTRK; t++) {                   /* ORGAN PAD MARIMBA FUNK KEY, then E.PIANO BELL BASS BRASS */

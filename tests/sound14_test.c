@@ -80,7 +80,7 @@ static void fresh(uint32_t e, uint32_t pi)        /* the boot state (no FX tails
     for (k = 0; k < NTRK; k++)
         pf.mg[k] = 32768;
     perf_held = perf_latched = 0;
-    lim_env = LIM_T;
+    lim_reset();
     dc_l = dc_r = dce_l = dce_r = 0;                      /* (the master's DC blockers: no residue of a run before) */
     vage = 0;                                             /* the seeds: every run the same (ANALOG's noise by age) */
     rng_state = 0x1234567u;
@@ -592,15 +592,16 @@ static void test_spread_fx(void)
     blocks(FS / 4u / CTL);
     for (k = 0; k < FS / CTL; k++) {
         double s = 0;
+        int32_t gc = sl[0].gc, bit = sl[0].bit;        /* (the master's out is a block late: the look-ahead limiter) */
         blocks(1);
         for (i = 0; i < CTL; i++) {
             double d = (double)out_buf[2u * i] - out_buf[2u * i + 1u];
             s += d * d;
         }
-        if (sl[0].gc >= 32000 && !sl[0].bit) {
+        if (gc >= 32000 && !bit) {
             side_closed += s;
             closed++;
-        } else if (!sl[0].gc) {
+        } else if (!gc) {
             side_open += s;
         }
     }

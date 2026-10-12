@@ -31,6 +31,8 @@ static const uint8_t ED_MENU[][2] = {
     {MI_HOME, 23},                                     /* 1.3 (Discussions #112, #134): HOME SCOPE / TRACKS, DISPLAY */
     {MI_HELP, 24},                                     /* 1.5 (Discussion #156): HELP OFF / ON, SYSTEM */
     {MI_SCENE, 25}, /* GHOULBOX: 12 is Felucca CLICK; append a distinct wire ID. */
+    {MI_T1CH, 26}, {MI_T2CH, 27}, {MI_T3CH, 28}, {MI_T4CH, 29},   /* MIDI IN TRACKS' channels, MIDI */
+    {MI_OTHER, 30},                                    /* .. and what the other channels play, MIDI */
 };
 #define ED_MENU_N NELEM(ED_MENU)
 

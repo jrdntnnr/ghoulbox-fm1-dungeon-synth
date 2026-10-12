@@ -16,6 +16,10 @@ static const char *const N_DIV[] = {"1/4", "1/8", "1/16", "1/32", "8T", "16T", "
 static const char *const N_DTIME[] = {"1/4", "1/8", "1/16", "1/32", "8T", "16T", "1/2", "1/1", "2BAR", "4BAR",
                                       "1/8D", "1/16D", "1/4D"};
 static const char *const N_ONOFF[] = {"OFF", "ON"};
+/* TEXTURE (fx.c texture_*): its sources (the user sample slots last), MOVE's length, when it plays */
+static const char *const N_TXSRC[] = {"OFF", "VINYL", "TAPE", "RAIN", "WIND", "RADIO", "ROOM", "USR1", "USR2", "USR3", "USR4"};
+static const char *const N_TXRATE[] = {"1BAR", "2BAR", "4BAR", "8BAR", "16BAR"};
+static const char *const N_TXWHEN[] = {"PLAY", "ALWAYS"};
 /* ANALOG's filter TYPE (1.5, #104; eng_analog.c): the SVF's low-pass (as always), band-pass, high-pass output */
 static const char *const N_FTYPE[] = {"LP", "BP", "HP"};
 /* ENV SYNC (1.5, #175; voice.c esync_coef): ATK DEC REL as note values of the tempo, shortest first. 0..127 split
@@ -47,7 +51,7 @@ static const char *const N_ORDER[] = {"NOTE", "PLAY"};
 static const char *const N_CLOCK[] = {"INT", "USB", "TRS"};
 static const char *const N_MIDI_INPUT[] = {"USB", "TRS"};
 /* MIDI IN (seq.c midi_base): 1..4 -> parts, 5..16 ignored / all -> selected / (1.2, append-only) 5..8, 9..12, 13..16 -> parts */
-static const char *const N_ROUTE[] = {"CH1-4", "SEL", "CH5-8", "CH9-12", "CH13-16"};
+static const char *const N_ROUTE[] = {"CH1-4", "SEL", "CH5-8", "CH9-12", "CH13-16", "TRACKS"};   /* TRACKS: seq.c ROUT_TRACKS */
 static const char *const N_NOTE[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 static const char *const N_DASH[] = {"--"};
 static const char *const N_RTYPE[] = {"ROOM", "SPRING", "HALL"};   /* G_RTYPE: the reverb bus's model (fx.c) */
@@ -229,6 +233,12 @@ static const param_desc_t GP[G_COUNT] = {
      * editor protocol depend on, do not move */
     [G_TAPE] = PD("TAPE", F_PCT, 0, 127, 0),       /* GHOULBOX: the mix through a worn cassette (tape.c) */
     [G_CRSH] = PD("CRSH", F_PCT, 0, 127, 0),       /* .. and a cheap sampler's bits and rate */
+    [G_TXSRC] = PE("SRC", N_TXSRC, 0),             /* TEXTURE: the bed under the mix (OFF: none) */
+    [G_TXLVL] = PD("LEVEL", F_PCT, 0, 127, 64),
+    [G_TXTONE] = PD("TONE", F_INT, -64, 63, 0),     /* left darker, right thinner, centre open */
+    [G_TXMOVE] = PD("MOVE", F_PCT, 0, 127, 40),     /* how much it breathes (level and colour) over RATE */
+    [G_TXRATE] = PE("RATE", N_TXRATE, 2),
+    [G_TXWHEN] = PE("WHEN", N_TXWHEN, 0),           /* PLAY: while the transport runs (fades in / out); ALWAYS */
 };
 
 static const param_desc_t *track_desc(const track_t *t, uint32_t id)
@@ -302,9 +312,11 @@ static const uint8_t DIV_ORDER[10] = {9, 8, 7, 6, 0, 1, 4, 2, 5, 3};   /* 4BAR 2
 static const uint8_t SLDIV_ORDER[6] = {0, 3, 1, 4, 2, 5};              /* 1/8 8T 1/16 16T 1/32 32T */
 static const uint8_t DTIME_ORDER[13] = {9, 8, 7, 6, 12, 0, 10, 1, 11, 4, 2, 5, 3};   /* 4BAR 2BAR 1/1 1/2 1/4D 1/4 1/8D
                                                                                       * 1/8 1/16D 8T 1/16 16T 1/32 */
+static const uint8_t TXRATE_ORDER[5] = {4, 3, 2, 1, 0};                 /* TEXTURE RATE: 16BAR .. 1BAR */
 static const uint8_t *enum_order(const param_desc_t *d)
 {
-    return d->names == N_DIV ? DIV_ORDER : d->names == N_SLDIV ? SLDIV_ORDER : d->names == N_DTIME ? DTIME_ORDER : d->names == SMP_ALL_NAMES ? SMP_SET_ORDER : 0;
+    return d->names == N_DIV ? DIV_ORDER : d->names == N_SLDIV ? SLDIV_ORDER : d->names == N_DTIME ? DTIME_ORDER : d->names == SMP_ALL_NAMES ? SMP_SET_ORDER :
+           d->names == N_TXRATE ? TXRATE_ORDER : 0;
 }
 static int32_t enum_rank(const param_desc_t *d, int32_t v)   /* v's place in the shown order (+ min): the gauges */
 {
@@ -485,6 +497,8 @@ static const page_t PAGES[] = {
     {"REVERB", FAM_FX, SC_GLOBAL, GR_NONE, {G_RTYPE, G_RSIZE, G_RDAMP, 0xFF}},   /* TYPE: ROOM / SPRING / HALL */
     {"CHORUS", FAM_FX, SC_GLOBAL, GR_NONE, {G_CRATE, G_CDEPTH, 0xFF, 0xFF}},
     {"TAPE", FAM_FX, SC_GLOBAL, GR_NONE, {G_TAPE, G_CRSH, 0xFF, 0xFF}},             /* GHOULBOX (tape.c) */
+    {"TEXTURE", FAM_FX, SC_GLOBAL, GR_NONE, {G_TXSRC, G_TXLVL, G_TXTONE, G_TXMOVE}},   /* fx.c texture_* */
+    {"TEXTURE 2", FAM_FX, SC_GLOBAL, GR_NONE, {G_TXRATE, G_TXWHEN, 0xFF, 0xFF}},
     {"SCL", FAM_SCL, SC_TRACK, GR_SCALE, {P_ROOT, P_SCALE, P_QUANT, P_TRANS}},
     {"CHORD", FAM_SCL, SC_TRACK, GR_CHORD, {P_CHRD, P_VOIC, 0xFF, 0xFF}},
     {"TUNE 1", FAM_SCL, SC_TRACK, GR_SCALE, {P_TC0, P_TC1, P_TC2, P_TC3}},

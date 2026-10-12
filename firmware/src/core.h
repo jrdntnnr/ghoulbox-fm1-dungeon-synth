@@ -103,6 +103,8 @@ enum {                          /* global parameters */
                                  * and reverb send (inert since 1.0, clamped to 0 on every load since): the import
                                  * of a project of firmware before 1.0 reads them as the drum part's, then sets
                                  * them 0 (project.c proj_drums_to_part) */
+    G_TXSRC, G_TXLVL, G_TXTONE,     /* TEXTURE (after SLOOP 2.6, isod89; fx.c texture_*): a bed under the mix. Past */
+    G_TXMOVE, G_TXRATE, G_TXWHEN,   /* the project's globals (PROJ_NG): it packs them in inert slots (proj_tx_put) */
     G_COUNT
 };
 
@@ -416,6 +418,9 @@ typedef struct {
 } song_t;
 
 static track_t trk[NTRK];        /* the instrument: four parts */
+/* a sound loaded over sounding notes (voice.c sound_change; after SLOOP 2.6, isod89): the sound they fade out with */
+static int16_t snd_old[NTRK][P_COUNT];
+static volatile uint8_t snd_fading;     /* bit per track: a fade with snd_old under way */
 static song_t song;
 #define TSEL (&trk[song.sel])    /* the selected track */
 

@@ -406,6 +406,9 @@ grid lives in the steps themselves, so every engine has it:
   byte as before; only the meaning changed. Firmware before 1.0 had a GM drum track there: engine byte
   NENGINES, no presets (`UP_LOAD` / `UP_STORE` rc 1), its level the global `G_DRLVL`. Drums are now the
   DRUM engine on any part: the first C key is the kick (C2 = 36), notes are GM numbers.
+- GHOULBOX TEXTURE (after SLOOP 2.6): `G_COUNT` 33. Ids 27..32 are FX > TEXTURE's SRC, LEVEL, TONE, MOVE, RATE,
+  WHEN. A project still holds 27 globals; TEXTURE rides in ids 15, 21 and 13 (`G_INFO`, `G_ENGGO`, `G_SYNC`, inert;
+  firmware/src/project.c proj_tx_put). An editor that knows only 27 sees them in id order or not at all.
 - The globals `G_DRCH`, `G_DRLVL`, `G_DRREV` (ids 24..26: the old drum track's MIDI channel, level and
   reverb send) keep their ids, and `G_COUNT` stays 27. `G_DRLVL` and `G_DRREV` are inert: `DESC` gives
   label "-", range 0..0, and no page shows them. Id 24 (`G_DRCH`, never read since 1.0) is `G_RTYPE`
@@ -466,6 +469,9 @@ grid lives in the steps themselves, so every engine has it:
   (append-only) 2 "CH5-8", 3 "CH9-12", 4 "CH13-16": channels 5..8, 9..12 or 13..16 → tracks 1..4, the others
   ignored as with CH1-4, and the keys' MIDI out on the track's channel of that block. `DESC` of id 14 gives range
   0..4 and the five names; firmware before 1.2 clamps 2..4 to 1 (SEL) when it loads such a project.
+  GHOULBOX (after SLOOP 2.6): 5 "TRACKS": each track listens on its own channel, MENU > MIDI > T1..T4 CH
+  (MENU ids 26..29: 1..16 or OFF; default 1..4), OTHER (id 30: SEL plays the rest on the selected track, OFF
+  ignores them). Settings of the FM-1, not the project.
   Neither setting affects this SysEx protocol or MIDI clock. The
   id, `G_COUNT` (27) and the project format are unchanged; it is saved and loaded with the project like
   the other globals. The editor shows it under GLOBAL > MIDI. 1.2: the GLO > GLOBAL and GLO > SYSTEM pages are
