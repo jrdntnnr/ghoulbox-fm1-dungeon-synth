@@ -133,4 +133,31 @@ static void custom_and_labels(void)
     puts("chord tuning: full-key CUSTOM, imported Rast mask, fixed-shape tuning and truthful chord labels pass");
 }
 
-int main(void) { maqam_sweep(); input_paths(); custom_and_labels(); return 0; }
+static void all_keys_audio(void)
+{
+    chord_reset(); track_t *t=&trk[0];
+    t->p[P_SCALE]=scale_id("RAST"); t->p[P_QUANT]=QN_ALL; t->p[P_CHRD]=CH_OFF;
+    /* C#4 and D4 physical keys are distinct D and E half-flat scale degrees. */
+    fm1_in.notes=(1u<<8)|(1u<<9); keyboard_block();
+    const uint8_t melody[]={62,64}; const int mc[]={0,-50}; sounding(melody,mc,2);
+    t->p[P_QUANT]=QN_OFF; fm1_in.notes=0; keyboard_block(); released();
+    t->p[P_QUANT]=QN_ALL; t->p[P_CHRD]=CH_DIA7; song.rec=song.playing=1;
+    fm1_in.notes=1u<<9; keyboard_block();
+    const uint8_t chord[]={64,67,71,74}; const int cc[]={-50,0,-50,0}; sounding(chord,cc,4);
+    assert(t->step[0].n==4 && !memcmp(t->step[0].note,chord,4));
+    fm1_in.notes=0; keyboard_block(); released(); song.rec=song.playing=0;
+    t->p[P_SLEN]=1; t->seq_active=1; seq_start(); events_block(CTL);
+    sounding(chord,cc,4); seq_stop(); released();
+    t->p[P_AMODE]=AM_CHORD; fm1_in.notes=1u<<9; keyboard_block(); arp_tick(t,1);
+    sounding(chord,cc,4); fm1_in.notes=0; keyboard_block(); arp_off(t); released();
+    /* The reported bug: retain actual input/root even in a one-voice preset. */
+    chord_reset(); t=&trk[0]; t->p[P_SCALE]=scale_id("HIJAZ"); t->p[P_ROOT]=7;
+    t->p[P_VOICE]=V_LEGATO; t->p[P_CHRD]=CH_DIA3;
+    uint8_t out[4]; assert(chord_build(t,69,out)==1 && out[0]==68);
+    assert(chord_last[0].input==69 && chord_last[0].root==68 && chord_last[0].n==1);
+    chord_build(t,68,out); assert(chord_last[0].input==chord_last[0].root);
+    t->p[P_CHRD]=CH_OFF; chord_build(t,69,out); assert(out[0]==69 && chord_last[0].n==0);
+    puts("ALL: black-key microtonal audio, chords, recording/playback, arp, releases; mono snap feedback pass");
+}
+
+int main(void) { maqam_sweep(); input_paths(); custom_and_labels(); all_keys_audio(); return 0; }

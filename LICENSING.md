@@ -21,6 +21,11 @@ Three source files are ports and keep the licence of their originals:
 `firmware/src/fm6_core.c` (msfa, Apache-2.0). The firmware built with them is GPL-3.0-only as
 a whole.
 
+The SANTUR / DUSK SANTUR and MIJWIZ / ARGHUL additions are our reduced
+implementations of Quilcom / Spogg's published instrument designs, built with
+the existing PHYS/TRIO DSP. No Quilcom source, waveforms or plugin binaries are
+bundled. See [design provenance and differences](docs/SOURCED-SYNTHS.md).
+
 You may use, study, change and share Felucca under the GPL. If you distribute Felucca, or
 firmware derived from it, you must also give your recipients its complete corresponding
 source under the same licence. That includes devices that ship with modified Felucca inside.
@@ -106,9 +111,18 @@ Felucca never enables the Bluetooth / Wi-Fi radio of the hardware.
 
 ## Optional desert recordings
 
-`assets/desert/*.wav`, `*.hdr` and `*.bin` are CC0-1.0 audio/data, separate from
+`assets/desert/oud*`, `qanun*` and `ney-air*` audio/data are CC0-1.0, separate from
 the GPL firmware. Oud: hammondman; Turkish kanun: barisbozkurt; ney: aliaref.
 [Source URLs, license links and hashes](assets/desert/sources.json) and
 [processing/usage notes](assets/desert/README.md) travel with the sample pack.
 The source MP3 previews were converted and pitch-calibrated; original masters
 are not included.
+
+`assets/desert/tar-*.wav`, `tar.hdr` and `tar.bin` are adapted **CC BY** recordings
+from the Berklee Intersectional Soundbox Archive, 2025: Erfan Hessampour
+(instrumentalist), Yangyang Hua (engineer), Shuyi Xiong (editor). The publisher
+does not state a CC BY version; we preserve its declaration without assigning
+one. These files are not CC0 or GPL. [Recording pages and source hashes](assets/desert/tar-sources.json)
+and [credits and modification notice](assets/desert/README.md#persian-tar--cc-by)
+must travel with redistributed Tar banks. The bank uses public AAC previews,
+trimmed, resampled, pitch-calibrated and ADPCM-encoded.

@@ -4,7 +4,7 @@
  * MIT: phys_dsp.c) and Rings' sympathetic strings (Emilie Gillet; MIT: phys_symp.c); this file is the
  * Felucca engine around them.
  *
- * MODEL picks one of four (the values are stored: new ones are appended):
+ * MODEL picks one of five (the values are stored: new ones are appended, 4 is retired):
  *   MODAL   a bank of 12 band-pass modes (bells, bars, plates): STRC stretches the partials
  *           (below 0.25 compressed, 0.25..0.3 harmonic, above more and more inharmonic), BRIT
  *           keeps the high modes ringing and opens the strike, DAMP the decay (127 rings on),
@@ -23,6 +23,8 @@
  *           harp's): CHRD tunes them (OCT 5TH 4TH MAJ MIN SUS 7TH above the note, ROOT: the track's
  *           scale root, its fifth and octave around C3), SYMP how much they take from the string, BUZZ
  *           the curved bridge; BRIT, DAMP as STRNG
+ *   SANT    directly struck three-string course: DTN spreads the outside strings +/-0..12 cents;
+ *           BRIT / DAMP / POS shape the strike and decay. Uses SYMP's existing line memory.
  * ACC is the accent at full velocity (brighter, longer, louder strike; velocity scales it), EXC
  * mixes the exciter itself into the output (the mallet / pick). The track's ENV / LFO -> FLT move BRIT.
  *
@@ -41,11 +43,12 @@
 #include "phys_dsp.c"
 #include "phys_symp.c"
 
-enum { PM_MODAL, PM_STRING, PM_MEMB, PM_SYMP, PM_COUNT };
+/* Value 4 remains reserved for the pre-1.0 DRUM migration. */
+enum { PM_MODAL, PM_STRING, PM_MEMB, PM_SYMP, PM_RETIRED, PM_SANTUR, PM_COUNT };
 #define PHYS_POLY 3
 /* output: model 1.0 -> this (VOICE_FS scale), then a soft knee; per model (a strike of all the modes in
  * phase peaks high but is short) */
-static const int32_t PHYS_GAIN[PM_COUNT] = {28000, 12000, 90000, 12000};
+static const int32_t PHYS_GAIN[PM_COUNT] = {28000, 12000, 90000, 12000, 28000, 750};
 
 typedef struct {
     uint8_t model;               /* PM_* the state belongs to */
@@ -58,17 +61,19 @@ typedef struct {
 
 ENG_MEM_FITS("PHYS", sizeof(phys_slot_t) * PHYS_POLY);   /* (it sets ENG_MEM_PART) */
 
-static const char *const N_PHYS_MODEL[] = {"MODAL", "STRNG", "MEMB", "SYMP"};
+static const char *const N_PHYS_MODEL[] = {"MODAL", "STRNG", "MEMB", "SYMP", "MODAL", "SANT"};
 static const char *const N_PHYS_CHORD[] = {"OCT", "5TH", "4TH", "MAJ", "MIN", "SUS", "7TH", "ROOT", 0};
 /* per model: STRC .. EXC under their own names (phys_desc; range and default as edit[], 0 = edit[]) */
 static const param_desc_t PHYS_D_HARM = {"HARM", F_PCT, 0, 127, 64, 0, 0};
 static const param_desc_t PHYS_D_BEND = {"BEND", F_PCT, 0, 127, 0, 0, 0};
 static const param_desc_t PHYS_D_CHRD = {"CHRD", F_INT, 0, 127, 64, N_PHYS_CHORD, 0};
+static const param_desc_t PHYS_D_SPREAD = {"DTN", F_PCT, 0, 127, 0, 0, 0};
 static const param_desc_t PHYS_D_SYMP = {"SYMP", F_PCT, 0, 127, 20, 0, 0};
 static const param_desc_t PHYS_D_BUZZ = {"BUZZ", F_PCT, 0, 127, 0, 0, 0};
 static const param_desc_t *const PHYS_DESC[PM_COUNT][8] = {
     [PM_MEMB] = {0, &PHYS_D_HARM, 0, 0, 0, 0, &PHYS_D_BEND, 0},
     [PM_SYMP] = {0, &PHYS_D_CHRD, 0, 0, &PHYS_D_SYMP, 0, &PHYS_D_BUZZ, 0},
+    [PM_SANTUR] = {0, &PHYS_D_SPREAD, 0, 0, 0, 0, 0, 0},
 };
 
 static const param_desc_t *phys_desc(const track_t *t, uint32_t k)
@@ -111,6 +116,7 @@ static void phys_reset(phys_slot_t *S, uint32_t md, uint32_t seed)
     seed |= 1u;
     switch (md) {
     case PM_STRING:
+    case PM_SANTUR:
     case PM_SYMP:                                        /* (the main string is the union's px_string_t) */
         S->u.s.rng = seed;
         S->u.s.src = 1u << 30;
@@ -144,6 +150,12 @@ static void phys_note_on(track_t *t, voice_t *v)
 static __attribute__((noinline)) void phys_symp_pitches(const track_t *t, const vmod_t *m, uint32_t *f)
 {
     uint32_t c = (uint32_t)t->p[P_E1] >> 4, k;          /* 0..7 */
+    if (t->p[P_E0] == PM_SANTUR) {                                    /* a struck course, no extra chord tones */
+        int32_t spread = clamp(t->p[P_E1], 0, 127) * 12 / 127;
+        for (k = 0; k < PX_NSYMP; k++)
+            f[k] = tuning_rate(m->inc, ((int32_t)k - 1) * spread * 2367 / 1000);
+        return;
+    }
     for (k = 0; k < PX_NSYMP; k++) {
         int32_t p16 = PHYS_DETUNE[k];
         p16 += c < 7u ? m->pitch16 + ((PHYS_CHORDS[c][k] * 41) >> 8)   /* cents -> 1/16 semitones (0.16) */
@@ -159,7 +171,7 @@ static void phys_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const 
     phys_slot_t *S = phys_slot_of(t, v);
     uint32_t md = (uint32_t)p[P_E0] % PM_COUNT, i, f0 = m->inc;
     int32_t y[CTL], ax[CTL];
-    int32_t strc = p[P_E1] * 516, brit = clamp(p[P_E2] * 516 + m->cutoff * 2, 0, 65536);   /* Q16 0..1 */
+    int32_t strc = clamp(p[P_E1], 0, 127) * 516, brit = clamp(p[P_E2] * 516 + m->cutoff * 2, 0, 65536);   /* Q16 0..1 */
     int32_t damp = p[P_E3] * 516, pos = p[P_E4], exc = p[P_E7] * 258;   /* exc Q15 */
     int32_t bow = p[P_E6] * 206;                         /* BOW: Dust at up to 0.4 (DaisySP's sustain: 1) */
     int32_t acc = clamp(p[P_E5] * v->vel * 4, 0, 65536);   /* ACC at full velocity, Q16 */
@@ -171,6 +183,7 @@ static void phys_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const 
     if (S->model != md)                                  /* MODEL changed under a sounding note */
         phys_reset(S, md, rng());
     switch (md) {
+    case PM_RETIRED:                                    /* never selected; value 4 migrates to DRUM on load */
     case PM_MODAL: {
         px_modal_blk_t B;
         px_modal_block(&B, &S->u.m, f0, strc, brit, damp, acc, pos * 129, bow);   /* pos 0..1/4 */
@@ -194,6 +207,18 @@ static void phys_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const 
         px_string_blk_t B;
         uint32_t f[PX_NSYMP];
         phys_symp_pitches(t, m, f);
+        if (md == PM_SANTUR) {
+            /* Compact adaptation of Quilcom SIM-SANTUR's struck, detuned string course.
+             * Existing DaisySP excitation + Rings-derived loops, not a FlowStone code port.
+             * All three loops receive the hammer burst directly; no plucked main string.
+             * See docs/SOURCED-SYNTHS.md for provenance and deliberate reductions. */
+            px_string_block(&B, &S->u.y.s, f0, 16384, brit, damp, acc, bow, pos * 516);
+            px_string_excite(&B, &S->u.y.s, ax, n);
+            px_symp_block(&S->u.y, f, brit, damp, 1048576); /* 16x line resolution; gain compensates */
+            px_symp_run(&S->u.y, ax, y, n);
+            for (i = 0; i < n; i++) y[i] -= ax[i];   /* EXC alone controls the dry hammer */
+            break;
+        }
         px_string_block(&B, &S->u.y.s, f0, 16384 - p[P_E6] * 129, brit, damp, acc, 0, 0);   /* BUZZ: STRC 0.25 .. 0 */
         px_string_excite(&B, &S->u.y.s, ax, n);
         px_string_run(&B, &S->u.y.s, ax, y, n);
@@ -234,6 +259,8 @@ static const preset_t PHYS_PRESETS[] = {
     {"GURDY DRONE", {3, 1, 70, 95, 80, 127, 110, 0}, {30, 100, 127, 90}, 0, 0, FX(5, 10, 0, 90), PAT(5)},
     {"DESERT OUD", {1, 35, 62, 65, 23, 127, 0, 0}, {0, 100, 127, 45}, 0, 0, FX(0, 5, 18, 75), PAT(23)},
     {"BRASS QANUN", {1, 72, 105, 82, 10, 127, 0, 0}, {0, 100, 127, 65}, 0, 0, FX(0, 12, 28, 85), PAT(23)},
+    {"SANTUR", {5, 32, 92, 68, 24, 100, 0, 5}, {0, 100, 127, 78}, 0, 0, FX(0, 0, 18, 65), PAT(23)},
+    {"DUSK SANTUR", {5, 43, 58, 83, 44, 100, 0, 0}, {0, 100, 127, 95}, 0, 0, FX(0, 0, 30, 95), PAT(23)},
     /* GHOULBOX end */
 };
 

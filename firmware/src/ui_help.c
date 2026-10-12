@@ -28,7 +28,7 @@ static const struct { const char *title, *hint; } HELP_PAGE[] = {
     {"REVERB", "[K1]ROOM SPRING HALL[FX]CHORUS"},
     {"TAPE", "[K1]TAPE[K2]CRUSH[FX]SENDS"},
     {"CHORUS", "[K1-4]ALL TRACKS[FX]FX"},
-    {"SCL", "[K2]SCALE[K3]QUANTIZE[SCL]CHORDS"},
+    {"SCL", "[K2]MAQAM[K3]KEY MAP[SCL]CHORDS"},
     {"CHORD", "[K1]CHORD[KEYS]PLAY[SCL]TUNE"},
     {"TUNE 1", "[K1-4]CENTS[SCL]NEXT KEYS"},
     {"TUNE 2", "[K1-4]CENTS[SCL]NEXT KEYS"},

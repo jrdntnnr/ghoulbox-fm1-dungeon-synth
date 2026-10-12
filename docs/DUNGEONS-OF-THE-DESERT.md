@@ -2,6 +2,12 @@
 
 Preview 2 adds a desert palette to GHOULBOX's existing dungeon instruments.
 
+The current source also includes an optional **Persian Tar** bank: four calibrated
+plucks from Berklee's BISA archive, licensed CC BY. In **Samples**, choose **Tar**
+in any USR slot's bank menu, **Prepare Tar**, preview, then **Upload**. Select that
+slot on a SAMPLE track. The browser emulator has **Load Tar on selected track**
+below its keyboard. [Credits, processing and slot limits](../assets/desert/README.md#persian-tar--cc-by).
+
 ## Start playing
 
 Hold HOME, open **SYSTEM > SCENE**, select **CITADEL**, then restart to load the
@@ -17,6 +23,9 @@ The new presets are:
 | --- | --- | --- |
 | PHYS | DESERT OUD | Short, woody string pluck |
 | PHYS | BRASS QANUN | Bright, ringing string pluck |
+| PHYS | SANTUR / DUSK SANTUR | Struck three-string courses, bright / softer |
+| TRIO | MIJWIZ | Paired reed-like pipes |
+| TRIO | ARGHUL | Reed-like melody with a fixed tonic drone |
 | WHEEL | DUNE NEY | Soft flute lead |
 | DRUM | DUNE DRUMS | Frame drum, hand slap and shaker from the CRYPT kit |
 | NOISE | SAND WIND | Slow, filtered wind texture |
@@ -42,6 +51,12 @@ and trim offsets independently for each note.
 
 These compact banks are mono one-shots, not large, looped acoustic libraries.
 Ney Air retains performance bends and breath; use DUNE NEY for steady pitch.
+
+The santur and reed sounds are compact adaptations of published Quilcom
+designs using our existing DSP, not plugin imports or recorded samples.
+See [sources, controls and limitations](SOURCED-SYNTHS.md). They are built in
+and do not occupy sample slots. Arghul's drone follows ROOT, independently of
+the melody; its INT2 shifts that drone relative to C3 + ROOT.
 The qanun source is a Turkish kanun. Sources, CC0 links, cuts, input hashes and
 measured pitch calibration are included with the pack.
 

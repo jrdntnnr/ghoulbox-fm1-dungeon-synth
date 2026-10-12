@@ -372,9 +372,10 @@ function mockTables() {
   {
     const m0 = E.makeMockDevice({ auto: false }), ph = m0.tables.ENG[9], dr = m0.tables.ENG[10];
     m0.stop();
-    ok(ph.name === "PHYS" && ph.edit[0].names.join() === "MODAL,STRNG,MEMB,SYMP" && ph.edit[0].max === 3 &&
-       ph.presets.length === 15 && !ph.presets.some((p) => p.name === "RAIN" || p.name === "DRUM KIT"),
-       "editor: PHYS models MODAL STRNG MEMB SYMP (no DUST, no DRUM), 15 presets (including desert plucks)");
+    ok(ph.name === "PHYS" && ph.edit[0].names.join() === "MODAL,STRNG,MEMB,SYMP,MODAL,SANT" && ph.edit[0].max === 5 &&
+       ph.presets.length === 17 && ph.presets[15].e[0] === 5 && ph.edit[1].max === 127 &&
+       !ph.presets.some((p) => p.name === "RAIN" || p.name === "DRUM KIT"),
+       "editor: PHYS preserves legacy IDs including reserved 4, appends SANT and two presets");
     ok(dr.name === "DRUM" && dr.edit.map((d) => d.label).join() === "KIT,TUNE,TONE,DECY,SNAP,ACC,KICK,DRV" &&
        dr.presets.length === 4 && dr.presets[3].pat === 25 && dr.presets[0].pat === 12 && dr.presets[1].pat === 22 && dr.presets[2].pat === 22,
        "editor: DRUM engine 10 (KIT TUNE TONE DECY SNAP ACC KICK DRV): DRUM KIT on BEAT; GHOULBOX's CRYPT KIT, TOMB DRUMS on TOMBBEAT");

@@ -27,7 +27,7 @@ typedef struct { uint8_t id, ch, src, n, note[CHORD_MAX]; } mchord_t;   /* id: t
 static mchord_t mchord[MCHORD_N];
 /* the last chord played per track (the CHORD page shows it): its root, notes, and the shape's tones above the
  * root (bit i = i semitones, 0..11) */
-static struct { uint8_t root, n, note[CHORD_MAX]; uint16_t mask; uint8_t gen; } chord_last[NTRK];
+static struct { uint8_t root, n, note[CHORD_MAX]; uint16_t mask; uint8_t gen, input; } chord_last[NTRK];
 
 /* 1 = the track's keys are a kit: no chords */
 static int chord_kit(const track_t *t)
@@ -142,14 +142,15 @@ static uint32_t chord_build(track_t *t, uint32_t root, uint8_t *out)
     int32_t r;
     uint16_t mask;
     uint32_t m = chord_make(t, root, out, &r, &mask), i, k = trk_index(t);
-    if (m > 1u) {
+    if (t->p[P_CHRD] && !chord_kit(t)) {           /* include MONO/LEGATO roots: their snapping must be visible too */
+        chord_last[k].input = (uint8_t)root;
         chord_last[k].root = (uint8_t)clamp(r, 0, 127);
         chord_last[k].mask = mask;
         chord_last[k].n = (uint8_t)m;
         for (i = 0; i < CHORD_MAX; i++)
             chord_last[k].note[i] = i < m ? out[i] : 0u;
         chord_last[k].gen++;
-    }
+    } else chord_last[k].n = 0;
     return m;
 }
 

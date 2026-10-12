@@ -35,7 +35,7 @@ static const param_desc_t ESYNC_DESC[3] = {   /* ATK DEC REL with ENV SYNC on: t
 static uint32_t esync_idx(int32_t v) { return (uint32_t)(v & 127) * ESYNC_N >> 7; }   /* (param_format's split) */
 /* seq.c kb_map; 1 = SNAP (stored projects: the former ON); 3 = SEQ: SNAP, and the sequencer's notes snap too as
  * they play (seq.c seq_step; the steps keep what was written). Append-only: older projects hold 0..2 */
-static const char *const N_QUANT[] = {"OFF", "SNAP", "WHITE", "SEQ"};
+static const char *const N_QUANT[] = {"OFF", "SNAP", "WHITE", "SEQ", "ALL"}; /* OFF = chromatic; names retained for libraries */
 /* chord keys (chord.c): OFF, the diatonic triad / seventh of the track's ROOT and SCALE on the key, fixed shapes */
 static const char *const N_CHRD[] = {"OFF", "DIA3", "DIA7", "MAJ", "MIN", "DOM7", "MAJ7", "MIN7", "SUS4", "POW"};
 static const char *const N_VOIC[] = {"CLOSE", "OPEN", "INV1", "INV2", "+OCT"};   /* VC_CLOSE .. VC_BASS */
@@ -259,6 +259,8 @@ static const param_desc_t *param_desc_of(uint32_t e, uint32_t id)
  * stands for */
 static int32_t enum_orig(const param_desc_t *d, int32_t v)
 {
+    if (d->names == N_PHYS_MODEL && v == PM_RETIRED)
+        return PM_MODAL;                             /* reserved legacy DRUM value, never offered */
     if (d->names == N_DRUM_KIT)
         return v >= 0 && v < DK_COUNT ? (int32_t)DK_PLAYS[v] : v;
     return d->names == SMP_ALL_NAMES && v >= 0 && v < (int32_t)SMP_USR_V0 ? SMP_SET_ORIG[v] : v;   /* (the aliases: 0..4) */

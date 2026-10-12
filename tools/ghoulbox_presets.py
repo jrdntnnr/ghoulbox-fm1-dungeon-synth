@@ -55,12 +55,19 @@ PRESETS = {
         ("GURDY DRONE", [3, 1, 70, 95, 80, 127, 110, 0], [30, 100, 127, 90], 0, 0, (5, 10, 0, 90), 5),
         ("DESERT OUD", [1, 35, 62, 65, 23, 127, 0, 0], [0, 100, 127, 45], 0, 0, (0, 5, 18, 75), 23),
         ("BRASS QANUN", [1, 72, 105, 82, 10, 127, 0, 0], [0, 100, 127, 65], 0, 0, (0, 12, 28, 85), 23),
+        # Reduced adaptations of Quilcom's published designs; see docs/SOURCED-SYNTHS.md.
+        # SANT model: a directly struck three-string course. DTN 32 = +/-3 cents.
+        ("SANTUR", [5, 32, 92, 68, 24, 100, 0, 5], [0, 100, 127, 78], 0, 0, (0, 0, 18, 65), 23),
+        ("DUSK SANTUR", [5, 43, 58, 83, 44, 100, 0, 0], [0, 100, 127, 95], 0, 0, (0, 0, 30, 95), 23),
     ],
     "TRIO": [  # WAVE INT2 INT3 DTN | MODE CUT RES PW
         ("FANTASY PAD", [0, 12, 7, 14, 0, 55, 20, 64], [90, 90, 115, 100], 10, 0, (0, 90, 25, 110), 5),
         ("MOURN HORN", [1, 0, -12, 5, 0, 40, 25, 50], [40, 85, 105, 70], 35, 0, (5, 20, 10, 90), 4),
         ("STRING MACH", [0, 12, 0, 18, 0, 70, 5, 64], [60, 90, 120, 95], 0, 0, (0, 110, 0, 100), 5),
         ("SHAWM", [1, 12, 19, 4, 1, 85, 70, 25], [6, 70, 115, 45], 10, 1, (20, 0, 10, 85), 19),   # 1.2: a nasal reed
+        ("MIJWIZ", [16, 0, 0, 4, 1, 82, 32, 42], [6, 64, 118, 32], 0, 0, (0, 0, 12, 65), 24),
+        # DRONE's second pipe stays at ROOT+C3 (INT2 offsets it). Poly for chord-gen use.
+        ("ARGHUL", [17, 0, 0, 0, 0, 79, 22, 46], [9, 64, 118, 42], 0, 0, (0, 0, 15, 80), 24),
     ],
     "LOFI": [  # CHIP (4BIT 4B/2 8BIT 1BIT STEP) WAVE (PLS TRI SAW NOIS WRAM) DUTY CRSH | SWP VIB ARP TONE
         ("TOWER LEAD", [0, 1, 64, 0, 0, 30, 0, 70], [5, 70, 110, 60], 0, 1, (0, 20, 35, 90), 4),

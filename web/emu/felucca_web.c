@@ -352,6 +352,52 @@ EXPORT uint8_t *web_nor(void) { return nor; }
 EXPORT uint32_t web_nor_size(void) { return sizeof nor; }
 EXPORT void web_nor_erase(void) { memset(nor, 0xFF, sizeof nor); }
 EXPORT uint32_t web_flash_writes_count(void) { return web_flash_writes; }
+/* Browser-only sample import. Validate in staging before replacing any saved
+ * slot; the target firmware continues to use its normal editor upload path. */
+static uint8_t web_sample_buf[SMP_USER_SIZE] __attribute__((aligned(4)));
+EXPORT uint8_t *web_sample_buffer(void) { return web_sample_buf; }
+EXPORT uint32_t web_sample_capacity(void) { return sizeof web_sample_buf; }
+EXPORT uint32_t web_sample_install(uint32_t slot, uint32_t bytes, uint32_t replace)
+{
+    const smp_user_hdr_t *h = (const smp_user_hdr_t *)web_sample_buf;
+    uint32_t i, j;
+    if (!web_booted || slot >= SMP_USER_SLOTS || bytes < SMP_USER_DATA || bytes > SMP_USER_SIZE ||
+        h->magic != SMP_USER_MAGIC || h->version != 1 || !h->nz || h->nz > 16u ||
+        h->data_len != bytes - SMP_USER_DATA || st_crc32(web_sample_buf + SMP_USER_DATA, h->data_len) != h->crc)
+        return 1;
+    for (i = 0; i < h->nz; i++) {
+        const smp_zone_t *z = &h->zone[i];
+        if (z->off > h->data_len || z->n > 2u * SMP_USER_SIZE || z->off + (z->n + 1u) / 2u > h->data_len ||
+            z->idx > 88u || !z->rate || z->rate > 4u << 16 || z->ls > z->le || z->le >= z->n || z->lo > z->hi)
+            return 1;
+    }
+    uint8_t *dest = nor + SMP_USER_BASE + slot * SMP_USER_SIZE;
+    if (!replace)
+        for (i = 0; i < SMP_USER_SIZE; i++)
+            if (dest[i] != 0xFF) return 2;           /* page asks before overwriting */
+    seq_stop();
+    for (i = 0; i < NTRK; i++) {
+        trk_all_off(&trk[i]);
+        for (j = 0; j < NVOICE; j++) trk[i].v[j].active = 0;
+    }
+    memset(dest, 0xFF, SMP_USER_SIZE);
+    memcpy(dest, web_sample_buf, bytes);
+    smp_user_scan(slot);
+    web_flash_writes++;
+    set_engine(ENGI_SAMPLE);
+    TSEL->p[P_E0] = SMP_USR_V0 + slot;
+    TSEL->p[P_E1] = 0;                              /* source roots are already calibrated */
+    TSEL->p[P_E2] = 0;                              /* no bit reduction */
+    TSEL->p[P_E3] = 0;                              /* one-shot plucks */
+    TSEL->p[P_E4] = 127;
+    TSEL->p[P_E6] = 0;
+    TSEL->p[P_ATK] = 0;
+    TSEL->p[P_SUS] = 127;
+    TSEL->p[P_REL] = 65;
+    ui.force = 1;
+    ui_say("SAMPLE ", "TAR");
+    return 0;
+}
 EXPORT void web_boot(void)
 {
     if (!web_booted)

@@ -24,12 +24,16 @@ static voice_t *find_voice(track_t *t,unsigned note)
 }
 int main(void)
 {
-    const char *names[]={"oud","qanun","ney-air"};
+    const char *names[]={"oud","qanun","ney-air","tar"};
     for(unsigned slot=0;slot<3;slot++)read_bank(slot,names[slot]);
-    for(unsigned slot=0;slot<3;slot++) for(int trim=-13;trim<=13;trim+=13) {
+    for(unsigned bank=0;bank<4;bank++) for(int trim=-13;trim<=13;trim+=13) {
+        unsigned slot=bank%3;
+        read_bank(slot,names[bank]);
         ui_power_on(); host_tracks_init();
         track_t *t=&trk[0]; host_preset(t,ENGI_SAMPLE,0);
         t->p[P_E0]=SMP_USR_V0+slot;t->p[P_SCALE]=18;t->p[P_ROOT]=2;
+        char label[16];sound_name(t,label);
+        assert(str_eq(label,bank==0?"OUD":bank==1?"QANUN":bank==2?"NEY AIR":"TAR"));
         t->p[P_TC2]=trim; t->p[P_CHRD]=CH_DIA7; t->p[P_VOIC]=VC_CLOSE;
         kb_note[7]=64; key_on(7,t);
         assert(kb_chn[7]==4);
@@ -51,7 +55,7 @@ int main(void)
         key_off(7,t);
         for(unsigned i=0;i<NVOICE;i++)assert(!t->v[i].gate);
     }
-    puts("desert: all three uploaded banks decode and play independently tuned Bayati sevenths, including trims and note-off");
+    puts("desert: all four banks decode and play independently tuned Bayati sevenths, including trims and note-off");
     ui_power_on(); host_tracks_init(); gb_scene_load(5);song.master_q12=4096;
     for(unsigned i=0;i<NTRK;i++)trk[i].seq_active=1;
     seq_start();

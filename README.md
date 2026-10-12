@@ -22,6 +22,15 @@ banks load from the editor's Samples tab. Includes further oscillator and
 sample-chord tuning fixes. [Playing guide](docs/DUNGEONS-OF-THE-DESERT.md) ·
 [Samples and credits](assets/desert/README.md).
 
+The current source adds an optional **Persian Tar** bank (Berklee BISA, CC BY):
+choose **Tar → Prepare Tar → Upload** in any editor sample slot. The emulator
+also offers **Load Tar on selected track**. [Tar credits and instructions](assets/desert/README.md#persian-tar--cc-by).
+
+Four synthesized voices are also included in the current source: **SANTUR** and
+**DUSK SANTUR** in PHYS, plus **MIJWIZ** and **ARGHUL** in TRIO. These are compact
+adaptations of published Quilcom instrument designs using our existing DSP;
+they use no sample slots. [Controls, provenance and limitations](docs/SOURCED-SYNTHS.md).
+
 ### 1.4
 
 - **Power-on scenes.** Hold HOME for the menu and pick **SYSTEM > SCENE** to choose what the FM-1 plays
@@ -505,13 +514,9 @@ default up to 1.1.5) and **SPRING**. A project plays the TYPE it was saved with.
 
 ## Scale keyboard
 
-On the **SCL** page, set **QNT** to WHITE to play the selected scale using only the
-white keys (SNAP keeps every key and rounds it down to the scale). C4 plays **ROOT**; consecutive white keys play consecutive scale notes
-above and below it. Black keys are silent, including during live recording and
-step entry. **TRN** transposes the resulting notes; the octave buttons shift them
-by full octaves. Set QNT to OFF for the normal chromatic keyboard. QNT SEQ snaps the keys like SNAP and
-also maps the sequenced notes onto the current ROOT / SCALE as they play (the steps are not changed; drum
-kits are never quantized).
+On **SCL**, choose **ROOT**, **MAQAM** and **MAP**. **CHR** keeps the familiar chromatic keyboard with real per-note tuning. **WHITE** maps successive scale degrees onto white keys and leaves black keys silent. **ALL** maps successive degrees onto every key, including black keys, extending the melodic range of the small keyboard. WHITE and ALL anchor the physical C4 key to ROOT; TRN and the octave buttons shift the resulting notes. ALL leaves notes outside MIDI's range silent.
+
+**SNAP** rounds keys down into the scale; **SEQ** also snaps sequencer playback without changing the stored steps. Neighboring keys can converge in these modes. Keep **CHORD OFF** for independent melody notes, and sequence generated chords on another track. Existing QNT OFF projects display **MAP CHR**; saved IDs and tuning are unchanged. See the [mapping and tuning guide](docs/MICROTONAL.md).
 
 Available scales: chromatic (CHR), major (MAJ), natural minor (MIN), Dorian (DOR),
 Mixolydian (MIX), major pentatonic (PEN), minor pentatonic (MPEN), harmonic minor
@@ -522,7 +527,7 @@ the white keys without repeating notes; their roots need not fall on every C key
 Drum kits and incoming MIDI keep their own note mapping.
 
 Press **SCL** again for the **CHORD** page: CHRD picks the chord keys (OFF, the scale's triads or
-sevenths, or a fixed shape) and VOIC the voicing.
+sevenths, or a fixed shape) and VOIC the voicing. DIA3/DIA7 show a **CHORD SNAP** message when they move a played root into the scale, even with MAP CHR.
 
 ## Layout
 

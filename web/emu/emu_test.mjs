@@ -70,7 +70,14 @@ check("  over by 1 s (~0.70 s)", a.ex.web_anim_levels() === 0);
 const home = a.screen();
 check(`boots: the splash, then HOME (${colours(home)} colours), the HOME LED lit`,
       splash > 1 && colours(home) > 4 && (a.ex.web_lit_buttons() >> B.HOME & 1) === 1);
-check("silent at rest", a.peak === 0);
+// DUNGEON starts with TAPE=40: its intentional hiss is below two 16-bit LSBs.
+check("only quiet tape hiss at rest", a.peak <= 2 / 32768);
+a.ex.web_midi(0xb0, 86, 0);                                  // TAPE off; retain the exact-silence check
+a.render(100);
+a.peak = 0;
+a.render(200);
+check("silent at rest with TAPE off", a.peak === 0);
+a.ex.web_midi(0xb0, 86, 40);
 a.ex.web_keys(1 << 7);                                        // C4
 a.render(300);
 const keyLit = (a.ex.web_lit_keys() >> 7) & 1;

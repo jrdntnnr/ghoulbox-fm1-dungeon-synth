@@ -19,6 +19,12 @@ for name in tuning chord_tuning desert integration_format scale project chord mo
         exit 1
     fi
 done
+# New melodic models: actual chord voices, persistence, release and independent drone.
+# FFT pitch measurements are separate (check_sourced_audio.py requires NumPy).
+mkdir -p build/assessment/sourced-synths
+"$CC" -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/sourced_synth_test" tests/sourced_synth_test.c -lm
+"$OUT/sourced_synth_test" build/assessment/sourced-synths > build/assessment/tuning-sourced-synth.log
+echo "sourced synths: passed"
 # the Shur review renderer (docs/SHUR_REVIEW.md): built so it cannot rot, not run
 "$CC" -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/shur_review" tests/shur_review.c -lm
 "$CC" -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/regress" tests/regress.c -lm

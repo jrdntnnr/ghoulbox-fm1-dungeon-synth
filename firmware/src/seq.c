@@ -91,7 +91,7 @@ static int32_t scale_snap(const track_t *t, int32_t n)
     return n;
 }
 
-enum { QN_OFF, QN_SNAP, QN_WHITE, QN_SEQ };      /* P_QUANT */
+enum { QN_OFF, QN_SNAP, QN_WHITE, QN_SEQ, QN_ALL }; /* P_QUANT: append-only saved values */
 
 /* the engine's own key map (DRUM's GM map, slices) for key k, -1 none */
 static int32_t kb_engine(const track_t *t, uint32_t k)
@@ -108,14 +108,19 @@ static uint32_t kb_pitch(const track_t *t, uint32_t k, int32_t oct)
     int32_t n = 53 + (int32_t)k;
     if (t->p[P_QUANT] == QN_SNAP || t->p[P_QUANT] == QN_SEQ)   /* SNAP (and SEQ): every key, rounded down */
         return (uint32_t)clamp(scale_snap(t, n + 12 * oct + t->p[P_TRANS]), 0, 127);
-    if (t->p[P_QUANT] == QN_WHITE) {                    /* WHITE: white keys walk the scale, black keys are silent */
+    if (t->p[P_QUANT] == QN_WHITE || t->p[P_QUANT] == QN_ALL) {
         uint32_t mask = scale_mask(t), i;
-        int32_t count = 0, degree = DEGREE[n % 12], wo;
-        if (degree < 0)
-            return KB_SILENT;
+        int32_t count = 0, degree, wo;
         /* C4 is the root. Walk scale degrees on successive white keys, including
-         * below C4; scales with 5, 6, 8 or 12 notes still have no duplicated degrees. */
-        degree += (n / 12 - 5) * 7;
+         * below C4. ALL uses every physical key; WHITE leaves black keys silent. */
+        if (t->p[P_QUANT] == QN_ALL)
+            degree = (int32_t)k - 7;
+        else {
+            degree = DEGREE[n % 12];
+            if (degree < 0)
+                return KB_SILENT;
+            degree += (n / 12 - 5) * 7;
+        }
         for (i = 0; i < 12u; i++)
             count += (mask >> i) & 1u;
         wo = degree / count;
@@ -132,6 +137,10 @@ static uint32_t kb_pitch(const track_t *t, uint32_t k, int32_t oct)
             }
         n = 60 + t->p[P_ROOT] + 12 * wo + (int32_t)i;
     }
+    /* A sparse custom scale can cover more than MIDI's range. Do not turn the
+     * overflow keys into duplicate notes at 0 / 127 in the new layout. */
+    if (t->p[P_QUANT] == QN_ALL && (n + 12 * oct + t->p[P_TRANS] < 0 || n + 12 * oct + t->p[P_TRANS] > 127))
+        return KB_SILENT;
     return (uint32_t)clamp(n + 12 * oct + t->p[P_TRANS], 0, 127);
 }
 

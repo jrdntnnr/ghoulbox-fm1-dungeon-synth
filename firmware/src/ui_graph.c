@@ -52,21 +52,32 @@ static void graph_adsr(const track_t *t, uint16_t c)
 #undef EGY
 }
 
+static uint32_t graph_lfo_inc(const track_t *t)
+{
+    return t->p[P_LSYNC] ? lfo_sync_inc(t) : LFO_INC[t->p[P_LRATE] & 127];
+}
+
 static void graph_lfo(const track_t *t, uint16_t c)
 {
     int32_t x, cy = graph_ht / 2, a = 38 * graph_ht / 100, py = cy, uni = t->p[P_LPOL] != 0;
     uint32_t ph = (uint32_t)t->p[P_LPHASE] << 25;
+    /* A fixed one-second window, using the same control-tick increment as the
+     * sound engine. Keep whole cycles for the sample-and-hold preview. */
+    uint64_t step = (uint64_t)graph_lfo_inc(t) * FS / (CTL * (PANEL_W - 1u));
     int32_t z = uni ? cy + a : cy;                   /* the zero line: POL UNI (LFO 2) draws 0..+1 over it */
     cv_rect(PANEL_X0, z, PANEL_W, 1, T_RAISE);
-    for (x = 0; x < PANEL_W; x++) {                  /* two cycles (lfo_wave only reads the track) */
-        int32_t w = lfo_wave((track_t *)t, ph + (uint32_t)x * (0xFFFFFFFFu / (PANEL_W / 2u))), y;
+    for (x = 0; x < PANEL_W; x++) {
+        uint64_t phase = ph + (uint64_t)x * step;
+        int32_t w = lfo_wave((track_t *)t, (uint32_t)phase), y;
         if (t->p[P_LWAVE] == 4)
-            w = (int32_t)((x / 20 * 2654435761u) >> 16) - 32768;
+            w = (int32_t)((((uint32_t)(phase >> 32) + 1u) * 2654435761u) >> 16) - 32768;
         y = uni ? z - (w + 32768) * a / 32768 : cy - w * a / 32768;
         if (x)
             cv_line_t(PANEL_X0 + x - 1, py, PANEL_X0 + x, y, c, 2);
         py = y;
     }
+    if (graph_ht >= 100)
+        cv_text_r(PANEL_X0 + PANEL_W, 91, &AF_S, "1 S", T_DIM, T_SURF);
 }
 
 /* step bar x of step i of a 16-step row: 4 groups, as the footer (9 px bars, 13 px apart, 4 px between groups),
@@ -376,6 +387,18 @@ static void cv_diamond(int32_t cx, int32_t cy, int32_t r, uint16_t c)
 /* SCL: the 12 keys as rounded bars (black keys high, white keys low): in the scale THEME, the root the
  * accent, out of the scale RAISE. A diamond in the root's own column (over a white key, under a black one)
  * marks it by shape as well as colour (SARDAB's copper and sandstone are close; MONO has one white) */
+static int chord_snap_text(const track_t *t, char *b)
+{
+    uint32_t k = trk_index(t);
+    if ((t->p[P_CHRD] != CH_DIA3 && t->p[P_CHRD] != CH_DIA7) || !chord_last[k].n ||
+        chord_last[k].input == chord_last[k].root || chord_kit(t)) return 0;
+    str_cpy(b, "CHORD SNAP ", 32);
+    note_name(b + str_len(b), chord_last[k].input);
+    str_cpy(b + str_len(b), " > ", 4);
+    note_name(b + str_len(b), chord_last[k].root);
+    return 1;
+}
+
 static void graph_scale(const track_t *t, uint16_t c)
 {
     static const uint8_t BLACK[12] = {0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0};
@@ -394,6 +417,14 @@ static void graph_scale(const track_t *t, uint16_t c)
             cv_line(x + 5, y, x + 8, tip, T_SURF);
             cv_line(x + 11, y, x + 8, tip, T_SURF);
         }
+    }
+    if (cur_page()->id[2] == P_QUANT) {
+        static const char *const hint[] = {"CHROMATIC KEYS + TUNING", "KEYS SNAP TO SCALE", "WHITE KEYS: SCALE DEGREES",
+                                         "KEYS + SEQUENCE SNAP", "ALL KEYS: SCALE DEGREES"};
+        char b[32];
+        int snap = chord_snap_text(t, b);
+        cv_text_in(12, 92, 216, &AF_S, snap ? b : hint[clamp(t->p[P_QUANT], 0, QN_ALL)],
+                   snap ? T_ACCENT : T_MID, T_SURF);
     }
 }
 /* CHORD (SCL 2): the chord's name ("Cm7": the last one the track played; before any, the one on its ROOT from
@@ -434,6 +465,7 @@ static void graph_chord(const track_t *t, uint16_t c)
     cv_text_on(14, 8, &AF_M, b, T_TEXT, T_SURF);
     GFX_HOOK_ALIGN(0, 0, 0, 8 + AF_M.asc, AL_B, "chord caption on the name's baseline");
     cv_text_r(226, 8 + AF_M.asc - AF_S.asc, &AF_S, cap, T_MID, T_SURF);   /* on the name's baseline */
+    { char snap[32]; if (chord_snap_text(t, snap)) cv_text_on(14, 22, &AF_S, snap, T_ACCENT, T_SURF); }
     lo = nn[0] - nn[0] % 12u;
     cnt = nn[n - 1u] - lo < 24u ? 24u : 36u;
     w = 216u / cnt;
@@ -1214,6 +1246,8 @@ static uint32_t graph_signature(void)
     if (pg->graph == GR_NONE || pg->graph == GR_ARP) h ^= ui.frame / 2u;
     for (i = 0; i < P_COUNT; i++)
         h = (h ^ (uint32_t)t->p[i]) * 16777619u;
+    if (pg->graph == GR_LFO)                         /* tempo / external clock can change a synced LFO */
+        h = (h ^ graph_lfo_inc(t)) * 16777619u;
     h ^= (uint32_t)TSEL->preset * 7u + (uint32_t)song.g[G_SLOT] * 13u + TSEL->user * 257u + up_gen * 7919u + ui.uslot * 104729u +
          ui.ppick * 1299709u;
     if (pg->graph == GR_CHORD) {                     /* the last chord played */
@@ -1222,6 +1256,9 @@ static uint32_t graph_signature(void)
             h = (h ^ chord_last[song.sel].note[i]) * 16777619u;
         h ^= (uint32_t)t->engine * 389u;             /* (MONO and kits follow the sounding engine) */
     }
+    if (pg->graph == GR_SCALE || pg->graph == GR_CHORD)
+        h = (h ^ (chord_last[song.sel].input + 131u * chord_last[song.sel].root +
+                  65537u * chord_last[song.sel].n)) * 16777619u;
     if (pg->graph == GR_SONG) {
         h ^= ui.song_row * 40503u + chain_config.count * 7919u + ui.song_trk * 3571u;
         h = fnv(h, chain_config.row, sizeof chain_config.row);

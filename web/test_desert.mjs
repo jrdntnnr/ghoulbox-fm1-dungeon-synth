@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
-import { prepareDesertBank, DESERT_BASE } from './desert.js';
+import { prepareDesertBank, DESERT_BASE, DESERT_NAMES } from './desert.js';
 const html = await readFile(new URL('./editor.html', import.meta.url), 'utf8');
 const proto = html.slice(html.indexOf('/*PROTO-BEGIN*/'),html.indexOf('/*PROTO-END*/'));
 const {parseWav,takeSample,buildSlot} = vm.runInNewContext(proto+';({parseWav,takeSample,buildSlot})',{setTimeout,clearTimeout,setInterval,clearInterval,console});
@@ -18,7 +18,8 @@ const decode = async f => {
   return {fname:f.name,s:takeSample(x,0,x.length),root:60};
 };
 const banks=JSON.parse(await readFile(new URL('banks.json',DESERT_BASE)));
-for(let k=0;k<3;k++) {
+assert.equal(banks.length, DESERT_NAMES.length);
+for(let k=0;k<banks.length;k++) {
   const draft=await prepareDesertBank(k,decode,fetcher);
   assert.equal(draft.name,banks[k].name);
   assert.equal(draft.files.length,banks[k].files.length);
@@ -32,7 +33,8 @@ for(let k=0;k<3;k++) {
     assert(Math.abs(z.median_error_cents)<3);
   }
 }
-assert.equal(calls,15); // 3 manifests + 12 note files
-await assert.rejects(prepareDesertBank(3,decode,fetcher),/Unknown/);
+assert.equal(calls,banks.length+banks.reduce((n,b)=>n+b.files.length,0));
+await assert.rejects(prepareDesertBank(banks.length,decode,fetcher),/Unknown/);
+await assert.rejects(prepareDesertBank(-1,decode,fetcher),/Unknown/);
 await assert.rejects(prepareDesertBank(0,decode,async()=>({ok:false,status:404})),/Cannot load/);
-console.log('desert web: three banks, note roots, WAV integrity, slot capacity and fetch failures pass');
+console.log('desert web: all banks, note roots, WAV integrity, slot capacity and fetch failures pass');

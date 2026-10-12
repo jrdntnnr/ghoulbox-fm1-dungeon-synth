@@ -3,7 +3,7 @@
 /* PHYS engine test (src/eng_phys.c, src/phys_dsp.c, phys_symp.c) on the Mac, through hostsim.c
  * as regress.c.
  *   build/host/phys_test [DEMODIR]          (run_tests.sh: build/phys_demo)
- * 1. stability: every model over notes 0..127 (C-1 .. G9)
+ * 1. stability: the original four models over notes 0..127 (C-1 .. G9)
  *    and the corners of STRC, BRIT, DAMP, POS, BOW and EXC (full accent), one strike / pluck / hit each: the
  *    model output (Q20, before the engine's gain and knee) stays within +-16 (the strings +-24: they clip at
  *    +-20 by design, DaisySP's clamp; SYMP +-32: that string and its sympathetic strings), the mode states
@@ -27,7 +27,7 @@
 #endif
 
 static int fails;
-static const char *const MN[PM_COUNT] = {"MODAL", "STRING", "MEMB", "SYMP"};
+static const char *const MN[PM_COUNT] = {"MODAL", "STRING", "MEMB", "SYMP", "RETIRED", "SANTUR"};
 
 /* ------------------------------------------------------------ stability --- */
 typedef struct { int32_t peak; int64_t sum; uint32_t n, clamp; int32_t tail; } st_t;
@@ -96,7 +96,7 @@ static void stability(void)
     static const int32_t STRC[] = {0, 16384, 17039, 39321, 65535}, C2[] = {0, 65535};
     uint32_t md, ni, a, b, c, d, e, cases = 0, bad = 0;
     int32_t worst[PM_COUNT] = {0};
-    for (md = 0; md < PM_COUNT; md++)
+    for (md = 0; md < PM_RETIRED; md++) /* SANTUR: engine torture + sourced_synth_test audio/pitch checks */
         for (ni = 0; ni < sizeof NOTES; ni++)
             for (a = 0; a < 5u; a++)
                 for (b = 0; b < 2u; b++)
@@ -131,8 +131,8 @@ static void stability(void)
                                 }
                             }
     printf("phys_test: stability: %u renders (%u models x notes 0..127 x STRC, BRIT, DAMP, POS, BOW corners), largest output",
-           cases, (uint32_t)PM_COUNT);
-    for (md = 0; md < PM_COUNT; md++)
+           cases, (uint32_t)PM_RETIRED);
+    for (md = 0; md < PM_RETIRED; md++)
         printf(" %s %.2f", MN[md], worst[md] / 1048576.0);
     printf(" (limit 16, strings 24, SYMP 32): %s\n", bad ? "FAIL" : "ok");
     fails += bad != 0;
@@ -259,6 +259,8 @@ static void cost(void)
         {"MEMB struck, 10 modes, bend", PM_MEMB, {PM_MEMB, 64, 127, 127, 64, 127, 127, 127}},
         {"SYMP, 3 sympathetic strings", PM_SYMP, {PM_SYMP, 64, 127, 127, 127, 127, 0, 127}},
         {"SYMP, curved bridge", PM_SYMP, {PM_SYMP, 127, 127, 127, 127, 127, 127, 127}},
+        {"SANTUR, struck three-string course", PM_SANTUR, {PM_SANTUR, 127, 127, 127, 127, 127, 0, 127}},
+        {"SANTUR, sustained course", PM_SANTUR, {PM_SANTUR, 127, 127, 127, 127, 127, 127, 127}},
     };
     uint32_t i, ok = 1;
     double idle = cpu(0, 0, 0, 0), wire = cpu(2, 5, 0, 8) - idle, worst = 0, modal = 0;
@@ -309,7 +311,7 @@ static void demo_write(const char *dir, const char *name, uint32_t secs, void (*
 }
 
 /* a phrase per preset: (time in 1/8 s, note, length in 1/8 s, velocity); chords share a time */
-#define NPHRASE 13
+#define NPHRASE 17
 static const uint8_t PHRASE[NPHRASE][24][4] = {
     {{0, 84, 6, 110}, {6, 91, 6, 80}, {12, 96, 6, 100}, {20, 88, 8, 70}, {28, 79, 10, 110}, {29, 86, 10, 90},
      {30, 91, 10, 90}, {44, 84, 12, 120}},                                                  /* BELL TREE */
@@ -342,6 +344,10 @@ static const uint8_t PHRASE[NPHRASE][24][4] = {
      {12, 46, 6, 100}, {13, 53, 6, 90}, {14, 58, 6, 90}, {15, 62, 6, 100}, {16, 65, 8, 110}},   /* DUNGEON HARP */
     {{0, 50, 32, 110}, {0, 57, 32, 90}, {4, 62, 6, 100}, {10, 64, 2, 90}, {12, 65, 8, 100}, {20, 64, 4, 90},
      {24, 62, 8, 110}},                                                                     /* GURDY DRONE */
+    {{0, 60, 2, 100}, {2, 64, 2, 90}, {4, 67, 6, 110}}, /* DESERT OUD */
+    {{0, 60, 2, 100}, {2, 64, 2, 90}, {4, 67, 6, 110}}, /* BRASS QANUN */
+    {{0, 60, 2, 100}, {2, 64, 2, 90}, {4, 67, 2, 110}, {8, 71, 6, 100}, {16, 60, 12, 110}}, /* SANTUR */
+    {{0, 48, 6, 100}, {3, 55, 6, 90}, {6, 60, 12, 100}, {24, 64, 16, 90}}, /* DUSK SANTUR */
 };
 static void play_preset(uint32_t f, uint32_t pi)
 {
@@ -380,7 +386,7 @@ static void play_model(uint32_t f, uint32_t md)
 
 static void demos(const char *dir)
 {
-    static const char *const MD[PM_COUNT] = {"model_modal", "model_string", "model_memb", "model_symp"};
+    static const char *const MD[PM_COUNT] = {"model_modal", "model_string", "model_memb", "model_symp", "model_reserved", "model_santur"};
     uint32_t i;
     char name[64];
     for (i = 0; i < ENG_PHYS.npresets && i < NPHRASE; i++) {

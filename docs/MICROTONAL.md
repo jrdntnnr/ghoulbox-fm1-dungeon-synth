@@ -5,12 +5,30 @@ This branch combines GHOULBOX 1.4 (`b61a931`) and Felucca 1.5.1 (`a4d7ca2`) with
 ## Play Rast or Bayati
 
 1. Select the track and its sound.
-2. Open **SCL**. Choose **ROOT C**, **SCL RAST**. E and B sound 50 cents below their normal pitches in every octave; C and G stay unchanged.
-3. Choose **QNT WHITE** to put successive scale notes on the white keys. **OFF** keeps the normal chromatic keyboard while applying the selected tuning; **SNAP** snaps keyboard notes into the scale; **SEQ** also snaps sequencer notes. The scale's tuning applies to played notes in every mode.
+2. Open **SCL**. Choose **ROOT C**, **MAQAM RAST**. E and B sound 50 cents below their normal pitches in every octave; C and G stay unchanged.
+3. Choose **MAP CHR** for the familiar piano layout, **WHITE** for successive scale degrees on white keys, or **ALL** for successive degrees on every physical key, including black keys. Keep **CHORD OFF** for individual melody notes. The scale's tuning applies in every mapping mode.
 4. Move through the SCL pages to **TUNE 1**, **TUNE 2**, **TUNE 3**. These adjust the twelve chromatic keys relative to ROOT, in one-cent steps from −63 to +63.
 5. Save the **project** to retain the scale, root and trims for each track.
 
-For Bayati, choose **ROOT D**, **SCL BAYATI**. Its second degree, E, is half-flat. The playable white-key layout follows the tonic. Keys in the scale diagram have a downward arrow when flattened, an upward arrow when sharpened (normal display mode).
+For Bayati, choose **ROOT D**, **MAQAM BAYATI**. Its second degree, E, is half-flat. Keys in the scale diagram have a downward arrow when flattened, an upward arrow when sharpened (normal display mode).
+
+## Keyboard mapping is separate from tuning
+
+| MAP | Physical keys |
+| --- | --- |
+| CHR | Ordinary chromatic note identities, with the chosen tuning applied. The default. |
+| WHITE | Successive scale degrees on white keys; black keys silent. |
+| ALL | Every successive physical key advances one scale degree. |
+| SNAP | Each key moves down to a scale member; neighboring keys can converge. |
+| SEQ | SNAP for the keyboard and sequencer playback; stored steps stay unchanged. |
+
+WHITE and ALL anchor the physical C4 key to the selected tonic in octave 4 (before OCT/TRN). For C Rast, ALL maps physical C4, C#4, D4, D#4, E4, F4, F#4, G4 to sounding C4, D4, E half-flat4, F4, G4, A4, B half-flat4, C5. The keyboard labels identify physical keys; they do not change with the mapping. ALL makes notes outside MIDI's 0–127 range silent instead of duplicating an endpoint. Drums retain their own key map. External MIDI supplies note identities directly; it receives tuning, not the physical-key layout.
+
+The twelve-note scale diagram shows pitch classes and their tuning, not a picture of the remapped physical keyboard. With SCALE LEDS enabled, key lights follow the selected mapping.
+
+For accompaniment and melody on the small FM-1 keyboard, record chords on one track, then play another track with MAP CHR and CHORD OFF while the sequence runs. Both tracks retain independent tunings; no keyboard split is needed.
+
+Saved mapping IDs 0–3 remain unchanged. ALL is appended at 4. The device displays the old QNT OFF setting as MAP CHR; protocol and library identifiers remain QNT/OFF for compatibility. The MAQAM card also offers western scales and custom tunings; these presets do not model a maqam's full melodic behavior.
 
 The tuning pages show **additional trims**, not the factory offset. In C Rast, the control **3** at `0 ct` means E is already −50 cents. Set it to `+13 ct` for E at −37 cents, or `−13 ct` for E at −63 cents. Set it to `+50 ct` to restore equal-tempered E. Trims remain when you change scales or load another sound; return all twelve to zero for an unmodified factory tuning.
 
@@ -29,6 +47,8 @@ Choose a polyphonic engine such as ANALOG or FM6. GURDY retains its one-voice in
 For C Rast, DIA7 on C plays C, E half-flat, G and B half-flat. Set the **3** trim to +13 ct and only E changes from −50 to −37 cents. For D Bayati, a generated chord on E includes the half-flat E; the tonic D triad does not contain that second degree. The screen says **C TUNED** when a voiced note has a cent offset, and arrows mark altered keys. This avoids calling a neutral-third chord ordinary C major.
 
 MAJ/MIN/DOM7 and the other fixed shapes retain their fixed key intervals, with the track's tuning applied afterwards. Use DIA3/DIA7 for scale-derived harmonization. The generator is a creative chord tool, not a model of traditional maqam harmony or melodic development.
+
+DIA3/DIA7 still move out-of-scale roots down, independently of MAP. The SCL and CHORD screens now show the last such move (for example **CHORD SNAP A4 > G#4** in G Hijaz), including MONO/LEGATO root-only playing. CHR with CHORD OFF never performs that chord-root snapping. Changing a mapping while holding a key still releases the notes that key actually started.
 
 Keyboard, incoming MIDI, chord/UP arpeggiation, chord recording and sequencer playback are covered by automated tests. The test renders every simultaneous oscillator voice across 9,240 combinations of eleven maqam and Shur presets, twelve roots, seven degrees, two chord types and five voicings, with custom trims. All measured errors are below 0.5 cents. The dedicated test also passes ASan/UBSan. External MIDI output remains ordinary note numbers.
 

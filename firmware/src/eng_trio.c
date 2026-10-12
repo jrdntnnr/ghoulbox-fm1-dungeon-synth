@@ -5,7 +5,7 @@
  *
  * Oscillators: triangle, saw, pulse (PW), pitched noise (a new random value 16 times a cycle)
  * and two combined waves (saw AND triangle, pulse AND saw: the bitwise AND of the 16-bit
- * waves, as such chips mix two waveforms). WAVE picks one of 16 sets: the three waves, their
+ * waves, as such chips mix two waveforms). WAVE picks one of 18 sets: the three waves, their
  * levels and the interactions:
  *   RING  osc 1's output flips sign with osc 3's top phase bit (the XOR ring of the triangle;
  *         osc 3 may be silent and only modulate),
@@ -27,19 +27,20 @@
 enum { TW_OFF, TW_TRI, TW_SAW, TW_PLS, TW_NOI, TW_ST, TW_PS };
 #define TRIO_RING 1u
 #define TRIO_SYNC 2u
+#define TRIO_DRONE 4u
 #define TRIO_G3 11000            /* osc level with three oscillators sounding */
 #define TRIO_G2 15000            /* two */
 #define TRIO_G1 24000            /* one */
 
 typedef struct {
     uint8_t w[3];                /* TW_* of osc 1..3 */
-    uint8_t flags;               /* TRIO_RING | TRIO_SYNC */
+    uint8_t flags;               /* TRIO_RING | TRIO_SYNC | TRIO_DRONE */
     int16_t g[3];                /* Q15 levels (0: silent; osc 3 still runs for RING) */
 } trio_set_t;
 
 static const char *const N_TRIO_WAVE[] = {"SAW3", "PLS3", "PPT", "SST", "TRI3", "S&T", "P&S", "P+N",
-                                          "NOIS", "SYNC", "SYNCP", "SYNC3", "RING", "RING3", "R+S", "R+SP"};
-static const trio_set_t TRIO_SETS[16] = {
+                                          "NOIS", "SYNC", "SYNCP", "SYNC3", "RING", "RING3", "R+S", "R+SP", "DUAL", "DRONE"};
+static const trio_set_t TRIO_SETS[] = {
     {{TW_SAW, TW_SAW, TW_SAW}, 0, {TRIO_G3, TRIO_G3, TRIO_G3}},                 /* SAW3 */
     {{TW_PLS, TW_PLS, TW_PLS}, 0, {TRIO_G3, TRIO_G3, TRIO_G3}},                 /* PLS3 */
     {{TW_PLS, TW_PLS, TW_TRI}, 0, {TRIO_G3, TRIO_G3, TRIO_G3 + 3000}},          /* PPT */
@@ -56,6 +57,10 @@ static const trio_set_t TRIO_SETS[16] = {
     {{TW_TRI, TW_OFF, TW_TRI}, TRIO_RING, {TRIO_G2 + 2000, 0, TRIO_G2 - 3000}}, /* RING3 */
     {{TW_TRI, TW_SAW, TW_OFF}, TRIO_RING | TRIO_SYNC, {TRIO_G2 + 2000, TRIO_G2, 0}},   /* R+S */
     {{TW_TRI, TW_PLS, TW_OFF}, TRIO_RING | TRIO_SYNC, {TRIO_G2 + 2000, TRIO_G2, 0}},   /* R+SP */
+    /* Reduced paired-pipe designs after Quilcom SIM-MIJWIZ (see SOURCED-SYNTHS.md).
+     * Our band-limited pulses replace its custom reed wavetables and comb coloration. */
+    {{TW_PLS, TW_PLS, TW_OFF}, 0, {6000, 6000, 0}},                           /* DUAL: headroom for chords */
+    {{TW_PLS, TW_PLS, TW_OFF}, TRIO_DRONE, {4000, 1333, 0}},                 /* DRONE */
 };
 static const char *const N_TRIO_MODE[] = {"LP", "BP", "HP", "NOT"};
 /* filter output = (in * a + bp * b + lp * c) >> 10; HP and notch take k * bp off (k: per block) */
@@ -267,7 +272,7 @@ static void trio_note_on(track_t *t, voice_t *v)
 static void trio_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
 {
     const int16_t *p = t->p;
-    const trio_set_t *ws = &TRIO_SETS[(uint32_t)p[P_E0] & 15u];
+    const trio_set_t *ws = &TRIO_SETS[(uint32_t)p[P_E0] % NELEM(TRIO_SETS)];
     uint32_t w1 = ws->w[0], w2 = ws->w[1], w3 = ws->w[2], i;
     uint32_t ring = ws->flags & TRIO_RING, sync = ws->flags & TRIO_SYNC;
     int32_t g1 = ws->g[0], g2 = ws->g[1], g3 = ws->g[2];
@@ -276,6 +281,12 @@ static void trio_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const 
     uint32_t inc1 = m->inc;
     uint32_t inc2 = trio_inc(m->pitch16, p[P_E1], p[P_E3], fine);
     uint32_t inc3 = trio_inc(m->pitch16, p[P_E2], -p[P_E3], fine);
+    if (ws->flags & TRIO_DRONE) {
+        /* Fixed tonic pipe: INT2 offsets ROOT at C3, not the currently played note.
+         * Resolve this pipe's own cent trim. Melody bends/LFO must not move the drone. */
+        int32_t note = clamp(48 + p[P_ROOT] + p[P_E1], 0, 127);
+        inc2 = cents_inc(note * 16, tuning_cents(t, (uint32_t)note) + song.g[G_TUNE] + p[P_E3], 0);
+    }
     int32_t duty = clamp((p[P_E7] << 8) + m->shape - (64 << 8), 768, 32000);   /* Q15 */
     trio_pw_t q;
     uint32_t mode = (uint32_t)p[P_E4] & 3u;
@@ -355,6 +366,8 @@ static const preset_t TRIO_PRESETS[] = {
     {"MOURN HORN", {1, 0, -12, 5, 0, 40, 25, 50}, {40, 85, 105, 70}, 35, 0, FX(5, 20, 10, 90), PAT(4)},
     {"STRING MACH", {0, 12, 0, 18, 0, 70, 5, 64}, {60, 90, 120, 95}, 0, 0, FX(0, 110, 0, 100), PAT(5)},
     {"SHAWM", {1, 12, 19, 4, 1, 85, 70, 25}, {6, 70, 115, 45}, 10, 1, FX(20, 0, 10, 85), PAT(19)},
+    {"MIJWIZ", {16, 0, 0, 4, 1, 82, 32, 42}, {6, 64, 118, 32}, 0, 0, FX(0, 0, 12, 65), PAT(24)},
+    {"ARGHUL", {17, 0, 0, 0, 0, 79, 22, 46}, {9, 64, 118, 42}, 0, 0, FX(0, 0, 15, 80), PAT(24)},
     /* GHOULBOX end */
 };
 
@@ -362,7 +375,7 @@ static const engine_t ENG_TRIO = {
     .name = "TRIO",
     .page_title = {"OSC", "TONE"},
     .edit = {
-        {"WAVE", F_ENUM, 0, 15, 0, N_TRIO_WAVE, 0},
+        {"WAVE", F_ENUM, 0, NELEM(TRIO_SETS) - 1, 0, N_TRIO_WAVE, 0},
         {"INT2", F_SEMI, -24, 24, 0, 0, 0},
         {"INT3", F_SEMI, -24, 24, -12, 0, 0},
         {"DTN", F_INT, 0, 50, 6, 0, "ct"},

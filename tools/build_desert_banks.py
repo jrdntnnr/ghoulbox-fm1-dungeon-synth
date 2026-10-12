@@ -79,6 +79,9 @@ def main(directory):
         (OUT/(slug+'.hdr')).write_bytes(hdr);(OUT/(slug+'.bin')).write_bytes(data)
         banks.append(dict(name=name,slot=slot,files=files,bytes=len(data),header=slug+'.hdr',data=slug+'.bin'))
         print(name,len(files),'zones',len(data),'of 81408 bytes')
+    # Separately licensed / generated banks (Tar) keep their manifest entries.
+    previous = json.loads((OUT/'banks.json').read_text()) if (OUT/'banks.json').exists() else []
+    banks.extend(b for b in previous if b['name'] not in CUTS)
     (OUT/'banks.json').write_text(json.dumps(banks,indent=2)+'\n')
 
 if __name__ == '__main__':

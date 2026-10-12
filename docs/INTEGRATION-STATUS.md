@@ -1,4 +1,4 @@
-# Microtonal development preview — 2026-10-11
+# Microtonal development preview — 2026-10-12
 
 This fork combines **GHOULBOX 1.4** (`b61a931`) with **Felucca 1.5.1**
 (`a4d7ca2`, plus maintenance commit `ef1f561`). GHOULBOX advanced by 25 commits after the initial 1.1 assessment;
@@ -9,6 +9,45 @@ The public source and releases belong to
 **Status: buildable development preview, not a hardware-validated release.**
 No FM-1 has been flashed or acoustically tested in this work. The broader suite
 still reports UI layout and static target-cost failures described below.
+
+## Current instrument build
+
+The current source adds PHYS SANTUR / DUSK SANTUR and TRIO MIJWIZ / ARGHUL,
+independent compact adaptations of published Quilcom designs. They use the
+existing DSP and allocate no additional synthesis state. See
+[controls and provenance](SOURCED-SYNTHS.md). These additions are on the
+`microtonal` source branch; the previously published preview assets do not
+include them.
+
+- 28 rendered notes across C3–C6, including Rast half flats and a separate
+  cent trim: worst fundamental error **1.529 cents**, with detuning disabled.
+- All four presets render simultaneous microtonal DIA3 chords; note release,
+  project/preset persistence and independently tuned arghul drone checks pass.
+- Native functional tests and all **152 audio golden comparisons** pass.
+  PHYS parameter/model sweeps and host CPU checks pass. The instrument
+  sanitizer run excludes shift and signed-overflow checks used by legacy
+  fixed-point arithmetic.
+- Rebuilt WebAssembly passes audio/MIDI, persistence and Tar import checks.
+  Startup tape hiss is checked separately from exact silence with TAPE off.
+- Editor, web backup, Scala and all sample-bank tests pass independently of
+  the host script's UI-audit stop.
+- Final target build: **575,228-byte application** (6,336 bytes free),
+  **50,548 bytes static RAM**, **332,132-byte SDRAM pool**, 916 instructions
+  in RAM-resident interrupt code with no calls. `build/felucca.fwsc` is
+  610,086 bytes, identity `FM-1_900`, SHA-256
+  `c8eea3ab9ee848003ee71e4eda7cc07a530512b210ee9ed92683107236e392ed`.
+  Update-entry and loader simulations pass against this final package.
+- The full host script still stops at the UI render audit: **596 lint findings
+  and 1,258 alignment findings** over 222 screens and twelve palettes.
+  These are unresolved; the separate functional UI tests pass.
+- The static target estimator flags PHYS at **400 vs 61** and the audio ISR at
+  **45,394 vs 37,502**. PHYS disassembly includes backward jumps from separate
+  model branches into the shared output block; the estimator counts these as
+  loops. Its score is not a measured cycle cost. No budget was raised; device
+  CPU and listening validation remain pending.
+
+The older preview evidence below describes the published build, not this
+instrument update.
 
 ## Preview 2: Dungeons of the Desert
 

@@ -6270,6 +6270,9 @@ static int test_scale_leds(void)
     ok &= sc == white && root == (1u << 7 | 1u << 16 | 1u << 24);
     ui_leds();
     ok &= lit_keys(fm1_led_dim) == white && lit_keys(fm1_led_mid) == root;
+    t->p[P_QUANT] = QN_ALL;                             /* PEN: roots every five physical keys from C4 */
+    sc = scale_leds(&root);
+    ok &= sc == ALL && root == (1u << 2 | 1u << 7 | 1u << 12 | 1u << 17 | 1u << 22);
     t->p[P_QUANT] = QN_OFF;
     t->p[P_SCALE] = 0;                                  /* CHR: every key, the C keys brighter */
     sc = scale_leds(&root);
@@ -6319,8 +6322,9 @@ static int test_seq_quant(void)
     ok = cur_page()->id[2] == P_QUANT && t->p[P_QUANT] == 0;
     turn(EN_K3, 10);
     param_format(&TP[P_QUANT], t->p[P_QUANT], val, &unit);
-    bad += check("SCL KNOB 3 QNT: OFF SNAP WHITE SEQ, SEQ last (default OFF)", ok && t->p[P_QUANT] == 3 &&
-                 str_eq(val, "SEQ"));
+    bad += check("SCL KNOB 3 MAP: legacy values kept, ALL appended (default chromatic)", ok && t->p[P_QUANT] == QN_ALL &&
+                 str_eq(val, "ALL"));
+    t->p[P_QUANT] = QN_SEQ;
     t->p[P_SCALE] = 1;
     t->p[P_ROOT] = 0;
     ok = kb_map(t, 8) == 60u && kb_map(t, 7) == 60u;   /* C#4 key -> C4, as SNAP */
@@ -9676,14 +9680,14 @@ static int test_hidden_presets(void)
     bad += check("hidden presets: 54 names (PIANO covers SAMPLE's two), each one a real preset",
                  ok && NELEM(GB_HIDDEN) == 54u);
     preset_all_pos(&total);
-    ok = total == 64u + (FELUCCA_FM4 ? ENGINES[ENGI_DIGITAL]->npresets : 0u);   /* (+ DIGITAL's, built in; 1.1: + 4 CC0, BAGPIPE) */
+    ok = total == 68u + (FELUCCA_FM4 ? ENGINES[ENGI_DIGITAL]->npresets : 0u);   /* + two santurs, MIJWIZ, ARGHUL */
     for (i = 0; i < total; i++) {
         e = preset_all_at(i, &k);
         ok &= e < NENGINES && !preset_hidden(ENGINES[e], k);
         for (uint32_t j = 0; j < NELEM(KEEP); j++)
             shown += str_eq(ENGINES[e]->presets[k].name, KEEP[j]);
     }
-    bad += check("hidden presets: the PRESETS list holds the 59 kept, none hidden", ok && shown >= NELEM(KEEP));
+    bad += check("hidden presets: the PRESETS list holds the 68 kept, none hidden", ok && shown >= NELEM(KEEP));
     ok = NENG_SHOWN == 13u + FELUCCA_FM4 && eng_ok(ENGI_SLICE);
     for (i = 0, k = 0; i < NENG_SHOWN; i++) {
         ok &= eng_vis(i) != ENGI_SLICE;

@@ -71,6 +71,16 @@ if (typeof registerProcessor === "function") {
       else if (m.type === "master") ex.web_master(m.value | 0);
       else if (m.type === "midi") ex.web_midi(m.data[0] | 0, m.data[1] | 0, m.data[2] | 0);
       else if (m.type === "visible") this.period = m.on ? 1 / 30 : 1 / 4;
+      else if (m.type === "sample") {
+        let result = 1;
+        if (Number.isInteger(m.slot) && m.slot >= 0 && m.slot < 3 &&
+            m.bytes instanceof Uint8Array && m.bytes.length <= ex.web_sample_capacity()) {
+          new Uint8Array(ex.memory.buffer, ex.web_sample_buffer(), m.bytes.length).set(m.bytes);
+          result = ex.web_sample_install(m.slot, m.bytes.length, m.replace ? 1 : 0);
+        }
+        this.port.postMessage({ type: "sample-result", result });
+        if (!result) this.publish();
+      }
     }
 
     publish() {

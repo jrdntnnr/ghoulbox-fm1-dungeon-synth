@@ -223,6 +223,7 @@ static void persistence_test(void)
         q.t[t].p[P_SCALE]=16+t; q.t[t].p[P_TC0+t]=-63+t; q.t[t].p[P_TC11]=63;
     }
     q.t[3].p[P_SCALE]=scale_id("SHUR2");   /* an appended ID saves in GBM2 and loads unclamped */
+    q.t[3].p[P_QUANT]=QN_ALL;              /* new map survives the existing project/preset schema */
     assert(param_fit(&TP[P_SCALE],q.t[3].p[P_SCALE])==q.t[3].p[P_SCALE]);
     assert(q.motion.event[0].param==P_E4 && q.motion.event[0].value==77);
     q.sum=proj_sum(&q); assert(proj_pack(&packed,&q));

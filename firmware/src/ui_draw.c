@@ -722,13 +722,23 @@ static uint32_t foot_rename(void)
     return 0;
 }
 
-/* the sound's name on the track: a user preset or the engine's preset (b holds 16) */
+/* A named user preset wins; otherwise a user sample shows its actual bank (b holds 16). */
 static void sound_name(const track_t *t, char *b)
 {
     const engine_t *e = ENGINES[t->eng_req % NENGINES];
     b[0] = 0;
     if (user_of(t) < UP_SLOTS)
         up_name(user_of(t), b);
+    else if (t->eng_req == ENGI_SAMPLE && t->p[P_E0] >= SMP_USR_V0 && t->p[P_E0] < SMP_USR_V0 + SMP_USER_SLOTS) {
+        uint32_t slot = (uint32_t)t->p[P_E0] - SMP_USR_V0, i;
+        const smp_user_hdr_t *h = (const smp_user_hdr_t *)smp_user_xip(slot);
+        if (usr_nz[slot]) {
+            for (i = 0; i < 8u && h->name[i]; i++)
+                b[i] = h->name[i] >= 32 && h->name[i] <= 126 ? h->name[i] : '?';
+            b[i] = 0;
+        }
+        if (!b[0]) str_cpy(b, SMP_ALL_NAMES[t->p[P_E0]], 16);
+    }
     else if (e->npresets)
         str_cpy(b, e->presets[t->preset % e->npresets].name, 16);
 }
@@ -1222,7 +1232,11 @@ static void draw_columns(void)
             draw_column(c, d->label, val, unit, T_DIM, RATIO(d, *vp), param_icon(d, *vp));
             continue;
         }
-        draw_column(c, d->label, val, unit, VAL(c), d->fmt == F_ENUM && d->max < 2 ? -1 : RATIO(d, enum_rank(d, *vp)),
+        /* Display names only: protocol/library labels SCL and QNT remain stable. */
+        const char *label = vp == &TSEL->p[P_SCALE] ? "MAQAM" : vp == &TSEL->p[P_QUANT] ? "MAP" :
+                            vp == &TSEL->p[P_CHRD] ? "CHORD" : d->label;
+        if (vp == &TSEL->p[P_QUANT] && *vp == QN_OFF) str_cpy(val, "CHR", sizeof val);
+        draw_column(c, label, val, unit, VAL(c), d->fmt == F_ENUM && d->max < 2 ? -1 : RATIO(d, enum_rank(d, *vp)),
                     param_icon(d, *vp));
     }
 }

@@ -108,6 +108,41 @@ static void appended_test(void)
     puts("scales: CUSTOM stays at 40; SHUR1/2 map the same WHITE and SNAP keys");
 }
 
+static void all_keys_test(void)
+{
+    track_t *t = &trk[0];
+    t->engine = t->eng_req = 0;
+    assert(QN_OFF == 0 && QN_SNAP == 1 && QN_WHITE == 2 && QN_SEQ == 3 && QN_ALL == 4);
+    t->p[P_QUANT] = QN_ALL;
+    /* Walk membership a semitone at a time as an independent reference, including
+     * below C4, all tonics, and sparse custom scales at the MIDI limits. */
+    for (unsigned s = 0; s < NELEM(SCALE_MASK); s++)
+    for (unsigned custom = 0; custom < (s == SCALE_CUSTOM_ID ? 3u : 1u); custom++)
+    for (int root = 0; root < 12; root++)
+    for (int oct = -3; oct <= 3; oct++)
+    for (int trans = -24; trans <= 24; trans += 24) {
+        t->p[P_SCALE] = s; t->p[P_ROOT] = root; t->p[P_TRANS] = trans; song.octave = oct;
+        t->p[P_TMASK0] = custom == 0 ? 63 : custom == 1 ? 1 : 5;
+        t->p[P_TMASK1] = custom == 0 ? 63 : 0;
+        unsigned mask = scale_mask(t), prev = KB_SILENT;
+        for (int k = 0; k < 27; k++) {
+            int offset = 0, count = k - 7, dir = count < 0 ? -1 : 1;
+            while (count) {
+                offset += dir;
+                if ((mask >> ((offset % 12 + 12) % 12)) & 1u) count -= dir;
+            }
+            int want = 60 + root + offset + 12 * oct + trans;
+            unsigned got = kb_map(t, k);
+            assert(got == (want < 0 || want > 127 ? KB_SILENT : (unsigned)want));
+            if (got != KB_SILENT) { assert(prev == KB_SILENT || got > prev); prev = got; }
+        }
+    }
+    song.octave = 0; t->p[P_TRANS] = 0;
+    host_preset(t, ENGI_DRUM, 0); t->engine = t->eng_req = ENGI_DRUM;
+    for (unsigned k = 0; k < 27; k++) assert(kb_map(t, k) == 29u + k);
+    puts("scales: ALL keys, every scale/tonic, sparse CUSTOM, range limits, stable IDs and drum bypass pass");
+}
+
 static void key_events_test(void)
 {
     track_t *t = &trk[0];
@@ -460,6 +495,7 @@ int main(void)
     host_tracks_init();
     mapping_test();
     appended_test();
+    all_keys_test();
     key_events_test();
     seq_quant_test();
     arp_follow_test();

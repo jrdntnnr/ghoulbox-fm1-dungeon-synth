@@ -26,10 +26,10 @@ static const char *const PRESET_CAT[16] = {
     "LBLLLLPL",                     /* 3 LOFI: PULSE LD, WAVE BASS, ARP 8BIT, WAVE LEAD, STEP LEAD */
     "KKLLKPKLU",                      /* 4 SAMPLE: PIANO, (PIANO: the retired TRANH's alias), FLUTE, SAX */
     "PLBFPPFB",                      /* 5 VOICE: CHOIR AAH, VOX LEAD, WOW BASS, WHISPER */
-    "BLLUPPLPL",                     /* 6 TRIO: FAT BASS, ARP LEAD, SYNC LEAD, RING BELL, CHIP CHOIR */
+    "BLLUPPLPLLL",                   /* 6 TRIO: appended MIJWIZ / ARGHUL leads */
     "KKKKKKKKLL",                     /* 7 WHEEL: the organs */
     "PFPP",                      /* 8 GRAIN: CLOUD PAD, GLITCH, FROZEN, SHIMMER */
-    "UUUPUDDPUUKUPUU",                 /* 9 PHYS: BELL TREE, MARIMBA, PLUCK, BOWED METAL, KALIMBA, HAND DRUM, TOMS, DRONE
+    "UUUPUDDPUUKUPUUUU",               /* 9 PHYS: appended SANTUR / DUSK SANTUR plucks; BELL TREE, MARIMBA, PLUCK, BOWED METAL, KALIMBA, HAND DRUM, TOMS, DRONE
                                   * STRING, HARP */
     "DDDD",                         /* 10 DRUM: DRUM KIT */
     "FFFFFFF",                      /* 11 NOISE: WIND, RAIN, ARCADE, METAL */
