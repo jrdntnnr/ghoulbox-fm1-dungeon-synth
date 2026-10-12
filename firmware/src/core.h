@@ -421,6 +421,17 @@ static track_t trk[NTRK];        /* the instrument: four parts */
 /* a sound loaded over sounding notes (voice.c sound_change; after SLOOP 2.6, isod89): the sound they fade out with */
 static int16_t snd_old[NTRK][P_COUNT];
 static volatile uint8_t snd_fading;     /* bit per track: a fade with snd_old under way */
+/* GHOULBOX: the drone latch of track i (seq.c, GLO + F#4..C#5): live notes sound on after their keys. Not stored;
+ * apart from track_t, whose size every trk[i] in the code is indexed by */
+typedef struct {
+    uint8_t on;                  /* the UI's switch (ui_layer.c), 0 / 1 */
+    uint8_t onp;                 /* in effect, as last seen by the ISR (seq.c latch_on): on -> off ends the drone */
+    uint8_t stop;                /* this press stopped the drone: its notes stay silent until every key is up */
+    uint16_t phys;               /* live note-ons not let go yet (0: the next one starts a new chord) */
+    uint32_t m[4];               /* the drone: a bit per latched note */
+    uint32_t out[4];             /* .. those whose MIDI OUT note-off waits for the drone's end (the keys') */
+} latch_t;
+static latch_t lt[NTRK];
 static song_t song;
 #define TSEL (&trk[song.sel])    /* the selected track */
 
@@ -443,6 +454,7 @@ static inline uint32_t swing_step_len(const track_t *t, uint32_t base, uint32_t 
 /* ----------------------------------------------------------- system --- */
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")   /* slot store before the index update */
 static volatile uint32_t fm1_ms;  /* milliseconds since boot (TIMER4-based, TIMER5 ISR in main.c) */
-/* boot-loop guard (main.c): two boots in a row that die in the first 30 s -> UBOOT */
-#define BOOTGUARD_MAGIC 0x42475244u
-struct { uint32_t magic, failed, pending; } bootguard __attribute__((section(".noinit")));
+/* boot-loop guard (main.c, bootguard.h): two boots in a row that die in the first 30 s -> the USB RESCUE (rescue.c),
+ * a reset there -> UBOOT */
+#include "bootguard.h"
+bootguard_t bootguard __attribute__((section(".noinit")));
