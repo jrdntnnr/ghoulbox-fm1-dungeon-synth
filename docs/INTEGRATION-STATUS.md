@@ -1,16 +1,70 @@
-# Microtonal development preview — 2026-10-12
+# SARDAB 2.1 development preview — 2026-10-13
 
-This fork combines **GHOULBOX 1.4** (`b61a931`) with **Felucca 1.5.1**
-(`a4d7ca2`, plus maintenance commit `ef1f561`). GHOULBOX advanced by 25 commits after the initial 1.1 assessment;
-those changes are integrated. Both histories are retained as merge parents.
-The public source and releases belong to
+This fork integrates selected **Ghoulbox 2.1** changes (`eaf04bd`) into our
+**Felucca 1.5.1 / SLOOP** base, retaining maqam tuning, Scala import, tuned chords
+and our instruments. [Controls and migration](GHOULBOX-2-INTEGRATION.md).
+The source and deployments belong to
 [jrdntnnr/ghoulbox-fm1-dungeon-synth](https://github.com/jrdntnnr/ghoulbox-fm1-dungeon-synth).
 
 **Status: buildable development preview, not a hardware-validated release.**
-No FM-1 has been flashed or acoustically tested in this work. The broader suite
-still reports UI layout and static target-cost failures described below.
+No FM-1 has been flashed or acoustically tested in this work.
 
-## Current instrument build
+## Current combined build
+
+- **DESERT** groups our nine synthesized sounds and SAMPLE **USR1/2/3**.
+  Device category browsing, loading and settings restoration pass; the editor
+  exposes the same collection. Sample banks are uploaded separately.
+- Application **579,304 / 581,564 bytes** (2,260 free); static RAM
+  **56,068 / 73,728**; SDRAM pool **333,172 / 368,640**. The RAM interrupt
+  section is 916 instructions with no calls. All checked target budgets pass,
+  including CAVE/TORCH. Boot artwork/keycaps are compressed losslessly.
+- Package **610,086 bytes**, identity `FM-1_900`, SHA-256
+  `2ab4bd41b416f432b0068c2ffc8117da0c023508ba19825403a9f7b94c082e76`.
+  On-device version is SARDAB 2.1 / Ghoulbox 2.1-dune.
+- Frozen old SARDAB and upstream 2.1 project/preset migrations pass. Settings
+  tests cover the shifted note-name, click, timeout and scene fields and preserve
+  the saved restore-session choice. Layout, latch, crank, microtonal chord,
+  pitch, storage, backup and editor functional checks pass.
+- All **152 audio reference renders** and **720 engine-switch renders** pass
+  after the intentional twelve-voice reference update. Rebuilding the same
+  integration with eight voices reproduces every old reference. No other
+  audio reference changes were accepted.
+- Maqam + temperament + owner-trim pitch measurements stay within **0.5 cents**.
+  Instrument, sample-bank, Scala and WebAssembly audio/persistence checks pass.
+  Update-entry and loader simulations pass against this exact package.
+- The broad host suite is **not fully green**. The UI audit reports **596 lint
+  findings and 968 alignment findings**, versus the earlier 596 / 1,258;
+  those findings remain unresolved. The PHASER host-cost estimate is about
+  **148 extra instructions/sample**, just over its 2.5% estimate threshold.
+  The same failure reproduces on the unchanged `b9d47b7` source with this
+  compiler. No budget was relaxed to hide it. Device CPU headroom and listening
+  checks remain pending.
+
+The expanded SAMPLE preset table required updating two old fixed-count tests;
+the corrected sample and MIDI program-change checks pass independently.
+Validation logs are in `build/assessment/ghoulbox-2/`.
+[Flashing instructions and exact package](FLASHING.md).
+
+## Device build from b9d47b7
+
+Rebuilt after the SLOOP port on 2026-10-12. Application **579,484 bytes**
+(2,080 free); static RAM **52,724 / 73,728**; SDRAM pool **332,132 / 368,640**.
+The 610,086-byte `FM-1_900` package has SHA-256
+`fedac81c9a026e213c17e66e04743899a327f925df1c8cbdd30f3b024ddf2301`.
+
+The target-cost check passes against the budgets supplied in this revision.
+All 152 audio goldens pass against this revision's updated reference files.
+Texture, idle buses, limiter, sound switching, tuning/chords, project/preset
+storage, backup, MIDI, editor and functional UI checks pass. The 28 instrument
+pitch measurements remain within 1.529 cents with detuning disabled; all four
+microtonal chord renders pass. Rebuilt emulator and Tar import checks pass,
+as do update-entry, loader and command-line installer simulations. No physical
+installation has been performed. The previous full UI render audit was not
+repeated and its findings remain unresolved.
+
+[Flashing instructions and exact package](FLASHING.md).
+
+## Earlier instrument build (d0bd9bc)
 
 The current source adds PHYS SANTUR / DUSK SANTUR and TRIO MIJWIZ / ARGHUL,
 independent compact adaptations of published Quilcom designs. They use the

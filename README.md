@@ -1,6 +1,6 @@
 # GHOULBOX: FM-1 Dungeon Synth
 
-**Microtonal development fork:** GHOULBOX 1.4 + Felucca 1.5.1, 40 factory scales, editable maqam tunings, Scala import and tuned chord generation. [Controls and compatibility](docs/MICROTONAL.md) · [Build/validation status](docs/INTEGRATION-STATUS.md). Hardware validation is pending.
+**SARDAB 2.1 development fork:** Ghoulbox 2.1 features + Felucca 1.5.1 and SLOOP, 42 factory scales, editable maqam tunings, Scala import and tuned chord generation. [Controls and compatibility](docs/MICROTONAL.md) · [Build/validation status](docs/INTEGRATION-STATUS.md). Hardware validation is pending.
 
 ![GHOULBOX 1.0: boot, HOME, PRESETS, MENU](docs/ghoulbox-1.0.png)
 
@@ -8,11 +8,23 @@
 [Felucca](https://github.com/hugelton/Felucca) by Hügelton Instruments (1.0.5.2), tuned for dark ambient,
 medieval and fantasy synth music, from Old Tower and Hole Dweller to Mortiis-era dungeon synth.
 
-**Microtonal preview based on 1.4.** [Install it](https://jrdntnnr.github.io/ghoulbox-fm1-dungeon-synth/) ·
+**SARDAB 2.1 development preview.** [Install it](https://jrdntnnr.github.io/ghoulbox-fm1-dungeon-synth/) ·
 [watch the original GHOULBOX demo](https://github.com/jasonpersinger/ghoulbox-fm1-dungeon-synth/releases/download/ghoulbox-v1.3/ghoulbox-demo-1.3.mp4) ·
 [read the guide (PDF)](docs/guide/GHOULBOX-User-Guide-1.4.pdf)
 
 ## What's new
+
+### SARDAB 2.1 — DESERT section and Ghoulbox integration
+
+Open **PRESETS → LIST (knob 4) → DESERT** for all nine of our synthesized
+sounds plus **USR1 / USR2 / USR3**. The USR entries play the sample banks you
+have uploaded; an empty slot is silent.
+
+Also includes USB rescue, twelve shared voices, drone latch, optional
+layer/split, GURDY crank, tuned note labels, temperaments and CAVE/TORCH
+textures. Our maqam tuning, chord generation, Scala import and saved-data
+migration remain intact. [Controls and compatibility](docs/GHOULBOX-2-INTEGRATION.md)
+· [Flashing instructions](docs/FLASHING.md).
 
 ### Dungeons of the Desert — microtonal preview 2
 
@@ -110,11 +122,16 @@ step, a minor-key chord cheat sheet and dungeon recipes; recording, troubleshoot
 
 In Chrome or Edge on a computer, with the FM-1 on a USB **data** cable and no other music app open:
 
-**[jasonpersinger.github.io/ghoulbox-fm1-dungeon-synth](https://jrdntnnr.github.io/ghoulbox-fm1-dungeon-synth/)**
+**[jrdntnnr.github.io/ghoulbox-fm1-dungeon-synth](https://jrdntnnr.github.io/ghoulbox-fm1-dungeon-synth/)**
 
-Press Install. The installer saves a full backup of your music, sounds and settings before it writes
-anything. If it stops after "update mode", replug the USB cable and press Install again: the FM-1 stays in
-update mode until the install is finished.
+Before installing, save anything you need to keep. On firmware that supports it,
+use the editor's **Complete backup → Save backup**, then close its MIDI connection.
+The normal **Install** button does not automatically create a backup; stock M-VAVE
+firmware does not support this editor's complete backup protocol.
+Press **Install** and allow MIDI/SysEx access. Keep USB connected until **Done** and
+the FM-1 restarts. If the installer reports that it stopped in update mode, replug
+the USB cable and press Install again: the FM-1 stays in update mode until the
+install is finished.
 
 To go back, install Felucca from [its installer](https://hugelton.github.io/Felucca/) and restore the
 backup in its editor; its "Return to official V15" returns to M-VAVE's firmware. The package (and the user

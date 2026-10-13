@@ -48,6 +48,25 @@ int main(void)
     }
     original.favorites.factory[15][13] = GB_MIG_SERIAL;
     original.favorites.factory[15][30] = GB_SERIAL_OFF;
+    {   /* Ghoulbox 2.1: shifted settings must remain independent after migration. */
+        persist_t q = original, again;
+        q.magic = 0x50455234u;
+        q.favorites.factory[15][12] = 0x19; /* CLICK REC, LEVEL HIGH, COUNT-IN 1 BAR */
+        q.favorites.factory[15][24] = 0x0D; /* NAMES OFF plus independent low bits */
+        q.favorites.factory[15][25] = 7;    /* SCREEN OFF 60 MIN */
+        q.favorites.factory[15][27] = 3;    /* CHAPEL */
+        q.favorites.factory[15][28] = GB_MIG_SERIAL;
+        q.favorites.factory[15][30] |= 0x80; /* RESTORE LAST OFF */
+        assert(settings_import(&q, sizeof q - 32) == 2);
+        assert(q.favorites.factory[15][12] == 3 && q.favorites.factory[15][24] == 0x15);
+        assert(q.favorites.factory[15][27] == 7 && q.favorites.factory[15][28] == 0x19);
+        assert(q.favorites.factory[15][30] & 0x80);
+        again = q;
+        assert(settings_import(&again, sizeof again) == 1 && !memcmp(&q, &again, sizeof q));
+        q = original; q.favorites.factory[15][11] = 9;
+        assert(settings_import(&q, sizeof q) == 1 && favorites.factory[15][11] == 9);
+        puts("settings: Ghoulbox 2.1 names, timeout, click, scene, restore choice; DESERT category preserved");
+    }
     {   /* GHOULBOX 1.4 scene/serial cannot become Felucca screen timeout/click. */
         persist_t q = original;
         q.magic = 0x50455234u;

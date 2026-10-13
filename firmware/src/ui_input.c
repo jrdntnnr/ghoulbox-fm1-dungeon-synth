@@ -1345,10 +1345,126 @@ static void sample_notice(void)
     }
 }
 
+/* GHOULBOX 2.1: MENU > CONTROL > NOTE NAMES: what the keys play, named in the header while they are held (a lower
+ * message than any other: never over one; it fades as messages do once the keys are up). One note: its name and
+ * octave (D4); two a fifth apart: a power chord (D5), other twos and shapes it does not know: their names (D F#);
+ * three or more: the chord (Dm, Bb, A7, Gsus4), its root the bass when it can be, another bass after a slash (C/E).
+ * The keys' own notes and their chords (kb_chord, LAYER's kb_chord2), whichever track plays them */
+static const char *const NN_NAME[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"};
+static const struct { uint16_t mask; char name[5]; } NN_CHORD[] = {   /* intervals from the root, bit i = i semitones */
+    {0x091, ""}, {0x089, "m"}, {0x049, "dim"}, {0x111, "aug"}, {0x085, "sus2"}, {0x0A1, "sus4"},
+    {0x491, "7"}, {0x891, "maj7"}, {0x489, "m7"}, {0x249, "dim7"}, {0x449, "m7b5"}, {0x291, "6"}, {0x289, "m6"},
+    {0x095, "add9"}, {0x4A1, "7sus"},
+};
+static uint32_t names_mask(uint32_t *bass)
+{
+    uint32_t k, i, m = 0, lo = 128;
+    for (k = 0; k < 27u; k++) {
+        if (!((fm1_in.notes >> k) & 1u))
+            continue;
+        for (i = 0; i < kb_chn[k]; i++) {
+            m |= 1u << (kb_chord[k][i] % 12u);
+            if (kb_chord[k][i] < lo) lo = kb_chord[k][i];
+        }
+        for (i = 0; i < kb_chn2[k]; i++) {
+            m |= 1u << (kb_chord2[k][i] % 12u);
+            if (kb_chord2[k][i] < lo) lo = kb_chord2[k][i];
+        }
+    }
+    *bass = lo;
+    return m;
+}
+static void names_of(uint32_t m, uint32_t bass, char *out)
+{
+    uint32_t n = 0, r, c, i, b = bass % 12u;
+    for (i = 0; i < 12u; i++)
+        n += (m >> i) & 1u;
+    out[0] = 0;
+    if (n == 1u) {                                      /* one note: its name and octave */
+        str_cpy(out, NN_NAME[b], 4);
+        fmt_int(out + str_len(out), (int32_t)bass / 12 - 1);
+        return;
+    }
+    if (n == 2u && (m >> ((b + 7u) % 12u)) & 1u) {      /* a fifth over the bass: a power chord */
+        str_cpy(out, NN_NAME[b], 4);
+        str_cpy(out + str_len(out), "5", 2);
+        return;
+    }
+    for (c = 0; n >= 3u && c < 12u; c++) {             /* the bass as the root first, then the others */
+        r = (b + c) % 12u;
+        if (!((m >> r) & 1u))
+            continue;
+        for (i = 0; i < NELEM(NN_CHORD); i++)
+            if (((m >> r | m << (12u - r)) & 0xFFFu) == NN_CHORD[i].mask) {
+                str_cpy(out, NN_NAME[r], 4);
+                str_cpy(out + str_len(out), NN_CHORD[i].name, 6);
+                if (r != b) {                           /* another bass: a slash chord */
+                    str_cpy(out + str_len(out), "/", 2);
+                    str_cpy(out + str_len(out), NN_NAME[b], 4);
+                }
+                return;
+            }
+    }
+    for (c = 0; c < 12u && str_len(out) < 15u; c++)    /* a shape it does not know: the names, from the bass */
+        if ((m >> ((b + c) % 12u)) & 1u) {
+            if (out[0]) str_cpy(out + str_len(out), " ", 2);
+            str_cpy(out + str_len(out), NN_NAME[(b + c) % 12u], 16u - str_len(out));
+        }
+}
+static int names_tuned(uint32_t *note, int32_t *cents)
+{
+    uint32_t k, j, side;
+    for (k = 0; k < 27u; k++) if ((fm1_in.notes >> k) & 1u)
+        for (side = 0; side < 2u; side++) {
+            uint32_t count = side ? kb_chn2[k] : kb_chn[k];
+            const uint8_t *notes = side ? kb_chord2[k] : kb_chord[k];
+            uint32_t tr = side ? kb_trk2[k] - 1u : kb_trk[k];
+            if (tr >= NTRK) continue;
+            for (j = 0; j < count; j++) {
+                int32_t c = tuning_cents(&trk[tr], notes[j]);
+                if (c) { *note = notes[j]; *cents = c; return 1; }
+            }
+        }
+    return 0;
+}
+static void names_notice(void)
+{
+    static char said[16];                               /* the name this put up (another message: not this) */
+    char n[16];
+    uint32_t bass, m;
+    if (ui_prefs2 & (PREF_NAMES_OFF >> 16))           /* (a bit of ui_prefs2, as CHORD ENTRY's) */
+        return;
+    m = names_mask(&bass);
+    if (!m)                                             /* the keys up: the name fades as a message does (still this
+                                                         * one's: the next key, played before it has gone, renames it) */
+        return;
+    if (ui.msg_t && !str_eq(ui.msg, said))              /* another message showing: it stays */
+        return;
+    {
+        uint32_t note; int32_t cents;
+        ui.msg2[0] = 0;
+        if (names_tuned(&note, &cents)) {
+            if (!(m & (m - 1u))) names_of(m, bass, n);
+            else str_cpy(n, "TUNED", sizeof n);
+            str_cpy(ui.msg2, (m & (m - 1u)) ? NN_NAME[note % 12u] : "", 4);
+            str_cpy(ui.msg2 + str_len(ui.msg2), ui.msg2[0] ? (cents > 0 ? " +" : " ") : (cents > 0 ? "+" : ""), 3);
+            fmt_int(ui.msg2 + str_len(ui.msg2), cents);
+            str_cpy(ui.msg2 + str_len(ui.msg2), "ct", 3);
+            str_cpy(n + str_len(n), " ", sizeof n - str_len(n));
+            str_cpy(n + str_len(n), ui.msg2, sizeof n - str_len(n));
+            ui.msg2[0] = 0;
+        } else names_of(m, bass, n);
+    }
+    str_cpy(ui.msg, n, sizeof ui.msg);
+    str_cpy(said, n, sizeof said);
+    ui.msg_t = 40;                                      /* held on while the keys are */
+}
+
 /* messages of things that happened elsewhere (a load, the editor, MIDI in): after this frame's own */
 static void ui_notices(void)
 {
     static uint32_t midi_t, midi_last;
+    names_notice();
     sample_notice();
     ml_poll();                                          /* (MIDI LEARN: a CC came for the picked parameter) */
     if (motion_full) { motion_full = 0; ui_message("AUTOMATION FULL"); }
@@ -1402,9 +1518,33 @@ static void midi_cc_apply(void)
         }
 }
 
+/* GHOULBOX: SELECT is the crank while a track cranks (eng_gurdy.c, COUP CRANK): its clicks, either way, with the
+ * input scan's frame of the last one; the tempo is then GLO + SELECT's (and HOME > CLOCK's). The first turn from a
+ * track that does not crank says so, once while the crank is there. 1: SELECT was the crank's */
+static int crank_select(void)
+{
+    static uint8_t told;
+    uint32_t k;
+    int32_t s;
+    for (k = 0; k < NTRK && !crank_track(&trk[k]); k++)
+        ;
+    if (k == NTRK) {
+        told = 0;
+        return 0;
+    }
+    if ((s = panel_enc(EN_SELECT)) != 0) {
+        if (!told && !crank_track(TSEL))
+            ui_message("SELECT IS THE CRANK");
+        told = 1;
+        crank_clicks((uint32_t)(s < 0 ? -s : s), fm1_in.enc_dfr[panel.enc[EN_SELECT]]);
+    }
+    return 1;
+}
+
 static void ui_input(void)
 {
     midi_cc_apply();                                  /* GHOULBOX: MIDI CCs, in the main loop */
+    crank_idle(fm1_in.frames);                        /* GHOULBOX: the crank slows and stops (every pass) */
     uint32_t pressed = fm1_input_edges(0), notes = fm1_input_note_edges(), now = fm1_ticks(), id, b, k;
     uint32_t home, rec, save;
     uint32_t oct;
@@ -1687,7 +1827,7 @@ static void ui_input(void)
         presets_turn(s);
     if (!lay && (s = panel_enc(EN_ALGO)) != 0)     /* ALGORITHM: the selected track, on every page */
         track_select((uint32_t)clamp((int32_t)song.sel + (s > 0 ? 1 : -1), 0, NTRK - 1));
-    if ((s = glo ? sel : panel_enc(EN_SELECT)) != 0) {   /* SELECT knob = global tempo; */
+    if ((s = glo ? sel : crank_select() ? 0 : panel_enc(EN_SELECT)) != 0) {   /* SELECT knob = global tempo; */
         if (glo || !(ui_prefs & PREF_BPM_LOCK)) {
             song.g[G_BPM] = (int16_t)clamp(song.g[G_BPM] + accel(EN_SELECT, s, 200), GP[G_BPM].min, GP[G_BPM].max);
             ui.bpm_t = 40;                              /* the header's BPM lights up; no message over the header */

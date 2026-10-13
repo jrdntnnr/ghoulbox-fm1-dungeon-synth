@@ -39,7 +39,10 @@ slicer_track 632
 slice_render 453
 slc_rev 120
 fm1_alnk0_irq 11043
-fm1_timer5_irq 33387
+fm1_timer5_irq 618
+usb_poll 26037
+fm1__frame 134
+fm1__keys 204
 click_render 30
 mod_begin 158
 mod_voice 30
@@ -63,3 +66,4 @@ mix_part_run 1548
 master_block 257
 texture_mix 48
 texture_gen 946
+cave_gen 249

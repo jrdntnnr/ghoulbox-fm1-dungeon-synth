@@ -114,6 +114,10 @@ does the same for the cost files.
 
 ## Install
 
+For the current locally rebuilt package, follow the [device flashing instructions](docs/FLASHING.md).
+They identify the exact build and its local installer; the public installer below
+may still serve an older published preview.
+
 Use the web installer in Chrome or Edge:
 <https://jrdntnnr.github.io/ghoulbox-fm1-dungeon-synth/webapp/installer/>. It installs this fork’s development preview; see [validation status](docs/INTEGRATION-STATUS.md).
 
@@ -149,3 +153,12 @@ JIELI_TOOLCHAIN=/path/to/jieli/toolchain python3 tools/build.py --sdk /path/to/a
 The three SDK assets are checked against SHA-256 hashes in `tools/build.py`. The tested toolchain is `jieli-linux-toolchains-20260730.1`. Do not publish the downloaded compiler or the local VM.
 
 For the package built with SLICE omitted, run the static target check with `FELUCCA_SLICE=0 python3 tests/target_budget.py`. This only permits those two SLICE functions to be absent; other missing or over-budget functions still fail.
+
+## SARDAB 2.1 graphics and target profile
+
+The standard build regenerates the Huffman-compressed boot artwork and keycap
+masks. Both generators verify exact decoded pixels. Keep all generated headers
+from the same build profile: the device build omits SLICE to fit flash, whereas
+full host/emulator tests may generate assets with SLICE enabled. Run a fresh
+target build after such tests before distributing firmware. The target-budget
+check for this profile is `FELUCCA_SLICE=0 python3 tests/target_budget.py`.

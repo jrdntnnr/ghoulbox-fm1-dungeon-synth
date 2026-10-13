@@ -54,7 +54,7 @@ async function editorMock() {
   const rq = async (r, o) => link.request(r, o);
   const info = E.parse[E.CMD.INFO](await rq(E.req.info()));
   ok(info.nengines === 15 && info.engines[1] === "-" && info.engines[12] === "FM6" && info.engines[13] === "SLICE"
- && info.engines[5] === "VOICE" && info.engines[6] === "TRIO" && info.engines[7] === "WHEEL" && info.engines[8] === "GRAIN" && info.engines[9] === "PHYS" && info.engines[10] === "DRUM" && info.engines[11] === "NOISE" && info.pcount === 125 && info.pe0 === 117 && info.engines[4] === "SAMPLE",
+ && info.engines[5] === "VOICE" && info.engines[6] === "TRIO" && info.engines[7] === "WHEEL" && info.engines[8] === "GRAIN" && info.engines[9] === "PHYS" && info.engines[10] === "DRUM" && info.engines[11] === "NOISE" && info.pcount === 126 && info.pe0 === 118 && info.engines[4] === "SAMPLE",
     "editor: INFO");
   let descs = 0;
   for (let i = 0; i < info.pcount; i++) if (E.parse[E.CMD.DESC](await rq(E.req.desc(0, i))).label) descs++;
@@ -169,6 +169,12 @@ async function editorMock() {
     const rows = E.devicePresetRows(info, names, prefs).filter((r) => !r.user), eng = [...new Set(rows.map((r) => r.engine))];
     ok(eng[0] === 0 && eng[1] === 12 && eng[eng.length - 1] === 10 && !rows.some((r) => (E.PRESET_HIDDEN[info.engines[r.engine]] || []).includes(r.name)),
        "editor: device presets in the device's engine order, the retired ones left out");
+    const desert = E.devicePresetRows(info, names, prefs, true);
+    ok(eq(desert.map((r) => r.name).sort(), ["DESERT OUD", "BRASS QANUN", "SANTUR", "DUSK SANTUR", "MIJWIZ", "ARGHUL", "DUNE NEY", "DUNE DRUMS", "SAND WIND", "USR1", "USR2", "USR3"].sort()),
+       "editor: DESERT section includes our nine sounds and the three user sample slots");
+    const user = E.parse[E.CMD.UP_LIST]([31, 1, 32, 1, 0, 68, 85, 78, 69, 0, 9]);
+    ok(user.slots[0].category === 9 && E.devicePresetRows(info, names, {...prefs, slots: user}, true).some((r) => r.user && r.name === "DUNE"),
+       "editor: DESERT also includes a saved sound with category 9 from UP_LIST");
   }
   const none = await E.readDevicePreferences(() => { throw new Error("unexpected request"); }, { uiCaps: 0 }, []);
   ok(none === null, "editor: old firmware receives no unsupported preference requests");
@@ -279,7 +285,7 @@ async function editorMock() {
     const inert = [25, 26].map(async (id) => E.parse[E.CMD.DESC](await rq(E.req.desc(1, id))));
     const [d25, d26] = await Promise.all(inert);
     ok(rd.label === "TYPE" && rd.def === 2 && eq(rd.names, ["ROOM", "SPRING", "HALL"]) && r1.value === 2 && r0.value === 0 &&
-       d25.label === "TAPE" && d26.label === "CRSH" && d25.max === 127 && info.gcount === 33,
+       d25.label === "TAPE" && d26.label === "CRSH" && d25.max === 127 && info.gcount === 37,
       "editor: REVERB TYPE (ROOM / SPRING / HALL, global id 24; 25 TAPE, 26 CRSH)");
   }
   const st = E.parse[E.CMD.STEP_SET](await rq(E.req.stepSet(5, { n: 2, notes: [60, 64], time: 0, flags: 1, vel: 100 })));
@@ -311,7 +317,7 @@ async function editorSamplePresets() {
   const names = E.parse[C.NAMES](await rq(E.req.names(4)));
   await rq(E.req.preset(4, 0));
   const set = E.parse[C.DESC](await rq(E.req.desc(0, info.pe0)));
-  ok(eq(names.names, ["PIANO", "PIANO", "FLUTE", "SAX", "PIANO", "BOWED PSALT", "REN ORGAN", "TENOR RECORD", "FOLK HARP"])
+  ok(eq(names.names, ["PIANO", "PIANO", "FLUTE", "SAX", "PIANO", "BOWED PSALT", "REN ORGAN", "TENOR RECORD", "FOLK HARP", "USR1", "USR2", "USR3"])
     && eq(set.names.slice(0, 4), ["PIANO", "PIANO", "FLUTE", "SAX"]) && set.names[4] === "PIANO"
     && eq(set.names.slice(5, 8), ["USR1", "USR2", "USR3"]) && eq(set.names.slice(8), ["PSALTERY", "RENORGAN", "RECORDER", "FOLKHARP"]),
     "SAMPLE: TRANH and PERC removed, SET 1 and 4 kept as PIANO aliases, USR1..3 at 5..7; GHOULBOX 1.1's sets after them");
@@ -872,7 +878,7 @@ async function editorLive() {
   const dump = E.parse[C.DUMP](await pend, info);
   const ch = ev.pushes.find((f) => f.cmd === C.CHANGED);
   const cv = ch && E.parse[C.CHANGED](ch.a);
-  ok(dump.p.length === 125 && ch && ch.pending === C.DUMP && cv.scope === 0 && cv.id === 9 && cv.value === kn.value && !ev.unknown.length,
+  ok(dump.p.length === info.pcount && ch && ch.pending === C.DUMP && cv.scope === 0 && cv.id === 9 && cv.value === kn.value && !ev.unknown.length,
     "live: CHANGED while DUMP waits -> push handler, reply still matched");
   const rl = m.sim.reload();
   m.sim.step(3);

@@ -2061,9 +2061,14 @@ static void al_keycaps(void)
         const kc_t *k = &KC[id];
         int32_t x, y, x0 = 999, y0 = 999, x1 = -1, y1 = -1, w = k->w;
         uint32_t i = 0;
+        uint16_t alpha[16];
+        for (i = 0; i < 16; i++) alpha[i] = i;
+        cv_begin(w, KC_H, 0);
+        cv_alpha_hc(0, 0, w, KC_H, KC_DATA + k->off, KC_HC, alpha);
+        i = 0;
         for (y = 0; y < KC_H; y++)
             for (x = 0; x < w; x++, i++)
-                if (((KC_DATA[k->off + (i >> 1)] >> ((i & 1u) ? 0 : 4)) & 15u) >= 6u) {
+                if (cv_px[i] >= 6u) {
                     if (x < x0) x0 = x;
                     if (y < y0) y0 = y;
                     if (x + 1 > x1) x1 = x + 1;

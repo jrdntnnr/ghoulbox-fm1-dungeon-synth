@@ -11,6 +11,8 @@
  * holds the hashes of 1.4 (the engines' own arrays, before the shared region): any difference fails. The 380
  * sequences that play SAMPLE's PIANO (SAMPLE presets 0 / 1, GRAIN's FROZEN / SHIMMER) were rewritten in 1.5, when
  * PIANO went back to the full piano of 1.1.5; the other 340 are 1.4's.
+ * SARDAB 2.1: 100/720 references changed for twelve shared voices. Restoring only NVOICE=8 reproduces
+ * all 720 original references; no other engine-switch audio change was accepted.
  * env: GOLDEN_UPDATE=1 rewrites GOLDEN_FILE (only with a reason: a switch is to sound as it did). */
 #define main hostsim_main
 #include "hostsim.c"

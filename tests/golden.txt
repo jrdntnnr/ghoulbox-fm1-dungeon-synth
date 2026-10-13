@@ -145,9 +145,9 @@ sends/ANALOG/delay 118f6dce473b6a08
 sends/ANALOG/reverb 7783f97f9bdf41b4
 sends/ANALOG/all 7eecbb2c7b023ac0
 sends/ANALOG/dist 93fcbeb715c9dcb8
-song/4track_mix 987e70b05edbeaac
+song/4track_mix 7e0052fc53784c30
 slicer/gate/ANALOG_ACID 322855a341a39e7c
-slicer/song_gate_stut 16ebd8933af2cda4
+slicer/song_gate_stut c50123457b36cc3c
 tuned/ANALOG/SHUR1 207ca0057e8e2144
 tuned/ANALOG/SHUR2 f64d1b115631f344
 tuned/SAMPLE/SHUR1 478b83fb70397dcc

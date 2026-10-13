@@ -17,7 +17,8 @@ static const char *const N_DTIME[] = {"1/4", "1/8", "1/16", "1/32", "8T", "16T",
                                       "1/8D", "1/16D", "1/4D"};
 static const char *const N_ONOFF[] = {"OFF", "ON"};
 /* TEXTURE (fx.c texture_*): its sources (the user sample slots last), MOVE's length, when it plays */
-static const char *const N_TXSRC[] = {"OFF", "VINYL", "TAPE", "RAIN", "WIND", "RADIO", "ROOM", "USR1", "USR2", "USR3", "USR4"};
+static const char *const N_TEMP[] = {"EQUAL", "PYTH", "MEAN", "JUST"};
+static const char *const N_TXSRC[] = {"OFF", "VINYL", "TAPE", "RAIN", "WIND", "RADIO", "ROOM", "USR1", "USR2", "USR3", "USR4", "CAVE", "TORCH"};
 static const char *const N_TXRATE[] = {"1BAR", "2BAR", "4BAR", "8BAR", "16BAR"};
 static const char *const N_TXWHEN[] = {"PLAY", "ALWAYS"};
 /* ANALOG's filter TYPE (1.5, #104; eng_analog.c): the SVF's low-pass (as always), band-pass, high-pass output */
@@ -65,6 +66,13 @@ static const char *const N_IBITS[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9
                                       "16", 0};
 static const char *const N_IRATE[] = {"689", "919", "1.1k", "1.4k", "1.8k", "2.2k", "2.8k", "3.7k", "4.4k", "5.5k",
                                       "7.4k", "8.8k", "11k", "15k", "22k", "44k", 0};
+/* GHOULBOX 2.1: HOME > KEYS (seq.c keyboard_block) */
+static const char *const N_KMODE[] = {"OFF", "LAYER", "SPLIT"};
+static const char *const N_KTRK[] = {"T1", "T2", "T3", "T4"};
+static const char *const N_KSPLIT[] = {"G#3", "A3", "A#3", "B3", "C4", "C#4", "D4", "D#4", "E4", "F4", "F#4", "G4",
+                                       "G#4", "A4", "A#4", "B4", "C5", "C#5", "D5", "D#5", "E5", "F5", "F#5", "G5"};
+                                       /* the upper part's lowest key (key 3 + value): the editor's 24 names at most */
+static const char *const N_KOCT[] = {"-2", "-1", "0", "+1", "+2"};
 /* modulation matrix (mod.c): sources, destinations (E1..E8 = P_E0..P_E7: shown with the engine's labels).
  * Append-only (stored values keep their meaning): S&H SLEW and DEPTH (#132) came after EXPR and E8 */
 static const char *const N_MSRC[] = {"OFF", "LFO", "ENV", "VEL", "KEY", "RAND", "MODW", "AT", "EXPR", "S&H", "SLEW"};
@@ -117,6 +125,7 @@ static const param_desc_t TP[P_COUNT] = {
     [P_TC8] = {"b6", F_INT, -63, 63, 0, 0, "ct"},
     [P_TC9] = {"6", F_INT, -63, 63, 0, 0, "ct"},
     [P_TC10] = {"b7", F_INT, -63, 63, 0, 0, "ct"},
+    [P_TEMP] = PE("TEMP", N_TEMP, 0),
     [P_TC11] = {"7", F_INT, -63, 63, 0, 0, "ct"},
 
     [P_TMASK0] = PD("MASK LO", F_INT, 0, 63, 63),
@@ -239,6 +248,10 @@ static const param_desc_t GP[G_COUNT] = {
     [G_TXMOVE] = PD("MOVE", F_PCT, 0, 127, 40),     /* how much it breathes (level and colour) over RATE */
     [G_TXRATE] = PE("RATE", N_TXRATE, 2),
     [G_TXWHEN] = PE("WHEN", N_TXWHEN, 0),           /* PLAY: while the transport runs (fades in / out); ALWAYS */
+    [G_KMODE] = PE("MODE", N_KMODE, 0),            /* GHOULBOX 2.1: HOME > KEYS */
+    [G_KTRK] = PE("TRK", N_KTRK, 3),               /* (T4: every scene's drone or drums) */
+    [G_KSPLIT] = PE("SPLT", N_KSPLIT, 4),          /* (C4: F3..B3 below, seven keys) */
+    [G_KOCT] = PE("OCT", N_KOCT, 2),               /* (0) */
 };
 
 static const param_desc_t *track_desc(const track_t *t, uint32_t id)
@@ -500,7 +513,7 @@ static const page_t PAGES[] = {
     {"TEXTURE", FAM_FX, SC_GLOBAL, GR_NONE, {G_TXSRC, G_TXLVL, G_TXTONE, G_TXMOVE}},   /* fx.c texture_* */
     {"TEXTURE 2", FAM_FX, SC_GLOBAL, GR_NONE, {G_TXRATE, G_TXWHEN, 0xFF, 0xFF}},
     {"SCL", FAM_SCL, SC_TRACK, GR_SCALE, {P_ROOT, P_SCALE, P_QUANT, P_TRANS}},
-    {"CHORD", FAM_SCL, SC_TRACK, GR_CHORD, {P_CHRD, P_VOIC, 0xFF, 0xFF}},
+    {"CHORD", FAM_SCL, SC_TRACK, GR_CHORD, {P_CHRD, P_VOIC, P_TEMP, 0xFF}},
     {"TUNE 1", FAM_SCL, SC_TRACK, GR_SCALE, {P_TC0, P_TC1, P_TC2, P_TC3}},
     {"TUNE 2", FAM_SCL, SC_TRACK, GR_SCALE, {P_TC4, P_TC5, P_TC6, P_TC7}},
     {"TUNE 3", FAM_SCL, SC_TRACK, GR_SCALE, {P_TC8, P_TC9, P_TC10, P_TC11}},
@@ -543,6 +556,7 @@ static const page_t PAGES[] = {
      * GLO > GLOBAL; its TUNE is MENU > AUDIO's now), again HOME (ui.c home_tap) */
     {"MIXER", FAM_TRK, SC_TRK, GR_TRK, {0, 1, 2, 3}},
     {"CLOCK", FAM_TRK, SC_GLOBAL, GR_NONE, {G_BPM, G_SWING, G_CLOCK, 0xFF}},
+    {"KEYS", FAM_TRK, SC_GLOBAL, GR_NONE, {G_KMODE, G_KTRK, G_KSPLIT, G_KOCT}},   /* GHOULBOX 2.1: CLOCK tapped again */
 };
 #define NPAGES (sizeof(PAGES) / sizeof(PAGES[0]))
 static uint8_t mod_ui_slot;      /* the MOD page: the matrix slot (0..3) KNOB 2..4 edit */

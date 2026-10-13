@@ -1,5 +1,12 @@
 # Felucca editor protocol (SysEx over USB-MIDI)
 
+SARDAB 2.1 retains the command protocol below. Current INFO reports
+P_COUNT=126, P_E0=118, G_COUNT=37. TC0–TC11 remain 103–114, custom masks
+115–116, TEMP is 117, TEXTURE globals remain 27–32, and KEYS uses 33–36.
+NOTE NAMES is appended at menu ID 31; DESERT is sound category 9. Read INFO
+and descriptors rather than assuming the historical counts in examples.
+
+
 **GHOULBOX 1.2-dev:** `INFO` reports P_COUNT 103 and P_E0 95. IDs 83–94 are twelve root-relative cent trims (−63..63); scale ID 26 now has 40 enum entries. `DESC` sends all forty names, so readers must not cap enum strings at 24. Wire command numbers and v14 encoding are unchanged. Projects use GBM1 (3,648 bytes), with legacy FUN8 import; stored preset versions are 6/7. See [microtuning compatibility and controls](../docs/MICROTONAL.md). This extension has host coverage only.
 
 
@@ -307,11 +314,11 @@ numbered 0..31 (the device shows U01..U32).
   that cannot stop it in 100 ms answers rc 2 and writes nothing.)
 - Frames stay below 640 bytes (`UP_PUT` is 5 + 1 + 1 + 13 + 2 × P_COUNT + 32 + 1, + 18 with the category).
 - **Categories (1.2, Discussion #90).** A user preset has a sound category: 0 none, 1 BASS, 2 LEAD, 3 PAD, 4 PLUCK,
-  5 KEYS, 6 DRUM, 7 FX, 8 OTHER (append-only; the device's PRESETS > LIST filters by it, its NAME screen sets it).
+  5 KEYS, 6 DRUM, 7 FX, 8 OTHER, 9 DESERT (SARDAB 2.1; append-only; the device's PRESETS > LIST filters by it, its NAME screen sets it).
   `UP_LIST` sends one byte per listed slot after all the slot entries (0 for an empty slot); `UP_GET` ends with it
   (after kind 0, or after kind 1's 16 bytes). A record saved without one (before 1.2, or by an editor that sends none)
   reports its engine's: 6 DRUM for DRUM and SLICE, else 8 OTHER. `UP_PUT` takes it as one byte after the kind and its
-  16 bytes (send kind 0 and 16 zeros for a note pattern); 0 stores none, 9 or more is rc 1. An older editor reads up to
+  16 bytes (send kind 0 and 16 zeros for a note pattern); 0 stores none, 10 or more is rc 1 (9 or more before SARDAB 2.1). An older editor reads up to
   where it knows and ignores the rest; firmware before 1.2 rejects an `UP_PUT` with the category (rc 1), so send it
   only to a device that answers `UP_GET` with it. The device keeps it in a byte of the record no value uses (the
   record's layout is unchanged; older firmware keeps it). The factory presets' categories are the device's

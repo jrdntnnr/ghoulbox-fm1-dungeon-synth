@@ -55,10 +55,13 @@ static int settings_import(persist_t *p, int n)
          * used the same magic/size for different fields, so guessing from
          * their values cannot be safe. Its backups must first be converted
          * explicitly with tools/migrate_settings.py --source felucca. */
+        uint8_t click = p->favorites.factory[15][12], screen = p->favorites.factory[15][25];
+        p->favorites.factory[15][24] = (p->favorites.factory[15][24] & 7u) |
+            ((p->favorites.factory[15][24] & 8u) << 1);
         p->favorites.factory[15][12] = p->favorites.factory[15][27]; /* SCENE */
         p->favorites.factory[15][13] = p->favorites.factory[15][28] & GB_MIG_SERIAL;
-        p->favorites.factory[15][27] = 0; /* new SCREEN OFF: never */
-        p->favorites.factory[15][28] = 0; /* new CLICK / COUNT-IN: off */
+        p->favorites.factory[15][27] = screen; /* upstream SCREEN OFF */
+        p->favorites.factory[15][28] = click; /* upstream CLICK / COUNT-IN */
     }
     if (!current && !old4) memset(&p->favorites, 0, sizeof p->favorites);
     if (!(p->favorites.factory[15][13] & GB_MIG_SERIAL)) {   /* GHOULBOX: once, settings from before (see above) */
@@ -76,7 +79,7 @@ static int settings_import(persist_t *p, int n)
     }
     if (p->favorites.factory[15][27] > 7u)         /* SCREEN OFF (1.1.5, ui.c SCR_CODE): unknown = 0 (NEVER since 1.1.5.1) */
         p->favorites.factory[15][27] = 0;
-    if (p->favorites.factory[15][11] > 8u)         /* PRESETS LIST's category (1.2, ui.c ui_lcat, CAT_*): unknown = none */
+    if (p->favorites.factory[15][11] > 9u)         /* PRESETS LIST's category (1.2, ui.c ui_lcat, CAT_*): unknown = none */
         p->favorites.factory[15][11] = 0;
     /* [15][26] HOME (1.3, ui.c ui_home_view): kept as saved; a value this firmware does not know draws SCOPE */
     p->magic = PERSIST_MAGIC;

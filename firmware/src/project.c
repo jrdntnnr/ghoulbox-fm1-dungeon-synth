@@ -110,7 +110,7 @@
 #define PROJ_NG_V2 27u                         /* G_COUNT of formats 1 and 2 */
 #define PROJ_NG 27u                            /* the globals a project holds (FUN7 on); TEXTURE's past them
                                                 * ride in inert slots (proj_tx_put) */
-_Static_assert(G_TXSRC == PROJ_NG && G_COUNT == G_TXWHEN + 1u, "a project's globals, then TEXTURE's");
+_Static_assert(G_TXSRC == PROJ_NG && G_KMODE == G_TXWHEN + 1u && G_COUNT == G_KOCT + 1u, "a project's globals, then TEXTURE's");
 #define PROJ_NP_V3 57u                         /* P_COUNT of format 3 (P_E0 was 49) */
 #define PROJ_NP_V4 69u                         /* P_COUNT of format 4 (P_E0 61) */
 #define PROJ_PHYS 2u                           /* project_t.phys: PHYS without DUST and DRUM (see the top) */
@@ -133,6 +133,7 @@ typedef struct {
     motion_store_t motion;
     uint8_t fm6[NTRK][FM6_PACKED];             /* each track's FM6 patch, packed (eng_fm6.c) */
     char name[PROJ_NAME_LEN];                  /* the project's name: upper-case ASCII 32..126, 0-padded; "" = none */
+    uint16_t keys;                             /* optional packed keyboard configuration */
     uint32_t sum;
 } project_t;
 /* Historical FUN5/6 types are frozen, independent of today's P_COUNT/step_t. */
@@ -234,6 +235,18 @@ static void proj_rtype_room(int16_t *g) { g[G_RTYPE] = 0; }
  * 0..0; G_ENGGO: unused). g[G_INFO]: TX_THERE | SRC | WHEN << 4 | RATE << 5, g[G_ENGGO]: LEVEL | (TONE + 64) << 7,
  * g[G_SYNC]: MOVE. Without TX_THERE (a project before it): the defaults, OFF */
 #define TX_THERE 0x4000
+static void proj_keys_get(const project_t *p)
+{
+    uint32_t v = p->keys;
+    song.g[G_KMODE] = GP[G_KMODE].def; song.g[G_KTRK] = GP[G_KTRK].def;
+    song.g[G_KOCT] = GP[G_KOCT].def; song.g[G_KSPLIT] = GP[G_KSPLIT].def;
+    if (!v || v > 3u * 4u * 5u * 24u) return;
+    v--;
+    song.g[G_KMODE] = v % 3u; v /= 3u;
+    song.g[G_KTRK] = v % 4u; v /= 4u;
+    song.g[G_KOCT] = v % 5u;
+    song.g[G_KSPLIT] = v / 5u;
+}
 static void proj_tx_put(project_t *p)
 {
     p->g[G_INFO] = (int16_t)(TX_THERE | (song.g[G_TXSRC] & 15) | (song.g[G_TXWHEN] & 1) << 4 | (song.g[G_TXRATE] & 7) << 5);
@@ -623,9 +636,10 @@ static uint32_t proj_name_get(char *d, const uint8_t *s)   /* its length */
  * use eight (biased by 64). LSB first, each track padded to 111 bytes. This is
  * a frozen disk schema, independent of descriptor ranges and engine choice. */
 #define PROJ_PARAM_BYTES 111u
-_Static_assert(P_TC0 == 103u && P_E0 == 117u && P_COUNT == 125u, "GBM2 schema: version before changing IDs");
+#define PROJ_KEYS_OFF (PROJ_FM6_OFF - 2u)
+_Static_assert(P_TC0 == 103u && P_TEMP == 117u && P_E0 == 118u && P_COUNT == 126u, "GBM2 schema: version before changing IDs");
 _Static_assert(68u + NTRK * (PROJ_PARAM_BYTES + 2u + NSTEP * 9u) +
-               sizeof(chain_config_t) + sizeof(motion_store_t) <= PROJ_FM6_OFF, "GBM2 fits before patches");
+               sizeof(chain_config_t) + sizeof(motion_store_t) <= PROJ_KEYS_OFF, "GBM2 fits before patches");
 static uint32_t proj_param_bias(uint32_t id)
 {
     /* Frozen numeric IDs: do not derive the disk representation from TP. */
@@ -633,27 +647,32 @@ static uint32_t proj_param_bias(uint32_t id)
         id == 28u || id == 39u || id == 51u || id == 54u || id == 57u || id == 60u ||
         (id >= 103u && id <= 114u) || id >= 117u ? 64u : 0u;
 }
+/* np125's exact 883-bit layout is frozen. np126 adds TEMP in bits 883..884.
+ * Engine IDs in memory moved by one; their serialized positions did not. */
 static int proj_params_pack(uint8_t *b, const int16_t *p)
 {
     uint32_t bit = 0, i, j;
-    for (i = 0; i < P_COUNT; i++) {
-        uint32_t width = i < 117u ? 7u : 8u;
-        int32_t v = p[i] + (int32_t)proj_param_bias(i);
+    for (i = 0; i < 125u; i++) {
+        uint32_t width = i < 117u ? 7u : 8u, id = i < 117u ? i : P_E0 + i - 117u;
+        int32_t v = p[id] + (int32_t)proj_param_bias(i);
         if (v < 0 || v >= (1 << width) || (i >= 117u && v > 191)) return 0;
         for (j = 0; j < width; j++, bit++) b[bit >> 3] |= ((v >> j) & 1u) << (bit & 7u);
     }
+    if (p[P_TEMP] < 0 || p[P_TEMP] > 3) return 0;
+    b[PROJ_PARAM_BYTES - 1u] |= (uint8_t)p[P_TEMP] << 3;
     return 1;
 }
-static int proj_params_unpack(int16_t *p, const uint8_t *b)
+static int proj_params_unpack(int16_t *p, const uint8_t *b, uint32_t np)
 {
     uint32_t bit = 0, i, j;
-    for (i = 0; i < P_COUNT; i++) {
-        uint32_t width = i < 117u ? 7u : 8u, v = 0;
+    for (i = 0; i < 125u; i++) {
+        uint32_t width = i < 117u ? 7u : 8u, v = 0, id = i < 117u ? i : P_E0 + i - 117u;
         for (j = 0; j < width; j++, bit++) v |= ((b[bit >> 3] >> (bit & 7u)) & 1u) << j;
         if (i >= 117u && v > 191u) return 0;
-        p[i] = (int16_t)v - (int16_t)proj_param_bias(i);
+        p[id] = (int16_t)v - (int16_t)proj_param_bias(i);
     }
-    return (b[PROJ_PARAM_BYTES - 1u] & 0xF8u) == 0;
+    p[P_TEMP] = np == 125u ? 0 : (b[PROJ_PARAM_BYTES - 1u] >> 3) & 3u;
+    return (b[PROJ_PARAM_BYTES - 1u] & (np == 125u ? 0xF8u : 0xE0u)) == 0;
 }
 
 /* A stable serialized schema: first header retains FUN6's fields; at byte66
@@ -689,6 +708,7 @@ static int proj_pack(project_store_t *out, const project_t *q)
     if (pos + sizeof q->chain + sizeof q->motion > PROJ_FM6_OFF) return 0;
     memcpy(b + pos, &q->chain, sizeof q->chain); pos += sizeof q->chain;
     memcpy(b + pos, &q->motion, sizeof q->motion);
+    memcpy(b + PROJ_KEYS_OFF, &q->keys, sizeof q->keys);
     memcpy(b + PROJ_FM6_OFF, q->fm6, sizeof q->fm6);
     {   /* the name (0-padded; stops at the first 0) */
         char n[PROJ_NAME_LEN + 1u];
@@ -708,7 +728,9 @@ static int proj_motion_ids(motion_store_t *m, uint32_t np)
     for (i = 0; i < m->count && i < MOTION_MAX; i++) {
         uint32_t id = MOTION_ID(&m->event[i]);
         if (id >= np) return 0;
-        if (np < P_COUNT && id >= np - 8u)
+        if (np == 112u && id == 103u)
+            m->event[i].param = (m->event[i].param & MOTION_LOCK) | P_TEMP;
+        else if (np < P_COUNT && id >= np - 8u)
             m->event[i].param = (uint8_t)((m->event[i].param & MOTION_LOCK) | (id + P_COUNT - np));
     }
     return 1;
@@ -746,28 +768,41 @@ static int proj_unpack(project_t *q, const uint8_t *b, uint32_t st)
     gbm1 = magic == PROJ_MAGIC_GBM1;
     gbm2 = magic == PROJ_MAGIC;
     pb = gbm2 ? PROJ_PARAM_BYTES : np;
-    if ((gbm2 && (!v10 || np != P_COUNT)) || (gbm1 && (st != PROJ_STORE_V9 || np != 103u)) ||
+    if ((gbm2 && (!v10 || (np != 125u && np != P_COUNT))) || (gbm1 && (st != PROJ_STORE_V9 || np != 103u)) ||
         (!gbm1 && !gbm2 && magic != (v7 ? PROJ_MAGIC_V7 : st == PROJ_STORE_V8 ? PROJ_MAGIC_V8 :
             st == PROJ_STORE_V9 ? PROJ_MAGIC_V9 : PROJ_MAGIC_FUNA)) ||
         size != st || sum != proj_hash(b, st - 4u) || np < 8u || np > P_COUNT ||
-        (!gbm1 && !gbm2 && np > (v10 ? 111u : 99u)) ||
+        (!gbm1 && !gbm2 && np > (v10 ? 112u : 99u)) ||
         68u + NTRK * (pb + 2u + NSTEP * 9u) + chn + mot > end)
         return 0;
     memset(q, 0, sizeof *q); q->magic = PROJ_MAGIC; q->size = sizeof *q;
     memcpy(q->g, b + 8, sizeof q->g); q->sel = b[62]; q->parts = b[63]; q->phys = b[64];
-    if (magic == PROJ_MAGIC_FUNA || magic == PROJ_MAGIC_V9) q->g[G_TAPE] = q->g[G_CRSH] = 0;
+    if ((magic == PROJ_MAGIC_FUNA && np != 112u) || magic == PROJ_MAGIC_V9) q->g[G_TAPE] = q->g[G_CRSH] = 0;
+    if (gbm2 && np == 126u) memcpy(&q->keys, b + PROJ_KEYS_OFF, 2);
+    else if (magic == PROJ_MAGIC_FUNA && np == 112u) {
+        memcpy(&q->keys, b + PROJ_FM6_OFF - 4u, 2);
+        /* Original ambience becomes an always-on cave TEXTURE. The upstream
+         * crackle density has no separate control here; keep its bed level. */
+        if (b[PROJ_FM6_OFF - 2u] > 1u && b[PROJ_FM6_OFF - 2u] <= 128u) {
+            q->g[G_INFO] = TX_THERE | TX_CAVE | (1u << 4) | (2u << 5);
+            q->g[G_ENGGO] = (b[PROJ_FM6_OFF - 2u] - 1u) | (64u << 7);
+            q->g[G_SYNC] = 0;
+        }
+    }
     if (v7 && (q->g[G_RTYPE] < 0 || q->g[G_RTYPE] > 1))   /* a FUN7 may still hold the old drum channel there */
         proj_rtype_room(q->g);
     for (t = 0; t < NTRK; t++) {
         int16_t values[P_COUNT], def[P_COUNT];
         if (gbm2) {
-            if (!proj_params_unpack(values, b + pos)) return 0;
+            if (!proj_params_unpack(values, b + pos, np)) return 0;
             pos += PROJ_PARAM_BYTES;
         } else for (i = 0; i < np; i++) { if (b[pos] > 191u) return 0; values[i] = (int16_t)b[pos++] - 64; }
         q->t[t].engine = b[pos++]; q->t[t].preset = b[pos++];
         if (q->t[t].engine >= NENGINES) return 0;
         for (i = 0; i < P_COUNT; i++) def[i] = param_desc_of(q->t[t].engine, i)->def;
-        if (gbm1) params_gbm1(q->t[t].p, values, def);
+        if (gbm2) memcpy(q->t[t].p, values, sizeof values);
+        else if (gbm1) params_gbm1(q->t[t].p, values, def);
+        else if (np == 112u) params_ghoul2(q->t[t].p, values, def);
         else params_by_count(q->t[t].p, values, np, def);
         for (i = 0; i < NSTEP; i++) {
             step_t *s = &q->t[t].step[i]; uint32_t meta, nd = 0;
@@ -921,6 +956,7 @@ static void project_capture(project_t *p)
     for (i = 0; i < PROJ_NG; i++)
         p->g[i] = song.g[i];
     proj_tx_put(p);
+    p->keys = (uint16_t)(1 + song.g[G_KMODE] + 3 * (song.g[G_KTRK] + 4 * (song.g[G_KOCT] + 5 * song.g[G_KSPLIT])));
     p->sel = song.sel;
     p->parts = NPART;
     p->phys = PROJ_PHYS;
@@ -1091,6 +1127,7 @@ static int project_restore_runtime(const project_t *input)
         if (i != G_SLOT && i != G_LOAD && i != G_SAVE && i != G_ENGGO)
             song.g[i] = (int16_t)clamp(p->g[i], GP[i].min, GP[i].max);
     proj_tx_get(p);
+    proj_keys_get(p);
     for (k = 0; k < NTRK; k++) {
         track_t *t = &trk[k];
         const proj_trk_t *s = &p->t[k];

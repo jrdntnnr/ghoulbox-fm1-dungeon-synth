@@ -25,3 +25,32 @@ Compile it against that commit’s `tests/tuning_test.c` and generated headers,
 with its tests directory on the include path; run from a disposable checkout
 containing the original GHOULBOX 1.1 fixture. It writes into `tests/fixtures/`.
 Never generate these fixtures using the current serializer.
+
+## SARDAB / Ghoulbox 2.1 integration fixtures
+
+`generate_ghoulbox_2.c` wrote `sardab-b9d47b7.gbm2` / `.up8` using our
+`b9d47b7` serializer and `ghoulbox-2.1.funa` / `.up4` using upstream
+`eaf04bd` (`ghoulbox-v2.1`). They cover four scale/root choices, nonzero cent
+trims or temperaments, engine parameters, steps, FM6 patches, automation,
+TEXTURE or upstream ambience, and optional keyboard layer/split.
+`tests/ghoulbox2_test.c` checks the resulting migration, including silent
+parameter-ID and scale-ID collisions.
+
+With the normal generated headers in `build/gen`, reproduce into disposable
+directories and compare without overwriting the fixtures:
+
+```sh
+mkdir -p build/fixture-b9 build/fixture-up
+git archive b9d47b7 firmware tests/hostsim.c | tar -x -C build/fixture-b9
+git archive eaf04bd firmware tests/hostsim.c | tar -x -C build/fixture-up
+cc -O2 -w -Ibuild/gen -Ibuild/fixture-b9/tests -Ibuild/fixture-b9/firmware/src \
+  tests/fixtures/generate_ghoulbox_2.c -lm -o build/fixture-b9/generate
+cc -O2 -w -DUPSTREAM_GHOUL2 -Ibuild/gen -Ibuild/fixture-up/tests -Ibuild/fixture-up/firmware/src \
+  tests/fixtures/generate_ghoulbox_2.c -lm -o build/fixture-up/generate
+build/fixture-b9/generate build/fixture-b9/project build/fixture-b9/preset
+build/fixture-up/generate build/fixture-up/project build/fixture-up/preset
+cmp tests/fixtures/sardab-b9d47b7.gbm2 build/fixture-b9/project
+cmp tests/fixtures/sardab-b9d47b7.up8 build/fixture-b9/preset
+cmp tests/fixtures/ghoulbox-2.1.funa build/fixture-up/project
+cmp tests/fixtures/ghoulbox-2.1.up4 build/fixture-up/preset
+```

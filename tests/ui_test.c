@@ -490,7 +490,7 @@ static int test_sound_loads(void)
     bad += check("a project load drops the copy and takes none", undo.trk == 0 && undo_depth == 0);
     ui_power_on();
     bad += check("SAMPLE factory presets: 1.0's four (PIANO .. SAX), PERC's alias, then GHOULBOX's four (BOWED PSALT .. FOLK HARP)",
-                 ENGINES[4]->npresets == 9u && str_eq(ENGINES[4]->presets[0].name, "PIANO") &&
+                 ENGINES[4]->npresets == 12u && str_eq(ENGINES[4]->presets[0].name, "PIANO") &&
                  str_eq(ENGINES[4]->presets[3].name, "SAX") && str_eq(ENGINES[4]->presets[5].name, "BOWED PSALT") &&
                  str_eq(ENGINES[4]->presets[8].name, "FOLK HARP") && preset_hidden(ENGINES[4], 4));
     {   /* TRANH (SET 1, preset 1) is gone: both are PIANO aliases, kept for old data, never offered */
@@ -508,7 +508,7 @@ static int test_sound_loads(void)
         apply_preset_to(TSEL, 1);
         bad += check("SAMPLE: old SET 1 / preset 1 (TRANH) play PIANO; browsing and knobs skip them",
                      SMP_SETS[1].z0 == SMP_SETS[0].z0 && SMP_SETS[1].nz == SMP_SETS[0].nz && pos == pos0 &&
-                     shown == 4u && TSEL->preset == 0u && TSEL->p[P_E0] == 0 &&   /* (GHOULBOX 1.1: its four CC0 presets) */
+                     shown == 7u && TSEL->preset == 0u && TSEL->p[P_E0] == 0 &&   /* (GHOULBOX 1.1: its four CC0 presets) */
                      str_eq(sd->names[1], "PIANO") && enum_step(sd, 0, 1) == 2 && enum_step(sd, 2, 1) == 0 &&
                      enum_step(sd, 1, 2) == 2 && enum_orig(sd, 1) == 0 && enum_orig(sd, 5) == 5 &&
                      enum_orig(&ENGINES[8]->edit[0], 1) == 0);
@@ -1508,7 +1508,7 @@ static int test_categories(void)
         if (!eng_ok(e) || e == ENGI_DIGITAL) continue;    /* (DIGITAL: FELUCCA_FM4 builds only, its sounds no category) */
         ok &= str_len(c) == ENGINES[e]->npresets;
         for (k = 0; k < ENGINES[e]->npresets; k++)
-            ok &= preset_cat(e, k) >= CAT_BASS && preset_cat(e, k) <= CAT_OTHER;
+            ok &= preset_cat(e, k) >= CAT_BASS && preset_cat(e, k) < CAT_N;
     }
     bad += check("categories: every factory preset of every engine has one (the table's strings == the preset counts)",
                  ok && preset_cat(0, 2) == CAT_BASS && preset_cat(ENGI_DRUM, 0) == CAT_DRUM && preset_cat(ENGI_FM6, 0) == CAT_KEYS &&
@@ -1531,9 +1531,25 @@ static int test_categories(void)
         ok &= track_cat(TSEL) == CAT_BASS;
     }
     bad += check("  the PRESETS knob steps through basses only (every engine), and round", ok && preset_pos(&total) == total - 1u);
+    list_set(1u + CAT_DESERT);
+    preset_pos(&total);
+    ok = total == 12u;
+    uint32_t user_slots = 0;
+    for (i = 0; i < total; i++) {
+        preset_go(i);
+        ok &= track_cat(TSEL) == CAT_DESERT;
+        if (TSEL->eng_req == ENGI_SAMPLE) {
+            ok &= TSEL->p[P_E0] >= 5 && TSEL->p[P_E0] <= 7;
+            user_slots |= 1u << (TSEL->p[P_E0] - 5);
+        }
+    }
+    bad += check("DESERT: all nine factory sounds and USR1/2/3 load from one section", ok && user_slots == 7u);
+    { persist_t p; settings_export(&p); list_set(0);
+      bad += check("DESERT section survives settings restore", settings_import(&p, sizeof p) && list_mode() == 1u + CAT_DESERT); }
     turn(EN_K4, 20);
-    bad += check("  .. right to OTHER and no further (no wrap)", list_mode() == LIST_N - 1u && str_eq(list_name(list_mode()), "OTHER"));
+    bad += check("  .. right to DESERT and no further (no wrap)", list_mode() == LIST_N - 1u && str_eq(list_name(list_mode()), "DESERT"));
 #if !FELUCCA_FM4                                           /* (DIGITAL's presets: OTHER's) */
+    list_set(1u + CAT_OTHER);
     {
         track_t before = *TSEL;
         ui.msg_t = 0;
@@ -1547,7 +1563,7 @@ static int test_categories(void)
         list_set(1u + CAT_PAD);
         settings_export(&p);
         ok = p.favorites.factory[15][11] == CAT_PAD && p.favorites.filter == 0u;
-        p.favorites.factory[15][11] = 9;
+        p.favorites.factory[15][11] = CAT_N;
         ok &= settings_import(&p, sizeof p) == 1 && list_mode() == 0u;
         p.favorites.factory[15][11] = CAT_FX;
         ok &= settings_import(&p, sizeof p) == 1 && list_mode() == 1u + CAT_FX;
@@ -1742,7 +1758,7 @@ static int test_menu_tabs(void)
     bad += check("MENU tabs: DISPLAY CONTROL AUDIO MIDI SYSTEM (8 7 6 7 5 rows), 1..8 each in a run, fit the page; tab gaps "
                  "constant (S, LARGE)",
                  ok && MTAB_COUNT == 5u && str_eq(MTAB_NAME[0], "DISPLAY") && str_eq(MTAB_NAME[MTAB_MIDI], "MIDI") &&
-                 mtab_rows(MTAB_DISPLAY) == 8u && MI_TAB[MI_HOME] == MTAB_DISPLAY && mtab_rows(MTAB_CONTROL) == 7u && mtab_rows(MTAB_AUDIO) == 6u &&
+                 mtab_rows(MTAB_DISPLAY) == 8u && MI_TAB[MI_HOME] == MTAB_DISPLAY && mtab_rows(MTAB_CONTROL) == 8u && mtab_rows(MTAB_AUDIO) == 6u &&
                  mtab_rows(MTAB_MIDI) == 7u && MI_TAB[MI_LCLEAR] == MTAB_MIDI && mtab_rows(MTAB_SYSTEM) == 7u && MI_TAB[MI_TUNE] == MTAB_AUDIO &&   /* (1.5: LEARN CLEAR, HELP) */
                  MI_TAB[MI_MIDIIN] == MTAB_MIDI && MI_TAB[MI_INFO] == MTAB_SYSTEM && MI_INFO >= MI_VALUES);
 
@@ -2770,7 +2786,8 @@ static int test_page_cycles(void)
         uint32_t f = PAGES[i].fam;
         ok &= f != FAM_SEQ || PAGES[i].graph == GR_ROLL || PAGES[i].graph == GR_EVENTS;
         ok &= f != FAM_GLO || PAGES[i].graph == GR_SONG;   /* (1.2: GLO's only page) */
-        ok &= f != FAM_TRK || PAGES[i].graph == GR_TRK || str_eq(PAGES[i].title, "CLOCK");   /* HOME's: MIXER CLOCK */
+        ok &= f != FAM_TRK || PAGES[i].graph == GR_TRK || str_eq(PAGES[i].title, "CLOCK") ||
+              str_eq(PAGES[i].title, "KEYS");                 /* HOME's: MIXER CLOCK KEYS (2.1) */
         ok &= PAGES[i].graph != GR_TRK || f == FAM_TRK;
         ui_power_on(); ui.home = 0; ui.page = (uint8_t)i; page_entered();
         ok &= FAM_BTN[cur_fam()] == (f == FAM_TRK ? B_HOME : f == FAM_GLO ? B_GLO : f == FAM_SEQ ? B_SEQ :
@@ -2778,7 +2795,7 @@ static int test_page_cycles(void)
     }
     for (i = 0; i < NPAGES; i++)
         ok &= !str_eq(PAGES[i].title, "PATTERN") && !str_eq(PAGES[i].title, "CHANCE") && !str_eq(PAGES[i].title, "AUTO LIST");
-    bad += check("1.2: SEQ has STEP and AUTOMATION only; SONG is GLO's only page, PHRASES SAVE's, MIXER and CLOCK HOME's "
+    bad += check("1.2: SEQ has STEP and AUTOMATION only; SONG is GLO's only page, PHRASES SAVE's, MIXER CLOCK KEYS HOME's "
                  "(their LED HOME)", ok);
     {   /* 1.2: GLOBAL and SYSTEM are gone; their knobs: BPM SWG CLK on HOME > CLOCK, TUNE and ROUT on no page (the MENU's),
          * MIDI SYNC CPU on none (INFO shows the USB state and the CPU) */
@@ -2947,6 +2964,8 @@ static int test_product_ux(void)
         ok &= song.g[G_BPM] == bpm + 1 && song.g[G_SWING] == swg + 1 && song.g[G_CLOCK] != clk && song.g[G_TUNE] == tune;
         song.g[G_CLOCK] = clk;
     }
+    press(B_HOME);                                      /* (2.1: CLOCK > KEYS > HOME) */
+    ok &= !ui.home && str_eq(cur_page()->title, "KEYS");
     press(B_HOME);
     ok &= ui.home && !ui.menu;
     press(B_HOME);
@@ -2954,8 +2973,18 @@ static int test_product_ux(void)
     go_title("ENV"); press(B_HOME);
     ok &= ui.home;
     go_title("CLOCK"); press(B_HOME);
+    ok &= !ui.home && str_eq(cur_page()->title, "KEYS");   /* (2.1: KEYS after CLOCK) */
+    {   /* KEYS's knobs: MODE TRK SPLT OCT, nothing else */
+        int16_t g0[G_COUNT];
+        memcpy(g0, song.g, sizeof g0);
+        turn(EN_K1, 1); turn(EN_K2, -1); turn(EN_K3, 1); turn(EN_K4, 1);
+        ok &= song.g[G_KMODE] == g0[G_KMODE] + 1 && song.g[G_KTRK] == g0[G_KTRK] - 1 &&
+              song.g[G_KSPLIT] == g0[G_KSPLIT] + 1 && song.g[G_KOCT] == g0[G_KOCT] + 1 && song.g[G_BPM] == g0[G_BPM];
+        memcpy(song.g, g0, sizeof g0);
+    }
+    press(B_HOME);
     ok &= ui.home;
-    bad += check("1.2: HOME cycles HOME > MIXER > CLOCK > HOME (CLOCK: BPM SWG CLK, HOME's LED); from any other page HOME", ok);
+    bad += check("HOME cycles HOME > MIXER > CLOCK > KEYS > HOME (CLOCK: BPM SWG CLK; KEYS: MODE TRK SPLT OCT); elsewhere HOME", ok);
     hold(B_HOME);
     bad += check("1.2: HOME held still opens the menu", ui.menu == 1);
     ui_power_on();
@@ -4139,14 +4168,14 @@ static int test_quick_layers(void)
         eng_list_pos(&tot);
         btn_down(B_EDIT); frame();
         c0 = eng_list_pos(&tot);                        /* (GHOULBOX 1.1: SAMPLE's kept presets are its four CC0 sets) */
-        ok = c0 == 0u && tot == 4u && TSEL->preset == 5u;
-        for (n = 0; n < 8u; n++) {                      /* round both ways: the four, never the aliases (1, 4) */
-            turn(EN_K2, n < 4u ? 1 : -1);
+        ok = c0 == 0u && tot == 7u && TSEL->preset == 5u;
+        for (n = 0; n < 14u; n++) {                     /* four built-ins plus USR1..3, both ways */
+            turn(EN_K2, n < 7u ? 1 : -1);
             seen |= 1u << TSEL->preset;
             alias |= TSEL->preset == 1u || TSEL->preset == 4u;
         }
         (void)c1; (void)c2;
-        ok &= !alias && seen == (0xFu << 5) && TSEL->eng_req == ENGI_SAMPLE;
+        ok &= !alias && seen == (0x7Fu << 5) && TSEL->eng_req == ENGI_SAMPLE;
         btn_up(B_EDIT); frame();
         bad += check("  #124 SAMPLE (GHOULBOX 1.1): KNOB 2 steps its four CC0 presets both ways, never an alias", ok);
     }
@@ -9384,10 +9413,11 @@ static int test_home_tracks(void)
     bad += check("1.3 HOME > TRACKS: K1..K4 edit the selected track (HOME's four), ALGORITHM moves the selected row", ok);
     press(B_HOME); ok = !ui.home && cur_page()->graph == GR_TRK;
     press(B_HOME); ok &= !ui.home && str_eq(cur_page()->title, "CLOCK");
+    press(B_HOME); ok &= !ui.home && str_eq(cur_page()->title, "KEYS");
     press(B_HOME); ok &= ui.home;
     frame();
     ok &= tr_px(3 + 22, tr_y(3) + 1) == T_THEME;
-    bad += check("1.3 HOME > TRACKS: HOME tapped still goes HOME > MIXER > CLOCK > HOME (the rows back)", ok);
+    bad += check("1.3 HOME > TRACKS: HOME tapped still goes HOME > MIXER > CLOCK > KEYS > HOME (the rows back)", ok);
 
     ui_prefs |= PREF_LARGE;                             /* MENU > LARGE: the cards as on a list page, the rows */
     ui.force = 1; frame();
@@ -9689,7 +9719,7 @@ static int test_hidden_presets(void)
     bad += check("hidden presets: 54 names (PIANO covers SAMPLE's two), each one a real preset",
                  ok && NELEM(GB_HIDDEN) == 54u);
     preset_all_pos(&total);
-    ok = total == 68u + (FELUCCA_FM4 ? ENGINES[ENGI_DIGITAL]->npresets : 0u);   /* + two santurs, MIJWIZ, ARGHUL */
+    ok = total == 71u + (FELUCCA_FM4 ? ENGINES[ENGI_DIGITAL]->npresets : 0u);   /* + two santurs, MIJWIZ, ARGHUL */
     for (i = 0; i < total; i++) {
         e = preset_all_at(i, &k);
         ok &= e < NENGINES && !preset_hidden(ENGINES[e], k);

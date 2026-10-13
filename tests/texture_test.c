@@ -123,7 +123,8 @@ int main(void)
     check(same, "off (SRC OFF, LEVEL 0, PLAY while stopped): the mix bit for bit as without");
 
     /* each source */
-    for (s = TX_VINYL; s <= TX_ROOM; s++) {
+    for (s = TX_VINYL; s < TX_N; s++) {
+        if (s >= TX_USR1 && s < TX_CAVE) continue;
         double db, mean;
         int32_t pk = 0;
         render(NOTE_OFF, (int32_t)s, 64, 0, 0, 1, 2u * SEC);
@@ -131,7 +132,7 @@ int main(void)
         for (i = 0; i < n; i++) {
             pk = abs(yl[i]) > pk ? abs(yl[i]) : pk;
         }
-        snprintf(b, sizeof b, "%-5s LEVEL 64: %.1f dBFS rms (-45 .. -15), peak %d, mean %.0f", NAME[s], db, pk, mean);
+        snprintf(b, sizeof b, "%-5s LEVEL 64: %.1f dBFS rms (-45 .. -15), peak %d, mean %.0f", N_TXSRC[s], db, pk, mean);
         check(db > -45.0 && db < -15.0 && pk < 32767 && fabs(mean) < 300.0, b);
     }
     render(NOTE_OFF, TX_USR1, 127, 0, 0, 1, SEC);

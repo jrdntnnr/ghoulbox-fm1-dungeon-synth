@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 /* ------------------------------------------------------------ sizes --- */
-#define NVOICE 8                 /* voices per part, and the budget shared by all parts */
+#define NVOICE 12                /* voices per part, and the budget shared by all parts */
 #define NPART 4                  /* synth parts: tracks 1..4 */
 #define NTRK NPART               /* tracks (the formats and the protocol count these): every track is a part */
 #define NSTEP 64
@@ -21,7 +21,7 @@
                                   * by default; replaced by FM6, its sounds convert (fm4_convert.c) */
 #endif
 #ifndef GHOULBOX_VERSION
-#define GHOULBOX_VERSION "1.4-dune"   /* GHOULBOX's own: the ABOUT screen; the editor's version string ends " GB" it */
+#define GHOULBOX_VERSION "2.1-dune"   /* GHOULBOX's own: the ABOUT screen; the editor's version string ends " GB" it */
 #endif
 #define NENGINES 15u             /* SLICE 13 (reserved without FELUCCA_SLICE: never offered), GURDY 14 (GHOULBOX):
                                   * every engine keeps its number in every build */
@@ -82,6 +82,7 @@ enum {                          /* per-track parameters */
     P_TC0, P_TC1, P_TC2, P_TC3, P_TC4, P_TC5,
     P_TC6, P_TC7, P_TC8, P_TC9, P_TC10, P_TC11,
     P_TMASK0, P_TMASK1, /* custom Scala scale membership, low/high six bits */
+    P_TEMP,                                    /* temperament, after our stable tuning IDs */
     P_E0, P_E1, P_E2, P_E3, P_E4, P_E5, P_E6, P_E7,
     P_COUNT
 };
@@ -105,6 +106,9 @@ enum {                          /* global parameters */
                                  * them 0 (project.c proj_drums_to_part) */
     G_TXSRC, G_TXLVL, G_TXTONE,     /* TEXTURE (after SLOOP 2.6, isod89; fx.c texture_*): a bed under the mix. Past */
     G_TXMOVE, G_TXRATE, G_TXWHEN,   /* the project's globals (PROJ_NG): it packs them in inert slots (proj_tx_put) */
+    G_KMODE, G_KTRK, G_KSPLIT, G_KOCT,   /* GHOULBOX 2.1: HOME > KEYS, what the keys play (seq.c keyboard_block): OFF,
+                                 * LAYER (the selected track and KTRK together) or SPLIT (KTRK below key 3 + KSPLIT);
+                                 * KOCT KTRK's octave (0..4: -2..+2). Appended: FUN10's tail (project.c PROJ_KEYS_OFF) */
     G_COUNT
 };
 
@@ -123,6 +127,18 @@ static void params_by_count(int16_t *out, const int16_t *in, uint32_t np, const 
 
 /* First GHOULBOX tuning prototype: common 0..82, tuning 83..94, engine 95..102.
  * Its magic/version distinguishes it from Felucca's unrelated 103-parameter layout. */
+/* Ghoulbox 2.x FUNA / preset v4-v5, np=112: TEMP occupied our TC0.
+ * Its dungeon scales used IDs 16..18; preserve their pitch masks explicitly. */
+static void params_ghoul2(int16_t *out, const int16_t *in, const int16_t *def)
+{
+    params_by_count(out, in, 112u, def);
+    out[P_TC0] = def[P_TC0];
+    out[P_TEMP] = in[103];
+    if (in[P_SCALE] >= 16 && in[P_SCALE] <= 18) {
+        static const uint8_t scale[3] = {22, 32, 23};
+        out[P_SCALE] = scale[in[P_SCALE] - 16];
+    }
+}
 static uint32_t params_gbm1_id(uint32_t id)
 {
     return id < 83u ? id : id < 95u ? P_TC0 + id - 83u : P_E0 + id - 95u;
@@ -421,6 +437,17 @@ static track_t trk[NTRK];        /* the instrument: four parts */
 /* a sound loaded over sounding notes (voice.c sound_change; after SLOOP 2.6, isod89): the sound they fade out with */
 static int16_t snd_old[NTRK][P_COUNT];
 static volatile uint8_t snd_fading;     /* bit per track: a fade with snd_old under way */
+/* GHOULBOX: the drone latch of track i (seq.c, GLO + F#4..C#5): live notes sound on after their keys. Not stored;
+ * apart from track_t, whose size every trk[i] in the code is indexed by */
+typedef struct {
+    uint8_t on;                  /* the UI's switch (ui_layer.c), 0 / 1 */
+    uint8_t onp;                 /* in effect, as last seen by the ISR (seq.c latch_on): on -> off ends the drone */
+    uint8_t stop;                /* this press stopped the drone: its notes stay silent until every key is up */
+    uint16_t phys;               /* live note-ons not let go yet (0: the next one starts a new chord) */
+    uint32_t m[4];               /* the drone: a bit per latched note */
+    uint32_t out[4];             /* .. those whose MIDI OUT note-off waits for the drone's end (the keys') */
+} latch_t;
+static latch_t lt[NTRK];
 static song_t song;
 #define TSEL (&trk[song.sel])    /* the selected track */
 
@@ -443,6 +470,7 @@ static inline uint32_t swing_step_len(const track_t *t, uint32_t base, uint32_t 
 /* ----------------------------------------------------------- system --- */
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")   /* slot store before the index update */
 static volatile uint32_t fm1_ms;  /* milliseconds since boot (TIMER4-based, TIMER5 ISR in main.c) */
-/* boot-loop guard (main.c): two boots in a row that die in the first 30 s -> UBOOT */
-#define BOOTGUARD_MAGIC 0x42475244u
-struct { uint32_t magic, failed, pending; } bootguard __attribute__((section(".noinit")));
+/* boot-loop guard (main.c, bootguard.h): two boots in a row that die in the first 30 s -> the USB RESCUE (rescue.c),
+ * a reset there -> UBOOT */
+#include "bootguard.h"
+bootguard_t bootguard __attribute__((section(".noinit")));

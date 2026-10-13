@@ -26,6 +26,7 @@ static uint8_t in_key;                   /* the key (+ 1) whose notes go into in
  * note (a CHRD chord's other notes). Out of track_t: its size stays as the audio ISR's trk[] indexing wants it */
 static uint8_t held_key[NTRK][16];
 static int8_t held_dt[NTRK][16];
+static uint8_t kb_trk2[27];              /* GHOULBOX 2.1: KEYS LAYER's second track of key k, + 1 (0: none) */
 static volatile uint8_t kb_asleep;       /* MENU > SCREEN OFF (ui.c): the screen dark or waking, a key pressed now only
                                           * wakes it (silent, no layer, its release nothing) */
 static uint8_t last_note = 60;
@@ -194,7 +195,7 @@ static void arp_add(track_t *t, uint32_t note)
         uint8_t *hk = held_key[trk_index(t)];
         hk[t->nheld] = in_key && song.grid != 1u && kb_engine(t, k) < 0
                            ? (uint8_t)(in_key | (uint32_t)(song.octave + 3) << 5) : 0u;
-        held_dt[trk_index(t)][t->nheld] = (int8_t)(hk[t->nheld] ? (int32_t)note - kb_note[k] : 0);
+        held_dt[trk_index(t)][t->nheld] = (int8_t)(hk[t->nheld] ? (int32_t)note - (int32_t)kb_pitch(t, k, song.octave) : 0);
         t->held[t->nheld++] = (uint8_t)note;
     }
     if (t->nheld == 1u) {
@@ -626,8 +627,44 @@ static __attribute__((noinline)) void cin_keep(track_t *t, uint32_t note, uint32
     cin_up[i] &= (uint8_t)~(1u << k);
 }
 
+/* GHOULBOX: the drone latch (GLO + F#4..C#5, core.h latch_t): on a synth track with the ARP off (its HOLD latches
+ * there), the live notes (keys, MIDI in) sound on after they are let go: the drone. With no key down, a new note
+ * starts a new chord (the drone ends first: as ARP HOLD); a note of the drone instead ends it, and the notes of that
+ * press stay silent until every key is up. The sequencer's notes never latch, nor end a latched one (voice.c
+ * trk_note_off), nor do the pedal (CC64) or the key's note-off; the drone ends with the latch off, a sound, engine or
+ * project load (panic_req), CC120 / CC123. Its voices are not taken by other parts (voice.c lt_voice). What is
+ * recorded is what the keys did; the keys' MIDI OUT note-offs wait for the drone's end */
+static int lt_has(const uint32_t *m, uint32_t n) { return (int)((m[n >> 5] >> (n & 31u)) & 1u); }
+static int latch_on(const track_t *t) { return lt[trk_index(t)].on && !t->p[P_AMODE] && !drum_track(t); }
+static void latch_end(track_t *t)                   /* the drone lets go */
+{
+    latch_t *l = &lt[trk_index(t)];
+    uint32_t n, mc = trk_midi_ch(trk_index(t));
+    if (!(l->m[0] | l->m[1] | l->m[2] | l->m[3]))
+        return;
+    for (n = 0; n < 128u; n++) {
+        if (!lt_has(l->m, n))
+            continue;
+        l->m[n >> 5] &= ~(1u << (n & 31u));
+        trk_note_off(t, n);
+        if (mc < MIDI_CH_NONE && lt_has(l->out, n))
+            midi_out_event(0x08u | (0x80u | mc) << 8 | n << 16);
+    }
+    memset(l->out, 0, sizeof l->out);
+}
+
 static void input_on(track_t *t, uint32_t note, uint32_t vel)
 {
+    latch_t *l = &lt[trk_index(t)];
+    if (latch_on(t)) {                              /* the first note of a press: a new chord, or the drone's end */
+        if (!l->phys++) {
+            l->stop = (uint8_t)lt_has(l->m, note);
+            latch_end(t);
+        }
+        if (l->stop)
+            return;
+        l->m[note >> 5] |= 1u << (note & 31u);
+    }
     last_note = (uint8_t)note;
     if (cin_left)
         cin_keep(t, note, vel);
@@ -643,6 +680,9 @@ static int midi_note_held(const track_t *t, uint32_t note);
 static int midi_local_held(const track_t *t, uint32_t note);
 static void input_off(track_t *t, uint32_t note)
 {
+    latch_t *l = &lt[trk_index(t)];
+    if (latch_on(t) && l->phys && !--l->phys)
+        l->stop = 0;                             /* (every key up: the next press plays) */
     if (midi_note_held(t, note))
         return;
     if (cin_left) {                                 /* a kept note let go before step 1: recorded, then let go */
@@ -714,39 +754,65 @@ static __attribute__((noinline)) void perf_key_remap(void)
 
 /* key k plays kb_note[k] on track t: its chord (chord.c; the note alone with CHRD OFF). A note another key
  * holds already sounds: it is not started again (nor sent to MIDI OUT); the key keeps its notes */
-static void key_on(uint32_t k, track_t *t)
+/* a key's note (and its chord) on track t: the notes into chord[], their count into *chn (GHOULBOX 2.1: the key's
+ * own, or KEYS LAYER's second sound) */
+static void key_on_to(uint32_t k, track_t *t, uint32_t note, uint8_t *chord, uint8_t *chn)
 {
-    uint32_t n = chord_build(t, kb_note[k], kb_chord[k]), i, mc = trk_midi_ch(trk_index(t));
-    kb_chn[k] = 0;
-    in_key = (uint8_t)(k + 1u);                     /* (the arp keeps the key: arp_add) */
+    uint32_t n = chord_build(t, note, chord), i, mc = trk_midi_ch(trk_index(t));
+    *chn = 0;
+    in_key = (uint8_t)(k + 1u);
     for (i = 0; i < n; i++) {
-        uint32_t x = kb_chord[k][i];
+        uint32_t x = chord[i];
         if (midi_local_held(t, x))
             continue;
         input_on(t, x, 100);
-        if (mc < MIDI_CH_NONE) {
+        if (mc < MIDI_CH_NONE && !lt[trk_index(t)].stop)
             midi_out_event(0x09u | (0x90u | mc) << 8 | x << 16 | 100u << 24);
-        }
     }
     in_key = 0;
-    kb_chn[k] = (uint8_t)n;
+    *chn = (uint8_t)n;
+}
+static void key_on(uint32_t k, track_t *t)
+{
+    key_on_to(k, t, kb_note[k], kb_chord[k], &kb_chn[k]);
     last_note = kb_note[k];                         /* (step entry, the SAMPLE zone: the key's note) */
 }
 
 /* key k is up: the notes it started end, but those another key still holds */
-static void key_off(uint32_t k, track_t *t)
+static void key_off_from(track_t *t, const uint8_t *chord, uint8_t *chn)
 {
-    uint32_t n = kb_chn[k], i, mc = trk_midi_ch(trk_index(t));
-    kb_chn[k] = 0;
+    uint32_t n = *chn, i, mc = trk_midi_ch(trk_index(t)), quiet;
+    *chn = 0;
     for (i = 0; i < n; i++) {
-        uint32_t x = kb_chord[k][i];
+        uint32_t x = chord[i];
         if (midi_local_held(t, x))
             continue;
+        quiet = lt[trk_index(t)].stop;
         input_off(t, x);
         if (mc < MIDI_CH_NONE) {
-            midi_out_event(0x08u | (0x80u | mc) << 8 | x << 16);
+            if (lt_has(lt[trk_index(t)].m, x))
+                lt[trk_index(t)].out[x >> 5] |= 1u << (x & 31u);
+            else if (!quiet)
+                midi_out_event(0x08u | (0x80u | mc) << 8 | x << 16);
         }
     }
+}
+static void key_off(uint32_t k, track_t *t) { key_off_from(t, kb_chord[k], &kb_chn[k]); }
+
+/* GHOULBOX 2.1: HOME > KEYS. SPLIT: key k below the KSPLIT key plays KTRK instead of the selected track; LAYER: every
+ * key plays KTRK too (not when it is the selected one). Neither on the SEQ pages (the keys enter steps there: what is
+ * written is the selected track's), the DRUM grid, NAME or SONG's keys. KTRK's note: its own map, KOCT octaves on it
+ * (an engine that maps the keys itself, DRUM's kit, as it maps them) */
+static int keys_on(void) { return !song.seq_mode && !song.grid; }
+static int keys_split(uint32_t k) { return song.g[G_KMODE] == 2 && keys_on() && k < 3u + (uint32_t)song.g[G_KSPLIT]; }
+static uint32_t keys_trk(void) { return (uint32_t)song.g[G_KTRK] & 3u; }
+static uint32_t keys_note(uint32_t tr, uint32_t k)
+{
+    const track_t *t = &trk[tr];
+    uint32_t n = kb_map(t, k);
+    if (n == KB_SILENT || ENGINES[eng_idx(t->eng_req)]->keys)
+        return n;
+    return (uint32_t)clamp((int32_t)n + 12 * (song.g[G_KOCT] - 2), 0, 127);
 }
 
 #ifdef FM1_INPUT_LAT
@@ -791,6 +857,7 @@ static void keyboard_block(void)
             continue;
         if ((cur >> k) & 1u) {                    /* the selected track; the key-up goes to the same one */
             kb_trk[k] = song.sel;
+            kb_trk2[k] = 0;                       /* (GHOULBOX 2.1: no second sound unless KEYS LAYER gives one) */
             if (kb_asleep) {                      /* (SCREEN OFF: the wake press is swallowed) */
                 kb_note[k] = KB_SILENT;
                 continue;
@@ -806,8 +873,18 @@ static void keyboard_block(void)
                 kb_note[k] = KB_SILENT;
             else if (song.grid == 1u)             /* the DRUM grid: a lane key plays its lane, the rest are the UI's */
                 kb_note[k] = grid_key_note(k);
-            else
+            else if (keys_split(k)) {             /* GHOULBOX 2.1: KEYS SPLIT, below the split: KTRK instead */
+                kb_trk[k] = (uint8_t)keys_trk();
+                kb_note[k] = (uint8_t)keys_note(kb_trk[k], k);
+            } else
                 kb_note[k] = (uint8_t)kb_map(&trk[kb_trk[k]], k);
+            if (song.g[G_KMODE] == 1 && keys_on() && !((mute >> k) & 1u) && keys_trk() != song.sel) {
+                uint32_t n2 = keys_note(keys_trk(), k);   /* GHOULBOX 2.1: KEYS LAYER: KTRK too */
+                if (n2 != KB_SILENT) {
+                    kb_trk2[k] = (uint8_t)(keys_trk() + 1u);
+                    key_on_to(k, &trk[keys_trk()], n2, kb_chord2[k], &kb_chn2[k]);
+                }
+            }
             if (kb_note[k] == KB_SILENT)
                 continue;
             key_on(k, &trk[kb_trk[k]]);
@@ -819,6 +896,10 @@ static void keyboard_block(void)
                 kb_layer &= ~(1u << k);
                 perf_key_press(k, 0);
                 continue;
+            }
+            if (kb_trk2[k]) {                     /* GHOULBOX 2.1: KEYS LAYER's second sound, as it started */
+                key_off_from(&trk[(kb_trk2[k] - 1u) % NTRK], kb_chord2[k], &kb_chn2[k]);
+                kb_trk2[k] = 0;
             }
             if (kb_note[k] == KB_SILENT)
                 continue;
@@ -1309,6 +1390,11 @@ static void events_block(uint32_t n)
     }
     for (i = 0; i < NTRK; i++) {
         track_t *t = &trk[i];
+        if (((pr >> i) & 1u) || lt[i].onp != latch_on(t)) {   /* GHOULBOX: the drone ends (panic, or the latch */
+            latch_end(t);                             /* off: GLO, ARP on, a DRUM engine); a press from scratch */
+            lt[i].phys = lt[i].stop = 0;
+            lt[i].onp = (uint8_t)latch_on(t);
+        }
         if ((pr >> i) & 1u) {
             midi_forget_track(i);
             trk_all_off(t);

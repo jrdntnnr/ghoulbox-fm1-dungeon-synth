@@ -27,7 +27,7 @@
 #undef memset
 #undef memcpy
 #undef memcmp
-static struct { volatile uint32_t notes, buttons; } fm1_in;
+static struct { volatile uint32_t notes, buttons; uint32_t frames, enc_dfr[7]; } fm1_in;   /* (GHOULBOX: the crank's) */
 #include "../firmware/src/core.h"
 #include "../firmware/src/engines.c"
 #include "../firmware/src/params.c"
@@ -416,10 +416,10 @@ static int steal_test(const char *dir)
         int32_t o[2 * CTL];
         uint32_t ms = f * 1000u / FS, k0 = voice_kills;
         if (f == 0)
-            for (i = 0; i < 7u; i++)
-                trk_note_on(&trk[0], N1[i], 90);
+            for (i = 0; i < NVOICE - 1u; i++)          /* (GHOULBOX: the budget full, 8 or 12) */
+                trk_note_on(&trk[0], N1[i % 7u] + 12u * (i / 7u), 90);
         if (f == FS / 2u / CTL * CTL)
-            trk_note_on(&trk[1], 74, 90);          /* 8: the budget is full */
+            trk_note_on(&trk[1], 74, 90);          /* NVOICE: the budget is full */
         if (ms >= 1000u && ms % 500u == 0u && f % (FS / 2u) < CTL && ms < 3500u) {
             p = ms / 500u % 2u ? 1u : 2u;          /* parts 2, 3 in turn: each takes a voice */
             trk_note_on(&trk[p], 76u + ms / 250u, 90);

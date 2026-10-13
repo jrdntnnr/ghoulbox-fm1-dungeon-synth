@@ -23,6 +23,9 @@ FUNCS = ["analog_render", "digital_render", "digital_render_legacy", "digital_re
          "slicer_track",
          "slice_render", "slc_rev",                          # SLICE (eng_slice.c): the render, the reverse windows
          "fm1_alnk0_irq", "fm1_timer5_irq",               # the audio ISR; TIMER5: the key / LED scan (hal/fm1_input.h)
+         "usb_poll", "fm1__frame", "fm1__keys",             # TIMER5's USB poll (usb.c), its key / encoder frame and keys
+                                                            # (hal/fm1_input.h): calls of their own since GHOULBOX's
+                                                            # rescue.c uses them too (not in fm1_timer5_irq's count)
          "uac_tap48",                                       # the USB audio input at 48 kHz: the 44.1 -> 48 resampler (usb.c)
          "click_render",                                    # the metronome's click (click.c), while it sounds
          "mod_begin", "mod_voice", "mod_end",                 # the modulation matrix (mod.c), called when active
@@ -32,7 +35,7 @@ FUNCS = ["analog_render", "digital_render", "digital_render_legacy", "digital_re
          "rev_room", "rev_spring", "rev_hall", "rev_side_mix",   # the reverb bus (fx.c): REVERB TYPE ROOM / SPRING / HALL (and its stereo)
          "track_insert", "ins_drive", "ins_swept",          # the per-track INSERT (fx.c, 1.5), while a TYPE plays
          "mix_part_run", "master_block",                    # a part's mix (out of the ISR: mix_part's sound fade), the master
-         "texture_mix", "texture_gen"]                      # TEXTURE (fx.c), while a source plays
+         "texture_mix", "cave_gen", "texture_gen"]                      # TEXTURE (fx.c), while a source plays
 # built only with FELUCCA_FM4=1 (DIGITAL, src/eng_digital.c; not in the default build, so not in BUDGET): absent,
 # they are skipped; present, checked against these (their budget lines until the engine was retired in 1.0)
 OPTIONAL = {"digital_render": 12, "digital_render_legacy": 333, "digital_render_custom": 558,

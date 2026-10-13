@@ -573,6 +573,7 @@ static int formats(void)
             step_set_nudge(&a.t[k].step[i], 0);
     }
     memcpy(a.name, "OLD SONG", 9);
+    a.keys = 0; /* legacy formats had no keyboard configuration word */
     chain_defaults(&a.chain);                         /* a song of rows {slot, repeat} (36 bytes then) */
     a.chain.count = 3;
     a.chain.row[0] = chain_row_of(0, 4); a.chain.row[1] = chain_row_of(3, 16); a.chain.row[2] = chain_row_of(1, 1);

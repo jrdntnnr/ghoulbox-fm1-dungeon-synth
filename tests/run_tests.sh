@@ -11,7 +11,7 @@
 #   CPU             instructions / sample per preset and mix (tests/cpu_baseline.txt, +25 %), ns printed;
 #                   target: loop instructions of the render functions in the pi32v2 disassembly
 #                   (tests/target_budget.txt, +10 %; exact, static).
-#   voices          the budget of 8, steal fades, MONO / LEGATO / UNISON keep their note, the VOICE cap,
+#   voices          the budget of 12 (UNISON 8), steal fades, MONO / LEGATO / UNISON keep their note, the VOICE cap,
 #                   no hanging notes on any MIDI / key routing.
 # ENGINE MEMORY (tests/union_test.c, 1.5): engine switches on a part (every pair and A -> B -> A of the engines that
 #                   share the part's state region, with others), hashed against 1.4's (tests/union_golden.txt).
@@ -174,6 +174,9 @@ run "flash storage (A/B, torn writes)" "$OUT/storage_test"
 $CC -o "$OUT/upreset_test" tests/upreset_test.c
 run "user presets (UP_PUT parser, bank round trip, versions, PHYS DRUM and SAMPLE PERC -> DRUM, grid records, DIGITAL kept)" "$OUT/upreset_test"
 
+$CC -o "$OUT/bootguard_test" tests/bootguard_test.c
+run "boot guard (GHOULBOX, after dinghy): two failed boots -> the USB RESCUE, a reset there -> UBOOT, power-on clears, OCT- alone" "$OUT/bootguard_test"
+
 $CC -o "$OUT/input_test" tests/input_test.c
 run "keys and buttons: fast press, long release, bouncy contacts (one note each), glitches, encoders" "$OUT/input_test"
 
@@ -228,6 +231,8 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "desert banks: actual decoding, tuned seventh chords and CITADEL audition" "$OUT/desert_test"
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/integration_format_test" tests/integration_format_test.c -lm
     run "compact projects and legacy microtuning migration" "$OUT/integration_format_test"
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/ghoulbox2_test" tests/ghoulbox2_test.c -lm
+    run "Ghoulbox 2.x frozen migration and simultaneous temperament/maqam chords" "$OUT/ghoulbox2_test"
     run "explicit legacy settings conversion" python3 tests/settings_migration_test.py
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/scale_test" tests/scale_test.c -lm
     run "scales: white-key mapping and note lifecycle" "$OUT/scale_test"
@@ -262,6 +267,10 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "1.2 (FUN10): LFO 2 SYNC / TRIG / POL, NUDGE (record, QUANTIZE, play, controls), 128 motion records, FUN10 / FUN9 / FUN8 / FUN7, user presets" "$OUT/fun10_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/midi_control_test" tests/midi_control_test.c -lm
     run "USB/TRS clock, bend, sustain, ownership and panic recovery" "$OUT/midi_control_test"
+    $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/latch_test" tests/latch_test.c -lm
+    run "the drone latch (GHOULBOX, GLO + F#4..C#5): new chord, stop press, what ends it, MIDI OUT, recording, voices kept" "$OUT/latch_test"
+    $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/keys_test" tests/keys_test.c -lm
+    run "HOME > KEYS (GHOULBOX 2.1): LAYER, SPLIT, OCT, release as started, the SEQ pages, saved with the project" "$OUT/keys_test"
     $CC -O1 -w -DFELUCCA_FM4=1 -Ibuild/gen -Ifirmware/src -o "$OUT/digital_test" tests/digital_test.c -lm
     run "DIGITAL (retired, built here with FELUCCA_FM4=1): operator envelopes/levels" "$OUT/digital_test"
     $CC -O2 -w -DFELUCCA_FM4=1 -Ibuild/gen -Ifirmware/src -o "$OUT/fm4_test" tests/fm4_test.c -lm
@@ -341,6 +350,10 @@ if [ -f build/gen/felucca_tables.h ]; then
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/reverb_test" tests/reverb_test.c -lm
     mkdir -p build/reverb_demo
     run "REVERB TYPE: ROOM / SPRING bit-identical, SPRING and HALL decay / stability / level, HALL silence / stereo / ringing, model changes, cost, demos" "$OUT/reverb_test" build/fx_demo build/reverb_demo
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/tape_test" tests/tape_test.c -lm
+    run "TAPE / CRSH (GHOULBOX): off untouched, wow / flutter, high cut, hiss, bounded, crush, switch-on, cost" "$OUT/tape_test"
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/gurdy_test" tests/gurdy_test.c -lm
+    run "GURDY (GHOULBOX): the drone on DRN, the trompette's strokes, one wheel, corners, cost, the crank" "$OUT/gurdy_test"
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/regress" tests/regress.c -lm
     run "regression: golden renders, health, voices, CPU budget" "$OUT/regress" tests/golden.txt tests/cpu_baseline.txt
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/union_test" tests/union_test.c -lm

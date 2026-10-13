@@ -119,7 +119,19 @@ static uint32_t fm1_input_edges(uint32_t *released)
     return p;
 }
 static uint32_t fm1_input_note_edges(void) { uint32_t n = web_notes_pressed; web_notes_pressed = 0; return n; }
-static int32_t fm1_enc_take(uint32_t e) { int32_t s = web_enc_steps[e % 7u]; web_enc_steps[e % 7u] = 0; return s; }
+static int32_t fm1_enc_take(uint32_t e)
+{
+    static uint32_t last[7];
+    e %= 7u;
+    int32_t s = web_enc_steps[e];
+    if (s) {
+        uint32_t elapsed = fm1_in.frames - last[e], n = s < 0 ? -s : s;
+        fm1_in.enc_dfr[e] = elapsed / n ? elapsed / n : 1u;
+        last[e] = fm1_in.frames;
+    }
+    web_enc_steps[e] = 0;
+    return s;
+}
 static void fm1_input_init(void) {}
 static void fm1_input_tick(void) {}
 static void fm1_wdt_feed(void) {}
@@ -296,6 +308,7 @@ static uint32_t ring_w, ring_r, web_samples_due;
 static void web_ms(void)
 {
     fm1_ms++;
+    fm1_in.frames = (uint32_t)((uint64_t)fm1_ms * 10u / 11u); /* hardware scan frame: 1.1 ms */
     web_ticks += 1000u * FM1_TICKS_PER_US;
     web_samples_due += FS;
     while (web_samples_due >= 1000u * HALF_FRAMES) {      /* an I2S half: the audio ISR renders it */

@@ -1124,7 +1124,9 @@ static __attribute__((noinline)) void perf_master(int32_t *out, uint32_t n)
  *   ROOM   room tone: a low rumble and a little air
  * Its level: x * LEVEL^2 / 16384 into the mix (the sources at about 8000 rms: LEVEL 64 about -30 dBFS rms out, 127
  * about -18). Off (and faded out): nothing runs, the mix bit for bit as without */
-enum { TX_OFF, TX_VINYL, TX_TAPE, TX_RAIN, TX_WIND, TX_RADIO, TX_ROOM, TX_USR1, TX_N = TX_USR1 + 4 };
+
+#include "ambience.c"
+enum { TX_OFF, TX_VINYL, TX_TAPE, TX_RAIN, TX_WIND, TX_RADIO, TX_ROOM, TX_USR1, TX_CAVE = TX_USR1 + 4, TX_TORCH, TX_N };
 static struct {
     int32_t rnd;                                        /* noise state (never 0) */
     int32_t g;                                          /* gain now (Q15 of the LEVEL target), ramped a block */
@@ -1147,6 +1149,7 @@ static inline int32_t tx_n16(void) { return (int32_t)(noise32(&tx.rnd) >> 16) - 
 static void texture_reset(uint32_t src)
 {
     int32_t rnd = tx.rnd, g = tx.g;
+    amb.on = 0;
     uint32_t ph = tx.ph;
     uint8_t play = tx.play;
     memset(&tx, 0, sizeof tx);
@@ -1180,9 +1183,10 @@ static inline int32_t tx_usr_next(const smp_zone_t *z)
 static __attribute__((noinline)) void texture_gen(uint32_t src, int32_t *l, int32_t *r, uint32_t n)
 {
     uint32_t i, k;
+    if (src == TX_CAVE || src == TX_TORCH) { cave_gen(l, r, n, src == TX_TORCH); return; }
     if (src >= TX_USR1) {
         uint32_t s = src - TX_USR1;
-        const smp_zone_t *z = usr_nz[s] ? &usr_zone[s][0] : 0;
+        const smp_zone_t *z = s < SMP_USER_SLOTS && usr_nz[s] ? &usr_zone[s][0] : 0;
         if (!z || !z->n) {
             for (i = 0; i < n; i++)
                 l[i] = r[i] = 0;
@@ -1347,7 +1351,7 @@ static __attribute__((noinline)) void texture_mix(int32_t *l, int32_t *r, uint32
     mv = 32767 - mulq15(u, 21000);                      /* the level breathing: down to ~36 % */
     k0 = 32767 - mulq15(u, 28000);                      /* the brightness: a one-pole closing */
     texture_gen(tx.src, tl, tr, n);
-    sc = TX_SCALE[tx.src < TX_USR1 ? tx.src : TX_USR1];
+    sc = tx.src >= TX_CAVE ? 2048 : TX_SCALE[tx.src < TX_USR1 ? tx.src : TX_USR1];
     for (i = 0; i < n; i++) {                           /* each source to its level, MOVE's colour (Q13: no overflow */
         tx.lpm[0] += ((((tl[i] * sc) >> 8) - tx.lpm[0]) >> 2) * (k0 >> 2) >> 11;   /* up to +-260000) */
         tx.lpm[1] += ((((tr[i] * sc) >> 8) - tx.lpm[1]) >> 2) * (k0 >> 2) >> 11;

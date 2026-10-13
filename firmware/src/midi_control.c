@@ -65,11 +65,16 @@ static int midi_note_held(const track_t *t, uint32_t note)
 static int midi_local_held(const track_t *t, uint32_t note)
 {
     uint32_t k, i;
-    for (k = 0; k < 27u; k++)
+    for (k = 0; k < 27u; k++) {
         if (kb_chn[k] && kb_trk[k] == trk_index(t))
             for (i = 0; i < kb_chn[k]; i++)
                 if (kb_chord[k][i] == note)
                     return 1;
+        if (kb_chn2[k] && kb_trk2[k] == trk_index(t) + 1u)   /* GHOULBOX 2.1: KEYS LAYER's second sound */
+            for (i = 0; i < kb_chn2[k]; i++)
+                if (kb_chord2[k][i] == note)
+                    return 1;
+    }
     return 0;
 }
 
@@ -183,6 +188,8 @@ static void midi_silence_track(uint32_t track)
 {
     track_t *t = &trk[track];
     uint32_t i;
+    latch_end(t);                             /* (GHOULBOX: the drone too, seq.c) */
+    lt[track].phys = lt[track].stop = 0;
     trk_all_off(t);
     t->nheld = t->arp_phys = t->rh_n = 0;
     arp_forget(t);
@@ -200,7 +207,7 @@ static int midi_track_held(uint32_t track)
     if (midi_owners[track])
         return 1;
     for (k = 0; k < 27u; k++)
-        if ((fm1_in.notes & (1u << k)) && kb_trk[k] == track)
+        if ((fm1_in.notes & (1u << k)) && (kb_trk[k] == track || kb_trk2[k] == track + 1u))   /* (2.1: LAYER's too) */
             return 1;
     return 0;
 }
@@ -348,6 +355,9 @@ static void midi_control(uint32_t ch, uint32_t cc, uint32_t value)
         for (i = 0; i < 128u; i++)
             if (midi_notes[ch][i])
                 midi_note_event(ch, i, 0);
+        for (i = 0; i < NTRK; i++)                 /* (GHOULBOX: a latched drone ends, seq.c) */
+            if (mask & (1u << i))
+                latch_end(&trk[i]);
         for (i = 0; i < NTRK; i++)
             if ((mask & (1u << i)) && !midi_track_held(i)) {
                 trk_all_off(&trk[i]);

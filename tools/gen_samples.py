@@ -364,7 +364,7 @@ class Builder:
         L.append(f"#define SMP_NSETS {max(1, len(sets))}")
         named = sets or [("NONE", 0, 0)]
         perc = PERC_SLOT if len(named) > PERC_SLOT else len(named)
-        L.append(f"#define SMP_NPRESETS {len(named) if len(named) > PERC_SLOT + 1 else perc}"
+        L.append(f"#define SMP_NPRESETS {len(named) + NUSR}"
                  "   /* GHOULBOX: the sets after PERC's alias have presets too (it stays hidden: SMP_SET_ORIG) */")
         if len(named) > PERC_SLOT:
             L.append(f"#define SMP_PERC_SLOT {PERC_SLOT}   /* once PERC (the GM kit): an alias, its sounds load as DRUM */")
@@ -380,6 +380,10 @@ class Builder:
             fx = ", " + GB_FX if name in PRESET_NAME else ""
             L.append(f'    {{"{PRESET_NAME.get(name, name)}", {{{val}, 0, 0, {loop}, 127, 0, 0, 0}}, {{{a}, {d}, {s_}, {r}}}, 0, 0{fx}{pat}}},')
         L.append("};")
+        # Append-only preset IDs: direct access to the three physical user banks.
+        # No samples are copied or installed by choosing one of these presets.
+        for slot in range(NUSR):
+            L.insert(len(L) - 1, f'    {{"USR{slot + 1}", {{{USR_V0 + slot}, 0, 0, 1, 127, 0, 0, 0}}, {{0, 127, 127, 70}}, 0, 0}},')
         orig = [self.alias.get(i, i) for i in range(len(named))]
         L.append("/* SET i plays SMP_SET_ORIG[i]: != i for a retired set kept as an alias (its preset i too) */")
         L.append("static const uint8_t SMP_SET_ORIG[] = {" + ", ".join(map(str, orig)) + "};")

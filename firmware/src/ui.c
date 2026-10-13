@@ -72,6 +72,7 @@ static uint32_t up_gen;                      /* bumped on every user bank change
 #define PREF_PREVIEW (0x02u << 16)
 #define PREF_CHORD_ADD (0x04u << 16)
 #define PREF_HELP (0x08u << 16)
+#define PREF_NAMES_OFF (0x10u << 16)           /* GHOULBOX 2.1: MENU > CONTROL > NOTE NAMES OFF (ui_input.c names_notice) */
 /* 1.3 (Discussions #112, #134): MENU > DISPLAY > HOME, what the HOME page shows under its four cards: 0 SCOPE (the
  * oscilloscope, as before), 1 TRACKS (the four tracks as rows: ui_graph.c draw_home_tracks), 2 LEVELS (1.5, #134: the
  * rows of TRACKS, and KNOB 1..4 the LEVEL of T1..T4 in place of the engine's four: home_param). A byte of its own no
@@ -1139,7 +1140,7 @@ static void pat_load_ui(track_t *t, uint32_t n)
 static int param_kept(uint32_t i)
 {
     return i == P_LEVEL || i == P_PAN || i == P_MUTE || (i >= P_AMODE && i <= P_SGATE) ||
-           (i >= P_SLCR && i <= P_SLDEPTH) || i == P_CHRD || i == P_VOIC || i == P_SQNT || i == P_TMASK0 || i == P_TMASK1 || (i >= P_TC0 && i <= P_TC11);
+           (i >= P_SLCR && i <= P_SLDEPTH) || i == P_CHRD || i == P_VOIC || i == P_SQNT || i == P_TEMP || i == P_TMASK0 || i == P_TMASK1 || (i >= P_TC0 && i <= P_TC11);
 }
 
 /* a retired preset kept as an alias, so stored preset numbers stay valid: SAMPLE 1, once TRANH, is PIANO

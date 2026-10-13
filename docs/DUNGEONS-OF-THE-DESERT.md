@@ -17,7 +17,13 @@ the current song immediately. CITADEL (Buried Citadel) runs at 78 BPM, with
 DUNE NEY, and DUNE DRUMS. The E keys sound 50 cents flat. All old scene and
 preset IDs retain their meanings.
 
-The new presets are:
+Open **PRESETS**, turn **knob 4 (LIST)** to **DESERT**, then turn the
+**PRESETS knob** to browse all nine sounds below plus **USR1, USR2, USR3**.
+The USR entries play whichever banks are stored in those slots; empty slots
+are silent. The firmware update does not upload or replace sample banks.
+In the web editor, use **Library → Device presets → Show → DESERT**.
+
+The built-in presets are:
 
 | Engine | Preset | Character |
 | --- | --- | --- |

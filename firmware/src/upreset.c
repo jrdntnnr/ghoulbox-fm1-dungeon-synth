@@ -109,7 +109,7 @@ static int up_valid(const up_rec_t *r)
 {
     if (!(r->used == UP_USED && r->ver >= 1u && r->ver <= UP_VER_GRID && r->engine < NENGINES &&
           r->np >= 8u && r->np <= (r->ver >= 4u ? UP_PMAX * 2u : UP_PMAX) && r->name[0])) return 0;
-    if (r->np > P_COUNT || (r->ver <= 5u && r->np > 111u) ||
+    if (r->np > P_COUNT || (r->ver <= 5u && r->np > 112u) ||
         ((r->ver == 6u || r->ver == 7u) && r->np != 103u)) return 0;
     if (r->ver >= 4u) for (uint32_t i = 0; i < r->np; i++) if (r->packed[i] > 191u) return 0;
     return 1;
@@ -164,6 +164,7 @@ static void up_params(const up_rec_t *r, int16_t *out, const int16_t *def)
     int16_t values[UP_PMAX * 2u];
     for (uint32_t i = 0; i < r->np && i < NELEM(values); i++) values[i] = up_value(r, i);
     if (r->ver == 6u || r->ver == 7u) params_gbm1(out, values, def);
+    else if ((r->ver == 4u || r->ver == 5u) && r->np == 112u) params_ghoul2(out, values, def);
     else params_by_count(out, values, r->np, def);
 }
 

@@ -1,6 +1,6 @@
 # Microtonal GHOULBOX
 
-This branch combines GHOULBOX 1.4 (`b61a931`) and Felucca 1.5.1 (`a4d7ca2`) with 42 factory scales, one custom scale and real per-voice tuning. The JieLi target build succeeds with the hidden SLICE engine omitted. Physical FM-1 validation remains pending; see [integration status](INTEGRATION-STATUS.md).
+This branch combines selected Ghoulbox 2.1 features with our Felucca 1.5.1 and SLOOP base with 42 factory scales, one custom scale and real per-voice tuning. The JieLi target build succeeds with the hidden SLICE engine omitted. Physical FM-1 validation remains pending; see [integration status](INTEGRATION-STATUS.md).
 
 ## Play Rast or Bayati
 
@@ -39,6 +39,20 @@ The tuning pages show **additional trims**, not the factory offset. In C Rast, t
 | TUNE 3 | b6, 6, b7, 7 |
 
 The selected root rotates both factory offsets and trims. Transpose moves note identities first; the resulting notes use the current root's tuning map. Recorded steps keep those note identities, so changing a track's tuning also retunes its existing sequence. Different tracks can use different tunings. Sound presets keep the track's tuning, like the existing SCL settings; use projects to recall a complete tuning setup. The web editor exposes the same controls when connected to this firmware.
+
+## Temperament and live note labels
+
+**SCL → CHORD → TEMP** adds EQUAL (zero offset), PYTH, MEAN or JUST,
+relative to ROOT. The sounding pitch combines maqam preset + custom trim +
+temperament. Leave EQUAL selected for the original maqam tunings. TEMP belongs
+to the track, survives loading a sound, and is saved in projects. Scala import
+resets it to EQUAL before applying the imported tuning.
+
+**MENU → CONTROL → NOTE NAMES** enables live note labels. A single altered
+note shows its offset, for example `E4 -50ct`. A tuned chord shows `TUNED`
+and the first altered note's offset; other members may have different offsets.
+The display rounds to whole cents; the central temperament audio path uses
+one-tenth-cent values.
 
 ## Built-in chord generator
 

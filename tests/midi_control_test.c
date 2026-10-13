@@ -564,7 +564,7 @@ static int learn_test(void)
 
     /* the stored codes with 1.5's parameters (the INSERT 96..100, TYPE 101, ESYNC 102, P_E0 103): a common parameter
      * id + 1, below ML_E0; an engine one ML_E0 + k whatever P_E0 is; every id back as it went in */
-    ok = P_E0 == 117u && P_COUNT == 125u && P_E0 < ML_E0;
+    ok = P_E0 == 118u && P_COUNT == 126u && P_E0 < ML_E0;
     for (i = 0; i < P_COUNT; i++)
         ok &= ml_id(ml_code(i)) == i && (i < P_E0 ? ml_code(i) == i + 1u && ml_code(i) < ML_E0 : ml_code(i) == ML_E0 + i - P_E0);
     ok &= ml_id(0) == P_COUNT && ml_id(P_E0 + 1u) == P_COUNT && ml_id(ML_E0 - 1u) == P_COUNT;   /* (no such parameter) */
@@ -664,9 +664,9 @@ static int pc_test(void)
     set_engine_of(t, ENGI_SAMPLE);
     pc(0, 1); frame();
     ok = str_eq(ENGINES[ENGI_SAMPLE]->presets[t->preset].name, "REN ORGAN");
-    pc(0, 4); frame();
+    pc(0, 7); frame();
     ok &= t->eng_req == ENGI_SAMPLE && str_eq(ENGINES[ENGI_SAMPLE]->presets[t->preset].name, "REN ORGAN");
-    bad += check("  SAMPLE: PC 1 is REN ORGAN; out-of-range PC 4 does not turn the track into DRUM", ok);
+    bad += check("  SAMPLE: PC 1 is REN ORGAN; out-of-range PC 7 does not turn the track into DRUM", ok);
 
     /* DRUM: the kits as KIT steps through them */
     {

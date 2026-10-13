@@ -32,7 +32,7 @@
 #define FELUCCA_ID "FM-1_900"    /* package identity (build.py: the .fwsc marker string) */
 #endif
 #ifndef FELUCCA_VERSION
-#define FELUCCA_VERSION "1.5.1" /* shown in the menu, the console and the editor; build.py --release X.Y */
+#define FELUCCA_VERSION "SARDAB 2.1" /* shown in the menu, the console and the editor; build.py --release X.Y */
 #endif
 #if FELUCCA_OTA && !FELUCCA_FLASH
 #error "FELUCCA_OTA needs FELUCCA_FLASH"
@@ -96,6 +96,7 @@
 #if FELUCCA_OTA
 #include "ota.c"
 #include "ota_hw.c"
+#include "rescue.c"              /* the USB RESCUE: two failed boots, or OCT- held at power-on (main.c) */
 #include "editor.c"              /* web editor SysEx (needs the OTA SysEx plumbing) */
 #endif
 #if FELUCCA_CDC

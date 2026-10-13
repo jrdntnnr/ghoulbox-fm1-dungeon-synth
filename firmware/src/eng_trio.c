@@ -285,7 +285,7 @@ static void trio_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const 
         /* Fixed tonic pipe: INT2 offsets ROOT at C3, not the currently played note.
          * Resolve this pipe's own cent trim. Melody bends/LFO must not move the drone. */
         int32_t note = clamp(48 + p[P_ROOT] + p[P_E1], 0, 127);
-        inc2 = cents_inc(note * 16, tuning_cents(t, (uint32_t)note) + song.g[G_TUNE] + p[P_E3], 0);
+        inc2 = cents_inc(tuning_pitch16(t, note), song.g[G_TUNE] + p[P_E3], tuning_residual(t, note));
     }
     int32_t duty = clamp((p[P_E7] << 8) + m->shape - (64 << 8), 768, 32000);   /* Q15 */
     trio_pw_t q;
