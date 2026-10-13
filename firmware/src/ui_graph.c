@@ -353,7 +353,15 @@ static void graph_detail(const track_t *t, uint16_t c)
                 continue;
             }
             col = !sd_takes(st, k) ? T_DIM : set ? hi : T_RAISE;
-            if (k == EVK_CHANCE) {
+            if (k == EVK_CHANCE && v > 100) {         /* 1.5.5: a condition: a:b as b cells up the lane, the a-th lit; */
+                int32_t c = v - 100, j, nb = c < 10 ? COND_B[c - 1] : 0;   /* FILL a frame, !FILL a frame crossed */
+                for (j = 0; j < nb; j++)
+                    cv_rect(x + 2, y + h - 6 - 7 * j, 9, 5, j == COND_A[c - 1] - 1 ? col : T_GRID);
+                if (!nb)
+                    cv_frame(x + 2, y + 2, 9, h - 2, col);
+                if (c == (int32_t)COND_NFILL)
+                    cv_rect(x + 2, y + h / 2, 9, 1, col);
+            } else if (k == EVK_CHANCE) {
                 bh = v * h / 100;
                 cv_rect(x + 2, y + h - (bh < 2 ? 2 : bh), 9, bh < 2 ? 2 : bh, col);
             } else if (k == EVK_RATCH) {
@@ -779,29 +787,6 @@ static void fm_bus(int32_t cl, int32_t cr, int32_t bus)
     cv_line(cr + 20, bus - 3, cr + 23, bus, T_MID); cv_line(cr + 20, bus + 3, cr + 23, bus, T_MID);
 }
 
-#ifndef FM6_CHART_HOOK
-#define FM6_CHART_HOOK(kind, a, b) ((void)0)   /* ui_render.c (host tests): the chart's parts one by one (its lint) */
-#endif
-enum { FMH_BOX, FMH_ROUTE, FMH_CAR, FMH_BUS, FMH_FB, FMH_LABEL, FMH_END };
-/* FM6's 32 algorithms as charts. FM6_CELL: per operator 1..6 its cell, the column in 24 px steps (bits 0..2) and
- * the row above the output bus (bits 4..5; row 0 = the carriers). The routes, the carriers and the feedback
- * operator are fm6_core.c's FM6_ALG itself (fm6_routes, fm6_car_ops, fm6_fb_op). ui_test.c checks the cells
- * against them (a modulator one row above what it modulates, the carriers on the bottom row and only they, one
- * operator per cell) and the routes against the 32 algorithms written out; ui_render.c lints every chart as drawn
- * (no route through a box or touching another route, no two boxes overlapping, all inside the panel). The cells:
- * a search for the fewest and shortest bends, the operators numbered left to right. */
-static const uint8_t FM6_CELL[32][6] = {
-    {0x00, 0x10, 0x01, 0x11, 0x21, 0x31}, {0x00, 0x10, 0x02, 0x12, 0x22, 0x32}, {0x00, 0x10, 0x20, 0x01, 0x11, 0x21},
-    {0x00, 0x10, 0x20, 0x01, 0x11, 0x21}, {0x00, 0x10, 0x01, 0x11, 0x02, 0x12}, {0x00, 0x10, 0x01, 0x11, 0x02, 0x12},
-    {0x00, 0x10, 0x01, 0x11, 0x12, 0x22}, {0x00, 0x10, 0x01, 0x12, 0x11, 0x21}, {0x00, 0x10, 0x02, 0x12, 0x13, 0x23},
-    {0x00, 0x10, 0x20, 0x01, 0x11, 0x12}, {0x00, 0x10, 0x20, 0x01, 0x11, 0x12}, {0x00, 0x10, 0x03, 0x12, 0x13, 0x14},
-    {0x00, 0x10, 0x02, 0x11, 0x12, 0x13}, {0x00, 0x10, 0x01, 0x11, 0x20, 0x21}, {0x00, 0x10, 0x02, 0x12, 0x21, 0x22},
-    {0x01, 0x10, 0x11, 0x21, 0x12, 0x22}, {0x01, 0x12, 0x10, 0x20, 0x11, 0x21}, {0x01, 0x10, 0x12, 0x11, 0x21, 0x31},
-    {0x00, 0x10, 0x20, 0x01, 0x02, 0x11}, {0x00, 0x01, 0x10, 0x02, 0x12, 0x13}, {0x00, 0x01, 0x10, 0x02, 0x03, 0x12},
-    {0x00, 0x10, 0x01, 0x02, 0x03, 0x12}, {0x00, 0x01, 0x11, 0x02, 0x03, 0x12}, {0x00, 0x01, 0x02, 0x03, 0x04, 0x13},
-    {0x00, 0x01, 0x02, 0x03, 0x04, 0x13}, {0x00, 0x01, 0x11, 0x02, 0x12, 0x13}, {0x00, 0x01, 0x11, 0x03, 0x13, 0x14},
-    {0x00, 0x10, 0x01, 0x11, 0x21, 0x02}, {0x00, 0x01, 0x02, 0x12, 0x03, 0x13}, {0x00, 0x01, 0x02, 0x12, 0x22, 0x03},
-    {0x00, 0x01, 0x02, 0x03, 0x04, 0x14}, {0x00, 0x01, 0x02, 0x03, 0x04, 0x05}};
 /* algorithm a's routes: m[i] bit j: operator j + 1 modulates operator i + 1. FM6_ALG runs the operators sixth
  * first, each reading a bus (or none) and writing one (or adding to it): who wrote a bus modulates its reader */
 static void fm6_routes(uint32_t a, uint8_t *m)
@@ -836,68 +821,44 @@ static uint32_t fm6_alg_of(const track_t *t)
 {
     return t->p[P_E0] >= 1 && t->p[P_E0] <= 32 ? (uint32_t)t->p[P_E0] - 1u : fm6_patch[(t - trk) % NTRK][FP_ALG] & 31u;
 }
-/* FM6's EDIT pages: the algorithm, drawn as graph_fm draws DIGITAL's, "ALG 05" top left; SLOT on a bank voice (B1..B32,
- * 1.4.1): its name top right. Carriers THEME with INK
- * numerals, modulators RAISE with THEME ones; an operator at output level 0: a DIM numeral (a carrier on RAISE).
- * Routes THEME, the feedback loop MID (DIM at feedback 0), the output bus MID. The knob just turned in ACCENT:
- * ALG and PTCH the label, FB the loop, MLVL the routes, MRAT MEG VMOD the modulators, DTUN the carriers.
- * sel < 6 (the OPERATOR pages, ui_fm6op.c): that operator's box ACCENT with an INK numeral, its frequency top right */
+/* FM6's EDIT pages (GHOULBOX: text in place of the 1.4 chart, flash): "ALG 05" top left (ACCENT while ALG / PTCH turn),
+ * the routes "2>1 4>3 6>5" (ACCENT while MRAT MEG VMOD turn), the carriers "OUT 1 3 5" (ACCENT while DTUN turns) and
+ * the feedback "FB 6: 3" (its operator, the amount; ACCENT while FB turns; DIM at 0). An operator at output level 0 is
+ * not named. sel < 6 (the OPERATOR pages, ui_fm6op.c): "OP3 x1.50" top right, else a bank voice's name (SLOT B1..B32) */
+static void fm6_names(char *s, uint32_t ops, const char *head)
+{
+    uint32_t k, n = 0;
+    while (head[n]) { s[n] = head[n]; n++; }
+    for (k = 0; k < 6u; k++)
+        if (ops >> k & 1u) { s[n++] = ' '; s[n++] = (char)('1' + k); }
+    s[n] = 0;
+}
 static void graph_fm6(const track_t *t, uint16_t c, uint32_t sel)
 {
-    uint32_t alg = fm6_alg_of(t), k, j, car = fm6_car_ops(alg), top = 0, hi = 0, fbop = fm6_fb_op(alg), hotset = 0;
+    uint32_t alg = fm6_alg_of(t), k, j, n = 0, car = fm6_car_ops(alg), fbop = fm6_fb_op(alg), on = 0;
     uint32_t hot = ui.hot_t ? (uint32_t)cur_page()->id[ui.hot_col & 3u] : 0u;
     const uint8_t *pt = fm6_patch[(t - trk) % NTRK];
-    int32_t x[6], y[6], bus, cl = 240, cr = 0, fb = clamp(pt[FP_FB] + t->p[P_E1], 0, 7);
-    uint8_t m[6], fan[6] = {0, 0, 0, 0, 0, 0};
-    uint16_t rc = hot == P_E2 ? T_ACCENT : c;
-    char b[7] = {'A', 'L', 'G', ' ', (char)('0' + (alg + 1u) / 10u), (char)('0' + (alg + 1u) % 10u), 0};
-    if (hot == P_E3 || hot == P_E4 || hot == P_E5)
-        hotset = 63u & ~car;
-    else if (hot == P_E6)
-        hotset = car;
+    int32_t fb = clamp(pt[FP_FB] + t->p[P_E1], 0, 7);
+    uint8_t m[6];
+    char b[7] = {'A', 'L', 'G', ' ', (char)('0' + (alg + 1u) / 10u), (char)('0' + (alg + 1u) % 10u), 0}, r[32], o[16];
     fm6_routes(alg, m);
-    for (k = 0; k < 6u; k++) {
-        uint32_t col = FM6_CELL[alg][k] & 7u, row = FM6_CELL[alg][k] >> 4;
-        hi = col > hi ? col : hi;
-        top = row > top ? row : top;
+    for (k = 0; k < 6u; k++)
+        on |= (pt[(5u - k) * FP_OP + FP_OL] != 0) << k;
+    for (k = 0; k < 6u; k++)                                   /* the routes, modulator > carrier, by the carrier */
         for (j = 0; j < 6u; j++)
-            fan[j] += (uint8_t)(m[k] >> j & 1u);
-    }
-    bus = 50 + (27 + 23 * (int32_t)top) / 2;         /* the chart centred on the 100 px scale */
-    for (k = 0; k < 6u; k++) {
-        x[k] = 120 + (int32_t)(FM6_CELL[alg][k] & 7u) * 24 - (int32_t)hi * 12;
-        y[k] = bus - 6 - FM_BH - 23 * (int32_t)(FM6_CELL[alg][k] >> 4);
-        if (car >> k & 1u) { cl = x[k] < cl ? x[k] : cl; cr = x[k] > cr ? x[k] : cr; }
-    }
-    for (k = 0; k < 6u; k++) {                       /* into k: its sources down to its jog row, across, down */
-        for (j = 0; j < 6u; j++)
-            if (m[k] >> j & 1u) {
-                FM6_CHART_HOOK(FMH_ROUTE, j, k);
-                fm_route(x[j], y[j] + FM_BH, x[k], y[k] - 3, y[k], rc);
-                if (fan[j] > 1u) fm_dot(x[j], y[k] - 3, rc);          /* one operator modulating several */
-                if (m[k] & (m[k] - 1u)) fm_dot(x[k], y[k] - 3, rc);   /* several modulating one */
+            if (m[k] >> j & 1u && n + 4u < sizeof r) {
+                if (n) r[n++] = ' ';
+                r[n++] = (char)('1' + j); r[n++] = '>'; r[n++] = (char)('1' + k);
             }
-        if (car >> k & 1u) {
-            FM6_CHART_HOOK(FMH_CAR, k, 0);
-            cv_rect(x[k], y[k] + FM_BH, 1, bus - y[k] - FM_BH, T_MID);
-            if (x[k] != cl) fm_dot(x[k], bus, T_MID);
-        }
-    }
-    FM6_CHART_HOOK(FMH_BUS, 0, 0);
-    fm_bus(cl, cr, bus);
-    FM6_CHART_HOOK(FMH_FB, fbop, 0);
-    fm_loop(x[fbop], y[fbop], hot == P_E1 ? T_ACCENT : fb ? T_MID : T_DIM);
-    for (k = 0; k < 6u; k++) {
-        uint32_t on = pt[(5u - k) * FP_OP + FP_OL] != 0, fill_c = (car >> k & 1u) && on;
-        uint16_t f = hotset >> k & 1u ? T_ACCENT : c, fill = k == sel ? T_ACCENT : fill_c ? f : T_RAISE;
-        char n[2] = {(char)('1' + k), 0};
-        FM6_CHART_HOOK(FMH_BOX, k, 0);
-        cv_rrect(x[k] - 10, y[k], 21, FM_BH, 3, fill, T_SURF);
-        GFX_HOOK_ALIGN(x[k] - 10, y[k], x[k] + 11, y[k] + FM_BH, AL_HV, "FM6 operator number in its box");
-        cv_text_in(x[k] - 10, y[k] + CAP_IN(S, FM_BH), 21, &AF_S, n, fill_c || k == sel ? T_INK : on ? f : T_DIM, fill);
-    }
-    FM6_CHART_HOOK(FMH_LABEL, 0, 0);
+    r[n] = 0;
+    fm6_names(o, car & on, "OUT");
     cv_text(10, 4 - GOY, &AF_S, b, hot == P_E0 || hot == P_E7 ? T_ACCENT : T_MID);
+    cv_text_in(0, 28, 240, &AF_S, r, hot == P_E3 || hot == P_E4 || hot == P_E5 ? T_ACCENT : c, T_SURF);
+    cv_text_in(0, 50, 240, &AF_S, o, hot == P_E6 ? T_ACCENT : c, T_SURF);
+    {
+        char f[12] = {'F', 'B', ' ', (char)('1' + fbop), ':', ' ', (char)('0' + fb), 0};
+        cv_text_in(0, 72, 240, &AF_S, f, hot == P_E1 ? T_ACCENT : fb ? c : T_DIM, T_SURF);
+    }
     if (sel < 6u) {                                  /* the operator picked: "OP3 x1.50" */
         char fq[16] = {'O', 'P', (char)('1' + sel), ' ', 0};
         fop_freq(pt + (5u - sel) * FP_OP, fq + 4);
@@ -910,7 +871,6 @@ static void graph_fm6(const track_t *t, uint16_t c, uint32_t sel)
             nm[k - 1] = 0;
         cv_text_r(228, 4 - GOY, &AF_S, nm, T_TEXT, T_SURF);
     }
-    FM6_CHART_HOOK(FMH_END, alg, 0);
 }
 
 /* OP ENV (ui_fm6op.c): the picked operator's envelope as the patch has it: from L4 to L1 at R1, L2 at R2, L3 at R3, held
@@ -1574,9 +1534,12 @@ static void graph_events(void)
             GFX_HOOK_ALIGN(0, y, 0, y + 16, AL_V, "list row text centred up/down");
             cv_text_on(EV_SX, y + LIST_TY, &AF_M, b, sel ? T_INK : T_MID, bg);
             GFX_HOOK_ALIGN(0, y, 0, y + 16, AL_V, "list row text centred up/down");
-            cv_text_on(EV_NX, y + LIST_TY, &AF_M, kd == EVK_CHANCE ? "CHANCE" : kd == EVK_RATCH ? "RATCH" :
+            cv_text_on(EV_NX, y + LIST_TY, &AF_M, kd == EVK_CHANCE ? (v > 100 ? "COND" : "CHANCE") : kd == EVK_RATCH ? "RATCH" :
                        kd == EVK_VEL ? "VEL" : "NUDGE", sel ? T_INK : vc, bg);
-            if (kd == EVK_CHANCE || kd == EVK_VEL) {
+            if (kd == EVK_CHANCE) {                  /* (1.5.5: "STEP 05 COND  1:4") */
+                ev_value(y, b, ev_chance_fmt(b, v), sel ? T_INK : vc, bg);
+                continue;
+            } else if (kd == EVK_VEL) {
                 fmt_int(b, v);
             } else if (kd == EVK_RATCH) {
                 b[0] = 'x';
@@ -1712,13 +1675,13 @@ static void trk_short_name(uint32_t c, char *b)      /* the track's sound, b hol
 #define TSS_GY 40                                    /* the LEVEL gauge, 3 px */
 #define TSS_MY 48                                    /* the meter, 3 px */
 static void track_strip(uint32_t c, uint32_t sel, uint32_t st, uint32_t mute, uint32_t arm, uint32_t hot, uint32_t lvl,
-                        const char *b)
+                        const char *b, uint32_t lit)
 {
     int32_t gw = CARD_W - 10, m = ts.meter[c] * gw / (TS_MH - 2), fx = (int32_t)lvl * gw / 127;
     uint16_t vc = mute ? T_DIM : T_THEME;
     cv_begin(CARD_W, LG_H_GRAPH, T_BG);
     cv_rrect(0, 0, CARD_W, LG_H_GRAPH, 5, T_SURF, T_BG);
-    cv_icon_on(4, 4, 16, trk_icon(c, sel), sel ? T_ACCENT : T_MID, T_SURF);
+    cv_icon_on(4, 4, 16, trk_icon(c, sel), lit ? (sel ? T_TEXT : T_ACCENT) : sel ? T_ACCENT : T_MID, T_SURF);
     if (st)
         GFX_HOOK_ALIGN(0, 4, 0, 20, AL_V, "mixer badge on the cushion's line");
     if (st == 1u || st == 2u)
@@ -1750,7 +1713,7 @@ static void draw_tracks(void)
     }
     for (c = 0; c < NTRK; c++) {
         track_t *t = &trk[c];
-        uint32_t sel = c == song.sel, lvl = trk_level(c), mute = t->p[P_MUTE] != 0;
+        uint32_t sel = c == song.sel, lvl = trk_level(c), mute = t->p[P_MUTE] != 0, lit = (uint32_t)midi_lit(c);
         uint32_t arm = (song.rec >> c) & 1u, st = arm ? (song.playing ? 1u : 2u) : mute ? 3u : 0u, sig;
         uint32_t hot = sel && ui.hot_t ? ui.hot_col + 1u : 0u;   /* the knob just turned (hot_col + 1): 1 LEVEL, 2 PAN,
                                                                 * 3 REV, 4 MUTE (its badge) */
@@ -1764,17 +1727,18 @@ static void draw_tracks(void)
             m = ts.meter[c] - 1;                     /* falls ~2 dB a frame */
         ts.meter[c] = (uint8_t)(m < 0 ? 0 : m);
         sig = str_hash(1u + sel + st * 2u + (mute && arm) * 16u + hot * 32u, b) + lvl * 7919u +
-              ts.meter[c] * 131u + (uint32_t)(pan + 128) * 104729u + (uint32_t)rv * 1299709u + mute * 3u + sk * 0x9E37u;
+              ts.meter[c] * 131u + (uint32_t)(pan + 128) * 104729u + (uint32_t)rv * 1299709u + mute * 3u + sk * 0x9E37u +
+              lit * 15485863u;                         /* (1.5.5: MIDI IN lights the cushion) */
         if (!ui.force && sig == ts.col[c])
             continue;
         ts.col[c] = sig;
         if (sk) {
-            track_strip(c, sel, st, mute, arm, hot, lvl, b);
+            track_strip(c, sel, st, mute, arm, hot, lvl, b, lit);
             continue;
         }
         cv_begin(CARD_W, H_GRAPH, T_BG);
         cv_window(0, 0, CARD_W, H_GRAPH, 3);           /* (GHOULBOX: a mixer strip is a window) */
-        cv_icon_on(4, 5, 16, trk_icon(c, sel), sel ? T_ACCENT : T_MID, T_SURF);
+        cv_icon_on(4, 5, 16, trk_icon(c, sel), lit ? (sel ? T_TEXT : T_ACCENT) : sel ? T_ACCENT : T_MID, T_SURF);
         if (st)
             GFX_HOOK_ALIGN(0, 5, 0, 21, AL_V, "mixer badge on the cushion's line");
         if (st == 1u || st == 2u)                    /* REC (recording) / ARM (armed, stopped) */
@@ -1817,7 +1781,7 @@ static void draw_tracks(void)
             knob(PAN_X - KNOB_SMALL_R, KS_Y, KNOB_SMALL_R, KNOB_SMALL_COV, KNOB_SMALL_ANG, pan, -64, 63, pc);
             knob(42 - KNOB_SMALL_R, KS_Y, KNOB_SMALL_R, KNOB_SMALL_COV, KNOB_SMALL_ANG, rv, 0, 127, rc);
             v[0] = '+';                              /* the cards' numbers, without the % */
-            fmt_int(pan > 0 ? v + 1 : v, pan * 100 / 64);
+            fmt_int(pan > 0 ? v + 1 : v, pan * 100 / (pan > 0 ? 63 : 64));
             GFX_HOOK_ALIGN(PAN_X - KNOB_SMALL_R, 0, PAN_X + KNOB_SMALL_R, 0, AL_H, "mixer value under its knob");
             cv_text_in(PAN_X - KNOB_SMALL_R, KS_Y + 17, 2 * KNOB_SMALL_R, &AF_S, v, pc, T_SURF);
             fmt_int(v, (rv * 100 + 63) / 127);
@@ -1860,7 +1824,7 @@ static void home_track_row(uint32_t c)
 {
     track_t *t = &trk[c];
     const step_t *s = seq_steps(t);
-    uint32_t sel = c == song.sel, mute = t->p[P_MUTE] != 0, large = (ui_prefs & PREF_LARGE) != 0u;
+    uint32_t sel = c == song.sel, mute = t->p[P_MUTE] != 0, large = (ui_prefs & PREF_LARGE) != 0u, lit = (uint32_t)midi_lit(c);
     uint32_t len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), np = (len + 15u) / 16u, pg, p0, ph, i, sig, carry = 0;
     int32_t y = Y_GRAPH + (int32_t)c * TR_PITCH, m, x, xr = 222, ch = large ? AF_M_CAP_H : AF_S_CAP_H;
     uint16_t bg = sel ? T_THEME : T_SURF, half = ux_mix(T_THEME, T_INK, 35);
@@ -1879,7 +1843,7 @@ static void home_track_row(uint32_t c)
     if (m < ts.meter[c] - 1)
         m = ts.meter[c] - 1;                         /* (falls as the MIXER's) */
     sig = str_hash(1u + sel + mute * 2u + large * 4u + t->eng_req * 8u, b) + steps_hash(t) * 31u + pg * 7919u +
-          ph * 104729u + len * 1299709u;
+          ph * 104729u + len * 1299709u + lit * 15485863u;   /* (1.5.5: MIDI IN lights the cushion) */
     if (!ui.force && sig == ts.col[c]) {
         if (m != ts.meter[c]) {                      /* the meter alone: its slot */
             ts.meter[c] = (uint8_t)m;
@@ -1893,7 +1857,7 @@ static void home_track_row(uint32_t c)
     ts.meter[c] = (uint8_t)m;
     cv_begin(TR_W, TR_H, T_BG);
     cv_rrect(0, 0, TR_W, TR_H, 5, bg, T_BG);
-    cv_icon_mid(4, TR_H / 2, 16, trk_icon(c, 1), sel ? T_INK : mute ? T_DIM : T_MID, bg);
+    cv_icon_mid(4, TR_H / 2, 16, trk_icon(c, 1), lit ? (sel ? half : T_ACCENT) : sel ? T_INK : mute ? T_DIM : T_MID, bg);
     if (mute) {                                      /* MUTE: its badge at the name line's end */
         xr -= kc_w(KC_MUTE);
         GFX_HOOK_ALIGN(0, TR_NY(large), 0, TR_NY(large) + ch, AL_V, "tracks row badge on the name's line");
@@ -2278,7 +2242,7 @@ static void graph_song(void)
     } else {                                           /* + ADD: how */
         for (i = 0; i < 4u && !graph_project_used(i); i++)
             ;
-        cv_free_hint(SG_X0, ly + AF_M_CAP_Y + AF_M_CAP_H - AF_S_CAP_Y - AF_S_CAP_H - 1,   /* (a key hint: S) */
+        cv_free_hint(SG_X0, ly + AF_M_CAP_Y + AF_M_CAP_H - AF_S_CAP_Y - AF_S_CAP_H - 2,   /* (a key hint: S; its pill inside the band) */
                      i < 4u ? "[K3] ADD SECTION" : "[SAVE] PROJECT A-D", T_MID, T_SURF, x0 - 10 - SG_X0);
     }
 }

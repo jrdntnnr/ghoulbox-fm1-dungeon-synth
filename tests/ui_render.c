@@ -17,10 +17,7 @@
  * MENU > STYLE LINE: every screen again in every palette, the same lint; a text or icon on a divider
  * (ui_draw.c lcd_rule, GFX_HOOK_RULE: the rules between the strips; cv_rule's are cells) is a finding too.
  * Rolling digits: every frame of a header BPM roll and a card roll, up and down, in every palette (lint, GREY, MONO).
- * FM6 charts (ui_graph.c graph_fm6, its parts through FM6_CHART_HOOK), every algorithm and every chart drawn: no two
- * operator boxes overlapping or touching, no route, loop, bus or label inside a box or touching one it does not
- * connect, no two nets (one gap's routes that share an operator, the output, the loop, the label) sharing or
- * touching a pixel, everything inside the panel.
+ * FM6's EDIT pages (ui_graph.c graph_fm6: GHOULBOX, text), every algorithm drawn and linted.
  * Output: OUTDIR/ppm/<PALETTE>_<screen>.ppm for GREY MONO GREEN PAPER NIGHT CRYPT, OUTDIR/report.txt (findings,
  * ellipsised free text, the draw cost), OUTDIR/text_audit.tsv (GREY, per screen: texts, icons and keycaps with their
  * ink-box px, the ellipsised ones, the texts closer than 2 px to their cell's edge, the words).
@@ -222,8 +219,6 @@ static void hk_ink(uint16_t ink, uint16_t bg);
 #define GFX_HOOK_INK(ink, bg) hk_ink(ink, bg)
 #define GFX_HOOK_PIXELS(n) (px_visited += (n))
 #define UI_FILL_HOOK(x, y, w, h) hk_fill(x, y, w, h)
-static void fm6_hook(uint32_t kind, uint32_t a, uint32_t b);
-#define FM6_CHART_HOOK(kind, a, b) fm6_hook(kind, a, b)
 /* MENU > LARGE: the tall cards' values by the face they got (ui_draw.c LARGE_HOOK), the characters L lacked */
 static uint64_t lg_n[4];
 static char lg_miss[96], lg_wide[16][12], lg_small[16][12];
@@ -296,7 +291,7 @@ static void hk_icon(int32_t x, int32_t y, uint32_t size, uint32_t id)
     const uint8_t *c;
     uint8_t cell[24 * 24];
     if (!al_n || (k = icon_cell(&size, id)) < 0) return;
-    c = size == 24u ? AI24_DATA + AI24_OFF[k] : size == 16u ? AI16_DATA + AI16_OFF[k] : AI12_DATA + AI12_OFF[k];
+    c = size == 16u ? AI16_DATA + AI16_OFF[k] : AI12_DATA + AI12_OFF[k];
     icon_unpack(c, cell, size * size);
     for (i = 0; i < size * size; i++)
         if (cell[i]) {
@@ -308,105 +303,6 @@ static void hk_icon(int32_t x, int32_t y, uint32_t size, uint32_t id)
         }
     if (cv_flip) { int32_t t = x0; x0 = (int32_t)size - x1; x1 = (int32_t)size - t; }   /* (mirrored: the metronome) */
     al_item(x + x0, y + y0, x + x1, y + y1, 1, "icon");
-}
-
-/* the FM6 chart lint: each part of a chart (FMH_*) drawn alone onto a canvas of SENT, its pixels kept in fmp_mask
- * (bit: the part), then the canvas as drawn restored with the part on it; at FMH_END the parts are checked */
-#define FMP_MAX 48u
-#define FMP_SENT 0x0861u
-static uint64_t fmp_mask[CV_MAX];
-static uint16_t fmp_save[CV_MAX];
-static uint8_t fmp_kind[FMP_MAX], fmp_a[FMP_MAX], fmp_b[FMP_MAX];
-static uint32_t fmp_n, fmp_charts;
-static void finding(const char *what, const rbox_t *b, const rbox_t *o);
-static void fmp_find(uint32_t alg, const char *what, uint32_t i, int32_t x, int32_t y, uint32_t j)
-{
-    static const char *const KIND[] = {"box", "route", "carrier", "bus", "loop", "label"};
-    rbox_t b = {(int16_t)x, (int16_t)y, (int16_t)x, (int16_t)y, 0, {0}}, o = b;
-    snprintf(b.s, sizeof b.s, "ALG %u %s %u>%u", alg + 1u, KIND[fmp_kind[i]], fmp_a[i] + 1u, fmp_b[i] + 1u);
-    snprintf(o.s, sizeof o.s, "%s %u>%u", j < FMP_MAX ? KIND[fmp_kind[j]] : "panel", j < FMP_MAX ? fmp_a[j] + 1u : 0u,
-             j < FMP_MAX ? fmp_b[j] + 1u : 0u);
-    finding(what, &b, &o);
-}
-static void fmp_check(uint32_t alg)
-{
-    int32_t bx0[FMP_MAX], by0[FMP_MAX], bx1[FMP_MAX], by1[FMP_MAX], x, y, dx, dy;
-    uint32_t net[FMP_MAX], par[12], i, j, w = cv_w, h = cv_h;
-    for (i = 0; i < 12u; i++) par[i] = i;               /* the routes' nets: an operator as source (0..5), as destination (6..11) */
-    #define FMP_ROOT(v) ({ uint32_t r_ = (v); while (par[r_] != r_) r_ = par[r_]; r_; })
-    for (i = 0; i < fmp_n; i++)
-        if (fmp_kind[i] == FMH_ROUTE) par[FMP_ROOT(fmp_a[i])] = FMP_ROOT(6u + fmp_b[i]);
-    for (i = 0; i < fmp_n; i++) {
-        net[i] = fmp_kind[i] == FMH_ROUTE ? FMP_ROOT(6u + fmp_b[i]) : fmp_kind[i] == FMH_CAR || fmp_kind[i] == FMH_BUS ? 20u
-                 : 21u + fmp_kind[i];
-        bx0[i] = by0[i] = 9999; bx1[i] = by1[i] = -1;
-    }
-    #undef FMP_ROOT
-    for (y = 0; y < (int32_t)h; y++)                     /* each part's extent */
-        for (x = 0; x < (int32_t)w; x++)
-            for (i = 0; i < fmp_n; i++)
-                if (fmp_mask[y * w + x] >> i & 1u) {
-                    if (x < bx0[i]) bx0[i] = x;
-                    if (y < by0[i]) by0[i] = y;
-                    if (x > bx1[i]) bx1[i] = x;
-                    if (y > by1[i]) by1[i] = y;
-                }
-    for (i = 0; i < fmp_n; i++)                          /* boxes: apart, by a pixel at least */
-        for (j = 0; j < i; j++)
-            if (fmp_kind[i] == FMH_BOX && fmp_kind[j] == FMH_BOX && bx0[i] <= bx1[j] + 1 && bx0[j] <= bx1[i] + 1 &&
-                by0[i] <= by1[j] + 1 && by0[j] <= by1[i] + 1)
-                fmp_find(alg, "FM6 boxes overlap", i, bx0[i], by0[i], j);
-    for (y = 0; y < (int32_t)h; y++)
-        for (x = 0; x < (int32_t)w; x++) {
-            uint64_t mk = fmp_mask[y * w + x];
-            if (!mk) continue;
-            for (i = 0; i < fmp_n; i++) {
-                if (!(mk >> i & 1u) || fmp_kind[i] == FMH_BOX) continue;
-                if (x < 6 || x > 233 || y < 2 || y > 119)
-                    fmp_find(alg, "FM6 part off the panel", i, x, y, FMP_MAX);
-                for (j = 0; j < fmp_n; j++) {
-                    if (fmp_kind[j] != FMH_BOX) continue;
-                    if (x >= bx0[j] && x <= bx1[j] && y >= by0[j] && y <= by1[j])
-                        fmp_find(alg, "FM6 part through a box", i, x, y, j);
-                    else if (x >= bx0[j] - 1 && x <= bx1[j] + 1 && y >= by0[j] - 1 && y <= by1[j] + 1 &&
-                             !((fmp_kind[i] == FMH_ROUTE && (fmp_a[i] == fmp_a[j] || fmp_b[i] == fmp_a[j])) ||
-                               ((fmp_kind[i] == FMH_CAR || fmp_kind[i] == FMH_FB) && fmp_a[i] == fmp_a[j])))
-                        fmp_find(alg, "FM6 part touches a box", i, x, y, j);
-                }
-                for (dy = -1; dy <= 1; dy++)              /* another net on this pixel or next to it */
-                    for (dx = -1; dx <= 1; dx++) {
-                        int32_t nx = x + dx, ny = y + dy;
-                        uint64_t mn;
-                        if (nx < 0 || ny < 0 || nx >= (int32_t)w || ny >= (int32_t)h) continue;
-                        mn = fmp_mask[ny * w + nx];
-                        for (j = 0; j < fmp_n; j++)
-                            if (mn >> j & 1u && fmp_kind[j] != FMH_BOX && net[j] != net[i])
-                                fmp_find(alg, "FM6 nets cross or touch", i, x, y, j);
-                    }
-            }
-        }
-    fmp_charts++;
-}
-static void fm6_hook(uint32_t kind, uint32_t a, uint32_t b)
-{
-    uint32_t i, n = cv_w * cv_h;
-    if (fmp_n) {                                         /* the part just drawn: its pixels */
-        for (i = 0; i < n; i++)
-            if (cv_px[i] != FMP_SENT) fmp_mask[i] |= (uint64_t)1u << (fmp_n - 1u);
-            else cv_px[i] = fmp_save[i];
-    } else {
-        memset(fmp_mask, 0, n * sizeof fmp_mask[0]);
-    }
-    if (kind == FMH_END) {
-        fmp_check(a);
-        fmp_n = 0;
-        return;
-    }
-    if (fmp_n >= FMP_MAX) { fprintf(stderr, "ui_render: an FM6 chart of more than %u parts\n", FMP_MAX); exit(1); }
-    memcpy(fmp_save, cv_px, n * sizeof cv_px[0]);
-    for (i = 0; i < n; i++) cv_px[i] = FMP_SENT;
-    fmp_kind[fmp_n] = (uint8_t)kind; fmp_a[fmp_n] = (uint8_t)a; fmp_b[fmp_n] = (uint8_t)b;
-    fmp_n++;
 }
 
 static void finding(const char *what, const rbox_t *b, const rbox_t *o)
@@ -657,6 +553,8 @@ static void state(void)                          /* a playing song with steps on
 {
     uint32_t i;
     ui_power_on();
+    seq_fill = 0;                                /* (1.5.5: GLO's FILL, held in layer_glo_fill only; */
+    eu.on = 0;                                   /* SEQ TOOLS' EUCLID, open in layer_seq_euclid*) */
     if (large_on) ui_prefs |= PREF_LARGE;
     song.playing = 1;
     song.g[G_BPM] = 124;
@@ -758,12 +656,14 @@ enum { S_HOME, S_HOME_IDLE, S_MESSAGE, S_MESSAGE_KEY, S_MESSAGE_NOFILE, S_PRESET
        S_COUNTIN, S_COUNTIN2, S_MENU_AUDIO, S_HEAD_PLAY_REC, S_HEAD_REC_OTHER, S_HEAD_BPM_TURN, S_HEAD_BPM_LOCK,
        S_HEAD_BPM_LOCKED, S_HEAD_GLO_TURN, S_HEAD_DOWNBEAT, S_HEAD_BEAT_2,
        S_SONG_LANES, S_SONG_LANES_PLAYING, S_SONG_LANES_SILENT, S_SONG_PICTURES, S_HEAD_SLOT, S_HEAD_SLOT_EDITED, S_HEAD_SLOT_SONG,
-       S_MENU_TUNE, S_MENU_INFO, S_HOME_TRACKS, S_HOME_TRACKS_STOPPED, S_HOME_TRACKS_HOT, S_MENU_HOME, S_HOME_LEVELS, S_HELP_HOME, S_HELP_USER, S_HELP_GRID, S_HELP_LFO, S_HELP_GLO, S_HELP_SEQ, S_MENU_HELP,
+       S_MENU_TUNE, S_MENU_INFO, S_HOME_TRACKS, S_HOME_TRACKS_STOPPED, S_HOME_TRACKS_HOT, S_MENU_HOME, S_HOME_LEVELS,
        S_INSERT_CRUSH, S_INSERT_FOLD, S_INSERT_PHASER, S_INSERT_OFF, S_INSERT_MIX,
        S_ENV_SYNC, S_ENV_DEST_SYNC, S_FILTER,
        S_LEARN_WAIT, S_LEARN_PICK, S_LEARN_SET, S_LEARN_LONG, S_GLO_LEARN, S_MENU_LCLEAR, S_MENU_LCLEAR_NONE,
        S_DLY_DOT, S_DLY_DOT16, S_FX_THROW,
-       S_DETAIL, S_DETAIL_PLAYING, S_DETAIL_REST, S_DETAIL_DRUM, S_ROLL_MARKS, S_DRUM_MARKS, S_HELP_DETAIL, S_RAST, S_TUNE1, S_TUNE2, S_TUNE3, S_CHORD_RAST, S_HEAD_MSG, S_SHUR, S_COUNT };
+       S_DETAIL, S_DETAIL_PLAYING, S_DETAIL_REST, S_DETAIL_DRUM, S_ROLL_MARKS, S_DRUM_MARKS, S_RAST, S_TUNE1, S_TUNE2, S_TUNE3, S_CHORD_RAST, S_HEAD_MSG, S_SHUR, S_DETAIL_COND, S_DETAIL_FILL, S_AUTO_COND, S_GLO_FILL, S_SEQ_EUCLID, S_SEQ_EUCLID_DRUM, S_SEQ_EUCLID_64,
+       S_MENU_SELECT, S_PROJECT_ERASE, S_CONFIRM_ERASE_PROJ, S_TOOLS_CLEAN, S_CONFIRM_CLEAN,
+       S_MENU_MIDI_TRACK, S_MENU_MIDI_TCH_UNUSED, S_MENU_MIDI_AUTO, S_HOME_TRACKS_MIDI, S_MIXER_MIDI, S_EDIT_PHASE_FOLD, S_COUNT };
 static const char *const S_NAME[S_COUNT] = {"home", "home_idle", "message", "message_key", "message_nofile", "presets", "presets_nofav", "user",
     "phrases", "project", "tools", "song_empty", "song", "step", "auto_steps", "auto_add_chance", "automation", "drum",
     "drum_hand", "drum_cym", "mixer", "mixer_from_home", "mixer_pan", "env", "env_dest", "lfo", "mod", "fx", "slicer", "dly", "scl", "chord", "chord_wide", "chord_off", "chord_kit", "arp",
@@ -785,12 +685,16 @@ static const char *const S_NAME[S_COUNT] = {"home", "home_idle", "message", "mes
     "countin", "countin_2bars", "menu_audio", "head_play_rec", "head_rec_other", "head_bpm_turn", "head_bpm_lock",
     "head_bpm_locked", "head_glo_turn", "head_downbeat", "head_beat_2",
     "song_lanes", "song_lanes_playing", "song_lanes_silent", "song_pictures", "head_slot", "head_slot_edited", "head_slot_song",
-    "menu_tune", "menu_info", "home_tracks", "home_tracks_stopped", "home_tracks_hot", "menu_home", "home_levels", "help_home", "help_user", "help_grid", "help_lfo", "layer_glo_help", "layer_seq_help", "menu_help",
+    "menu_tune", "menu_info", "home_tracks", "home_tracks_stopped", "home_tracks_hot", "menu_home", "home_levels",
     "insert_crush", "insert_fold", "insert_phaser", "insert_off", "insert_mix",
     "env_sync", "env_dest_sync", "filter",
     "learn_wait", "learn_pick", "learn_set", "learn_long", "layer_glo_learn", "menu_learn_clear", "menu_learn_clear_none",
     "dly_dotted", "dly_dotted_16", "perform_throw",
-    "detail", "detail_playing", "detail_rest", "detail_drum", "roll_marks", "drum_marks", "help_detail", "rast", "tune1", "tune2", "tune3", "chord_rast", "head_msg", "shur"};
+    "detail", "detail_playing", "detail_rest", "detail_drum", "roll_marks", "drum_marks", "rast", "tune1", "tune2", "tune3", "chord_rast", "head_msg", "shur",
+    "detail_cond", "detail_fill", "auto_cond", "layer_glo_fill", "layer_seq_euclid", "layer_seq_euclid_drum",
+    "layer_seq_euclid_64",
+    "menu_select", "project_erase", "confirm_erase_project", "tools_clean", "confirm_clean",
+    "menu_midi_track", "menu_midi_channels_unused", "menu_midi_auto_select", "home_tracks_midi", "mixer_midi", "edit_phase_fold"};
 
 /* the STEP page's piano roll (ui_graph.c graph_roll) on track 1, stopped unless said: an empty pattern; ACID in
  * A minor; POLY chords (Am7 F C G, tied); a line with ties, slides and accents in C major; LEN 32 on its second
@@ -1144,15 +1048,6 @@ static void setup(int s)
     case S_HOME_TRACKS_HOT: tracks_scene(1); ui.hot_col = 1; ui.hot_t = 30; break;
     case S_MENU_HOME: ui.menu = 1; ui.menu_sel = MI_HOME; ui_home_view = HV_TRACKS; break;
     /* 1.5 (#134): HOME LEVELS: the rows of TRACKS, the cards T1..T4 LEVEL (T3 muted: DIM), K2 just turned */
-    /* 1.5 (Discussion #156): MENU > HELP ON: a page just entered with its hint in the footer (HOME, USER: in place of the
-     * OCT+ / OCT- hint, the DRUM grid, LFO); a layer's map with its second footer row (GLO, SEQ TOOLS); the MENU row */
-    case S_HELP_HOME: ui_prefs2 |= PREF_HELP >> 16; go_home(); break;
-    case S_HELP_USER: song.playing = 0; ui_prefs2 |= PREF_HELP >> 16; go_page(GR_USER); break;
-    case S_HELP_GRID: drum(0); ui_prefs2 |= PREF_HELP >> 16; go_page(GR_ROLL); break;
-    case S_HELP_LFO: ui_prefs2 |= PREF_HELP >> 16; go_title("LFO"); break;
-    case S_HELP_GLO: ui_prefs2 |= PREF_HELP >> 16; go_home(); ui.help_t = 0; ui.layer = LAYER_GLO; break;
-    case S_HELP_SEQ: ui_prefs2 |= PREF_HELP >> 16; go_page(GR_ROLL); ui.help_t = 0; ui.layer = LAYER_SEQ; break;
-    case S_MENU_HELP: ui_prefs2 |= PREF_HELP >> 16; ui.menu = 1; ui.menu_sel = MI_HELP; break;
     case S_HOME_LEVELS: tracks_scene(1); ui_home_view = HV_LEVELS; trk[1].p[P_LEVEL] = 90; ui.hot_col = 1; ui.hot_t = 30; break;
     /* 1.5: the INSERT pages (fx.c track_insert): CRUSH (#177: BITS RATE LPF), FOLD at MIX 60 %, PHASR, OFF; INSERT 2 */
     case S_INSERT_CRUSH: set_ins_ui(IT_CRUSH, 64, 96, 80, 127); go_title("INSERT"); break;
@@ -1182,6 +1077,26 @@ static void setup(int s)
         break;
     }
     case S_MENU_LCLEAR_NONE: ui.menu = 1; ui.menu_sel = MI_LCLEAR; break;
+    /* 1.5.5 (#202): MENU > MIDI with MIDI IN TRACK: T1 on 10, T2 on 2, T3 OMNI, T4 OFF, T1 CHANNEL selected; the same
+     * channels with MIDI IN CH1-4 (the rows' values dim: unused), T2 CHANNEL selected */
+    case S_MENU_MIDI_TRACK: case S_MENU_MIDI_TCH_UNUSED:
+        ui.menu = 1;
+        ui.menu_sel = s == S_MENU_MIDI_TRACK ? MI_TCH1 : MI_TCH2;
+        song.g[G_ROUTE] = s == S_MENU_MIDI_TRACK ? ROUTE_TRACK : 0;
+        mch_set(0, 9); mch_set(2, MCH_OMNI); mch_set(3, MCH_OFF);
+        break;
+    /* 1.5.5 (#208): MENU > MIDI > AUTO SELECT ON (selected); MIDI IN notes into T2 (selected) and T4 just now: their
+     * cushions lit on HOME TRACKS (and the header's), on the MIXER T1 (selected) and T3 */
+    case S_MENU_MIDI_AUTO: ui.menu = 1; ui.menu_sel = MI_MFOLLOW; ui_rec_prefs |= PREF_MIDI_FOLLOW >> 8; break;
+    case S_HOME_TRACKS_MIDI:
+        tracks_scene(1);
+        midi_lit_ms[song.sel] = midi_lit_ms[3] = fm1_ms | 1u;
+        break;
+    case S_MIXER_MIDI:
+        go_page(GR_TRK);
+        trk[2].p[P_MUTE] = 1;
+        midi_lit_ms[0] = midi_lit_ms[2] = fm1_ms | 1u;
+        break;
     /* 1.5.1: the DLY page with TIME 1/8D (KNOB 1 turned: its gauge) and 1/16D (the widest name); the FX layer's map
      * with REV THROW (D5, VERB) and ECHO THROW (E5, ECHO) held */
     case S_DLY_DOT: song.g[G_DTIME] = 10; go_title("DLY"); ui.hot_col = 0; ui.hot_t = 30; break;
@@ -1206,6 +1121,7 @@ static void setup(int s)
     }
     case S_EDIT_GRAIN: eng(8); go_title("EDIT 2"); break;
     case S_EDIT_PHYS: eng(9); go_title("EDIT 1"); break;
+    case S_EDIT_PHASE_FOLD: eng(2); TSEL->p[P_E7] = 80; go_title("EDIT 2"); ui.hot_col = 3; ui.hot_t = 30; break;   /* 1.5.5 FOLD (#104) */
     case S_ALG1: case S_ALG2: case S_ALG3: case S_ALG4: case S_ALG5: case S_ALG6: case S_ALG7: case S_ALG8:
         eng(1); TSEL->p[P_E0] = (int16_t)(s - S_ALG1);      /* the 8 DIGITAL charts; FB on the odd ones, IDX high .. 0 */
         TSEL->p[P_E6] = (s - S_ALG1) & 1 ? 40 : 0; TSEL->p[P_E4] = (int16_t)((S_ALG8 - s) * 18);
@@ -1480,9 +1396,46 @@ static void setup(int s)
         }
         go_title_page("DETAIL"); ui.cursor = 6; ui.hot_col = 0; ui.hot_t = 30;
         break;
-    case S_HELP_DETAIL:
-        roll_scene(S_ROLL_ACID); ui_prefs2 |= PREF_HELP >> 16; go_title_page("DETAIL");
+    /* 1.5.5 (#209): conditions on DETAIL's CHANCE lane (1:2 2:2 1:4 4:4 on ACID, the cursor on 4:4, KNOB 1 just turned;
+     * FILL / !FILL on the DRUM beat, the cursor on !FILL), AUTOMATION's COND rows, GLO with FILL held */
+    case S_DETAIL_COND: case S_AUTO_COND:
+        roll_scene(S_ROLL_ACID);
+        detail_values(TSEL, 0);
+        step_set_chance_v(&TSEL->step[0], 101); step_set_chance_v(&TSEL->step[2], 102);
+        step_set_chance_v(&TSEL->step[6], 106); step_set_chance_v(&TSEL->step[12], 109);
+        if (s == S_AUTO_COND) {
+            go_page(GR_EVENTS); (void)auto_pick(EVC(EVK_CHANCE, 12)); ui.hot_col = 3; ui.hot_t = 30;
+            break;
+        }
+        go_title_page("DETAIL"); ui.cursor = 12; ui.hot_col = 0; ui.hot_t = 30;
         break;
+    case S_DETAIL_FILL:
+        drum(0);
+        detail_values(TSEL, 1);
+        step_set_chance_v(&TSEL->step[4], 110); step_set_chance_v(&TSEL->step[12], 111);
+        go_title_page("DETAIL"); ui.cursor = 12; ui.hot_col = 0; ui.hot_t = 30;
+        break;
+    case S_GLO_FILL: go_home(); ui.layer = LAYER_GLO; seq_fill = 1; break;
+    /* 1.5.5 (#186): SEQ TOOLS' EUCLID open: 5 / 16 turned by 2 on ACID (HELP ON); 3 / 8 on the DRUM beat's clap (its
+     * repeats faint); 7 / 64 over 64 steps (four rows) */
+    case S_SEQ_EUCLID: case S_SEQ_EUCLID_DRUM: case S_SEQ_EUCLID_64:
+        if (s == S_SEQ_EUCLID_DRUM) { drum(0); ui.lane = 2; } else roll_scene(S_ROLL_ACID);
+        if (s == S_SEQ_EUCLID_64) TSEL->p[P_SLEN] = 64;
+        go_page(GR_ROLL); ui.layer = LAYER_SEQ; lys.trk = song.sel;
+        eu.steps = 0; eu_open(TSEL);
+        eu.hits = s == S_SEQ_EUCLID ? 5 : s == S_SEQ_EUCLID_DRUM ? 3 : 7;
+        eu.steps = s == S_SEQ_EUCLID ? 16 : s == S_SEQ_EUCLID_DRUM ? 8 : 64;
+        eu.rot = s == S_SEQ_EUCLID ? 2 : 0;
+        eu_render(TSEL); ui.msg_t = 0;
+        break;
+    /* 1.5.5 (#188): MENU > CONTROL > SELECT PAGE (the tab's eighth row) */
+    case S_MENU_SELECT: ui_prefs2 |= PREF_SEL_PAGE >> 16; ui.menu = 1; ui.menu_sel = MI_SELECT; break;
+    /* 1.5.5 (#199): SAVE > PROJECT with KNOB 2 ERASE picked on a used slot; its dialog with the project's name */
+    case S_PROJECT_ERASE: song.playing = 0; project_save_as(1, "DUB SKETCH"); song.g[G_SLOT] = 2; go_page(GR_SLOTS); ui.act = 2; break;
+    case S_CONFIRM_ERASE_PROJ: song.playing = 0; project_save_as(1, "A VERY LONG NAME"); ui.confirm = CF_ERASE_PROJ; ui.confirm_trk = 1; break;
+    /* 1.5.5 (#190): SAVE > TOOLS with KNOB 2 turned on past INIT (CLEAN INIT picked); its dialog */
+    case S_TOOLS_CLEAN: go_page(GR_TOOLS); ui.act = 2; ui.tl_clean = 1; break;
+    case S_CONFIRM_CLEAN: ui.confirm = CF_CLEAN_SOUND; ui.confirm_trk = 0; break;
     case S_DRUM_LOCKS: case S_DRUM_LOCK_HELD:
         drum(0); go_page(GR_ROLL); ui.cursor = 4; ui.lane = 1; trk[3].seq_idx = 9;
         motion_set_lock(TSEL, 2, P_E1, 90); motion_set_lock(TSEL, 4, P_REV, 100); motion_set_lock(TSEL, 4, P_DLY, 70);
@@ -1941,6 +1894,14 @@ static void align_sweeps(void)
             song.g[G_ROUTE] = (int16_t)(k / 4u); ui.force = 1;
             draw_menu();
         }
+        cur_name = st ? "sweep LINE: menu T1..T4 CHANNEL" : "sweep FLAT: menu T1..T4 CHANNEL";   /* (1.5.5) */
+        for (k = 0; k < 8u * MCH_N; k++) {              /* every channel, OMNI, OFF, selected or not, TRACK or not, S and M */
+            ui.menu_sel = (uint8_t)(k & 2u ? MI_TCH1 + (k / 8u) % 4u : MI_MIDIIN); ui_prefs = k & 1u ? PREF_LARGE : 0u;
+            song.g[G_ROUTE] = k & 4u ? ROUTE_TRACK : 0;
+            mch_set((k / 8u) % 4u, k / 8u); ui.force = 1;
+            draw_menu();
+        }
+        memset(song.mch, 0, sizeof song.mch);
         song.g[G_TUNE] = 0; song.g[G_ROUTE] = 0;
         cur_name = st ? "sweep LINE: INFO" : "sweep FLAT: INFO";   /* (1.2: every USB state, the CPU 0..99 %, S and M) */
         {
@@ -1973,18 +1934,7 @@ static void align_sweeps(void)
             ui.force = 1; draw_layer(); ui.force = 0;
         }
         ui.layer = 0; song.sel = 0; ui_prefs = 0; ui_rec_prefs = 0;
-        cur_name = st ? "sweep LINE: HELP hints" : "sweep FLAT: HELP hints";   /* (1.5: every page's, HOME's, every layer's) */
-        ui_prefs2 |= PREF_HELP >> 16;
-        for (i = 0; i <= NPAGES + HV_COUNT; i++) {
-            ui.home = i >= NPAGES; ui.page = (uint8_t)(i < NPAGES ? i : 0u);
-            ui_home_view = (uint8_t)(i > NPAGES ? i - NPAGES - 1u : 0u);
-            ui.help_t = HELP_FRAMES; ui.force = 1;
-            draw_foot();
-        }
-        for (k = LAYER_FX; k < LAYER_N; k++) {
-            ui.layer = (uint8_t)k; ui.force = 1; draw_layer(); ui.force = 0;
-        }
-        ui.layer = 0; ui.home = 1; ui.help_t = 0; ui_home_view = 0; ui_prefs2 &= (uint8_t)~(PREF_HELP >> 16);
+        ui.layer = 0; ui.home = 1; ui_home_view = 0;
         cur_name = st ? "sweep LINE: count-in" : "sweep FLAT: count-in";
         for (i = 1; i <= 2u; i++)                       /* 1 and 2 bars, every beat */
             for (k = 4u * i; k >= 1u; k--) {
@@ -2051,34 +2001,6 @@ static void align_sweeps(void)
     if (nul) fclose(nul);
 }
 
-/* the keycaps' labels in their pills (tools/gen_aa_keycaps.py), from the data: the label's ink (nibbles 6..15) in the
- * pill (KC_H rows, its width) */
-static void al_keycaps(void)
-{
-    uint32_t id;
-    cur_name = "keycap data";
-    for (id = 0; id < KC_COUNT; id++) {
-        const kc_t *k = &KC[id];
-        int32_t x, y, x0 = 999, y0 = 999, x1 = -1, y1 = -1, w = k->w;
-        uint32_t i = 0;
-        uint16_t alpha[16];
-        for (i = 0; i < 16; i++) alpha[i] = i;
-        cv_begin(w, KC_H, 0);
-        cv_alpha_hc(0, 0, w, KC_H, KC_DATA + k->off, KC_HC, alpha);
-        i = 0;
-        for (y = 0; y < KC_H; y++)
-            for (x = 0; x < w; x++, i++)
-                if (cv_px[i] >= 6u) {
-                    if (x < x0) x0 = x;
-                    if (y < y0) y0 = y;
-                    if (x + 1 > x1) x1 = x + 1;
-                    if (y + 1 > y1) y1 = y + 1;
-                }
-        al_record("keycap label in its pill", (x0 + x1) - w, (y0 + y1) - KC_H, k->label, 0, 0, w, KC_H, x0, y0, x1, y1);
-        if (al_rep) fprintf(al_rep, "keycap %-8s w %2d  ink x %2d..%2d y %d..%d  across %+.1f up/down %+.1f\n", k->label, w, x0, x1, y0, y1,
-                            ((x0 + x1) - w) / 2.0, ((y0 + y1) - KC_H) / 2.0);
-    }
-}
 static void al_table(void)
 {
     uint32_t i;
@@ -2250,8 +2172,8 @@ int main(int argc, char **argv)
         for (s = 0; s < lg_nsmall; s++) fprintf(rep, " '%s'", lg_small[s]);
         fprintf(rep, "\n");
     }
-    {   /* every FM6 chart (the lint above, fmp_check, runs on each), in GREY: gray */
-        uint32_t a, c0 = fmp_charts;
+    {   /* every FM6 algorithm's EDIT page (GHOULBOX: text), in GREY: gray */
+        uint32_t a;
         for (a = 1; a <= 32u; a++) {
             char name[32];
             snprintf(name, sizeof name, "FM6 ALG %u", a);
@@ -2261,11 +2183,10 @@ int main(int argc, char **argv)
             lint();
             mono_check();
         }
-        if (fmp_charts - c0 != 32u) { fprintf(stderr, "ui_render: %u FM6 charts drawn of 32\n", fmp_charts - c0); return 1; }
     }
     {   /* every FM6 chart again on OPERATOR, each operator picked in turn, its frequency at its widest ("x61.69", every
          * operator FIXED: "9.77 KHZ") top right: the same chart lint (the text is part of the label's net), in GREY */
-        uint32_t a, o, w, k, c0 = fmp_charts;
+        uint32_t a, o, w, k;
         for (w = 0; w < 2u; w++)
             for (a = 1; a <= 32u; a++)
                 for (o = 0; o < 6u; o++) {
@@ -2285,7 +2206,6 @@ int main(int argc, char **argv)
                     lint();
                     mono_check();
                 }
-        if (fmp_charts - c0 != 384u) { fprintf(stderr, "ui_render: %u FM6 operator charts drawn of 384\n", fmp_charts - c0); return 1; }
     }
     sweep_columns();
     roll_frames(argc > 2 ? argv[2] : 0);
@@ -2371,7 +2291,6 @@ int main(int argc, char **argv)
         }
     }
     al_off = 0;
-    al_keycaps();
     align_sweeps();
     al_table();
     if (al_rep) fclose(al_rep);
@@ -2386,8 +2305,8 @@ int main(int argc, char **argv)
         fprintf(rep, "\n");
     }
     fprintf(rep, "\n%u lint findings, %u inks on their own colour, %u ellipsised free texts, %u GREY / MONO pixels off gray / "
-            "neutral; %u column values swept; %u FM6 charts linted; %u cards linted with MOTION's icon\n", nfind, nink, nfree, mono_bad,
-            nsweep, fmp_charts, nmotion);
+            "neutral; %u column values swept; %u cards linted with MOTION's icon\n", nfind, nink, nfree, mono_bad,
+            nsweep, nmotion);
     if (!nmotion) { fprintf(stderr, "ui_render: the MOTION sweep marked no card\n"); nfind++; }
     if (!nsong_txt) { fprintf(stderr, "ui_render: SONG's bands checked no text\n"); nfind++; }
     fclose(rep);

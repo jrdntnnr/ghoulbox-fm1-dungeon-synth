@@ -76,8 +76,10 @@ static int32_t fm1_enc_take(uint32_t e)
 }
 static void (*host_wdt_hook)(void);                /* (a test's: time passing in a blocking loop, as panel_setup's) */
 static void fm1_wdt_feed(void) { if (host_wdt_hook) host_wdt_hook(); }
+#ifndef HOST_IRQ_STUBS                                   /* (tests/drumfuzz_test.c: its own, an emulated ISR) */
 static void fm1_irq_off(void) {}
 static void fm1_irq_on(void) {}
+#endif
 static uint16_t host_screen[240 * 240];
 /* #181 a blank frame: while host_fl_on, every write of a frame is watched (host_fl_begin .. host_fl_end); a pixel that
  * shows, between two writes, a value that is neither the one before the frame nor the one after (a fill of the
@@ -168,6 +170,7 @@ static void ui_power_on(void)
     uint32_t i;
     memset(trk, 0, sizeof trk);
     memset(&song, 0, sizeof song);
+    memset(midi_lit_ms, 0, sizeof midi_lit_ms); midi_seen = 0;   /* (1.5.5: no MIDI IN light) */
     memset(&chain, 0, sizeof chain);
     chain_defaults(&chain_config);
     memset(&ui, 0, sizeof ui);
@@ -1755,11 +1758,11 @@ static int test_menu_tabs(void)
             }
     }
     ui_prefs = 0;
-    bad += check("MENU tabs: DISPLAY CONTROL AUDIO MIDI SYSTEM (8 7 6 7 5 rows), 1..8 each in a run, fit the page; tab gaps "
+    bad += check("MENU tabs: DISPLAY CONTROL AUDIO MIDI SYSTEM (8 8 6 8 7 rows; 1.5.5: SELECT, T1..T4 CHANNEL, AUTO SELECT, SCREEN WAKE; GHOULBOX: no HELP), 1..8 each in a run, fit the page; tab gaps "
                  "constant (S, LARGE)",
                  ok && MTAB_COUNT == 5u && str_eq(MTAB_NAME[0], "DISPLAY") && str_eq(MTAB_NAME[MTAB_MIDI], "MIDI") &&
-                 mtab_rows(MTAB_DISPLAY) == 8u && MI_TAB[MI_HOME] == MTAB_DISPLAY && mtab_rows(MTAB_CONTROL) == 8u && mtab_rows(MTAB_AUDIO) == 6u &&
-                 mtab_rows(MTAB_MIDI) == 7u && MI_TAB[MI_LCLEAR] == MTAB_MIDI && mtab_rows(MTAB_SYSTEM) == 7u && MI_TAB[MI_TUNE] == MTAB_AUDIO &&   /* (1.5: LEARN CLEAR, HELP) */
+                 mtab_rows(MTAB_DISPLAY) == 8u && MI_TAB[MI_HOME] == MTAB_DISPLAY && mtab_rows(MTAB_CONTROL) == 8u && MI_TAB[MI_SELECT] == MTAB_CONTROL && mtab_rows(MTAB_AUDIO) == 6u &&
+                 mtab_rows(MTAB_MIDI) == 8u && MI_TAB[MI_MFOLLOW] == MTAB_MIDI && MI_TAB[MI_SCRWAKE] == MTAB_MIDI && MI_SCRWAKE + 1u == MI_LCLEAR && MI_TAB[MI_LCLEAR] == MTAB_MIDI && MI_TAB[MI_TCH4] == MTAB_MIDI && mtab_rows(MTAB_SYSTEM) == 7u && MI_TAB[MI_TUNE] == MTAB_AUDIO &&   /* (1.5: LEARN CLEAR; GHOULBOX: no HELP) */
                  MI_TAB[MI_MIDIIN] == MTAB_MIDI && MI_TAB[MI_INFO] == MTAB_SYSTEM && MI_INFO >= MI_VALUES);
 
     ui_power_on();
@@ -1775,10 +1778,9 @@ static int test_menu_tabs(void)
     turn(EN_PRESET, 1); turn(EN_PRESET, 1); ok &= ui.menu_sel == MI_LATCH;
     turn(EN_ALGO, 1); ok &= ui.menu_sel == MI_LOWCUT && menu_tab() == MTAB_AUDIO;
     turn(EN_ALGO, 1); ok &= ui.menu_sel == MI_MIDIIN && menu_tab() == MTAB_MIDI;   /* (1.2) */
-    turn(EN_PRESET, 1); ok &= ui.menu_sel == MI_LCLEAR;  /* (1.5: LEARN CLEAR, then round) */
-    turn(EN_PRESET, 1); ok &= ui.menu_sel == MI_T1CH;    /* (T1..T4 CH, OTHER) */
-    for (i = 0; i < 5u; i++) turn(EN_PRESET, 1);
-    ok &= ui.menu_sel == MI_MIDIIN;
+    turn(EN_PRESET, 1); ok &= ui.menu_sel == MI_TCH1;    /* (1.5.5: T1..T4 CHANNEL) */
+    turn(EN_PRESET, -1); turn(EN_PRESET, -1); ok &= ui.menu_sel == MI_LCLEAR;   /* (1.5: LEARN CLEAR, the last: round) */
+    turn(EN_PRESET, 1); ok &= ui.menu_sel == MI_MIDIIN;
     turn(EN_ALGO, 1); ok &= ui.menu_sel == MI_SCENE && menu_tab() == MTAB_SYSTEM;
     turn(EN_ALGO, -1); turn(EN_ALGO, -1); ok &= ui.menu_sel == MI_LOWCUT;
     turn(EN_ALGO, -1); ok &= ui.menu_sel == MI_LATCH;   /* (back at the row left there) */
@@ -1816,7 +1818,7 @@ static int test_menu_tabs(void)
             seen[menu_get(i) & 127u] = 1;
         }
         for (j = 0; j < 128u; j++)
-            ok &= seen[j] == (j < n && !(menu_tch(i) && j < MIDI_CH_NONE && tch_taken(i, j)));   /* (T1..T4 CH: not another track's) */
+            ok &= seen[j] == (j < n);
         for (j = 0; j <= n; j++) {                     /* and down again */
             want = menu_step(i, -1);
             press(B_OCTDN);
@@ -2004,24 +2006,18 @@ static int test_information(void)
     ui.menu_sel = MI_ABOUT;
     press(B_OCTUP);
     ui_draw();
-    bad += check("ABOUT opens one document with scrollable license text and credits", ui.menu == 2 && !ui.menu_scroll && menu_scroll_max() > MENU_DOC_H);
-    for (y = 146; y < 220; y++)
-        for (x = 158; x < 232; x++)
-            if (x < 166 || x >= 224 || y < 154 || y >= 212)
-                quiet &= host_screen[y * 240 + x] == swap16(UI_QR_LIGHT);
-    bad += check("ABOUT QR keeps its complete white quiet zone above the fixed footer", quiet);
+    /* GHOULBOX: one page (no credits scroll, no QR: flash); PRESETS has nothing to scroll */
+    bad += check("ABOUT opens one document that fits its page (GHOULBOX: the notices are in the source)", ui.menu == 2 && !ui.menu_scroll && menu_scroll_max() == 0);
     memcpy(header, host_screen, sizeof header);
     memcpy(footer, host_screen + 221 * 240, sizeof footer);
     turn(EN_PRESET, 3);
     ui_draw();
-    bad += check("PRESETS scrolls ABOUT with its header and controls fixed",
-                 ui.menu == 2 && ui.menu_scroll > 0 && !memcmp(header, host_screen, sizeof header) &&
+    bad += check("PRESETS on ABOUT: nothing to scroll, its header and controls fixed",
+                 ui.menu == 2 && ui.menu_scroll == 0 && !memcmp(header, host_screen, sizeof header) &&
                  !memcmp(footer, host_screen + 221 * 240, sizeof footer));
     turn(EN_PRESET, 12);
     ui_draw();
-    bad += check("PRESETS continues from ABOUT into CREDITS without changing pages",
-                 ui.menu == 2 && ui.menu_scroll > 216 && !memcmp(header, host_screen, sizeof header) &&
-                 !memcmp(footer, host_screen + 221 * 240, sizeof footer));
+    (void)quiet; (void)x; (void)y;
     uint16_t position = ui.menu_scroll;
     press(B_OCTUP);
     bad += check("OCT+ does not switch pages or alter the octave in the document",
@@ -2261,7 +2257,7 @@ static int test_roll(void)
         n = roll_diff(x0, 0, x1, H_HEAD, 1);
         ok &= n > 20u && roll_diff(x0, 0, x1, H_HEAD, 0) == roll_diff(STRIP(0), 1);   /* (+ the card's strip) */
         ok &= roll_diff(g.bx, 0, g.bx + text_w(&AF_M, "12"), H_HEAD, 1) == 0;
-        ok &= x0 < g.bx && x1 <= 140 && x1 - x0 <= 40;
+        ok &= x0 < g.bx && x1 <= 160 && x1 - x0 <= 40;   /* (1.5.6: the group centred, the BPM right of x 120) */
     }
     ok &= roll_diff(CARD_X(0), Y_LABEL + ROLL_Y, CARD_X(0) + 5 + text_w(&AF_M, "12"), Y_LABEL + ROLL_Y + ROLL_H, 1) == 0;
     /* TUNE 10 -> 11 on a card: the 1 stays */
@@ -3224,8 +3220,11 @@ static int test_layer(void)
     ui_power_on();
     hold(B_HOME); ui.menu_sel = MI_LEDS;
     ok = settings_leds == LEDS_DIM;
-    turn(EN_K1, 1); ok &= settings_leds == LEDS_INV;
-    turn(EN_K1, 1); ok &= settings_leds == LEDS_INV;
+    turn(EN_K1, 1); ok &= settings_leds == LEDS_INV && !leds_inv();
+    turn(EN_K1, 1); ok &= settings_leds == LEDS_INV && leds_inv() == 1u;   /* (1.5.6, #212: INV LO, INV HI after INV) */
+    turn(EN_K1, 1); ok &= settings_leds == LEDS_INV && leds_inv() == 2u;
+    turn(EN_K1, 1); ok &= settings_leds == LEDS_INV && leds_inv() == 2u;
+    turn(EN_K1, -1); turn(EN_K1, -1); ok &= settings_leds == LEDS_INV && !leds_inv();
     turn(EN_K1, -1); ok &= settings_leds == LEDS_DIM;
     turn(EN_K1, -1); ok &= settings_leds == LEDS_DIM_LO;
     turn(EN_K1, -1); ok &= settings_leds == LEDS_OFF;
@@ -3233,8 +3232,10 @@ static int test_layer(void)
     press(B_OCTUP); ok &= settings_leds == LEDS_DIM_LO && ui.menu == 1u;
     press(B_OCTUP); ok &= settings_leds == LEDS_DIM;
     press(B_OCTUP); ok &= settings_leds == LEDS_INV;
-    press(B_OCTUP); ok &= settings_leds == LEDS_INV && ui.menu == 1u;   /* (stops at the end) */
-    for (k = 0; k < 4u; k++) press(B_OCTDN);
+    press(B_OCTUP); ok &= settings_leds == LEDS_INV && leds_inv() == 1u && ui.menu == 1u;
+    press(B_OCTUP); ok &= settings_leds == LEDS_INV && leds_inv() == 2u;
+    press(B_OCTUP); ok &= settings_leds == LEDS_INV && leds_inv() == 2u && ui.menu == 1u;   /* (stops at the end) */
+    for (k = 0; k < 6u; k++) press(B_OCTDN);
     ok &= settings_leds == LEDS_OFF && ui.menu == 1u;
     ok &= !strcmp(LEDS_NAME[LEDS_OFF], "OFF") && !strcmp(LEDS_NAME[LEDS_DIM_LO], "DIM LO") &&
           !strcmp(LEDS_NAME[LEDS_DIM], "DIM HI") && !strcmp(LEDS_NAME[LEDS_INV], "INV");
@@ -3250,7 +3251,7 @@ static int test_layer(void)
         ok &= !memcmp(before, host_screen, sizeof before);
     }
     hold(B_HOME);
-    bad += check("menu LEDS: DIM HI by default; KNOB 1 OFF < DIM LO < DIM HI < INV (stops at the ends), OCT+ / OCT- the same; "
+    bad += check("menu LEDS: DIM HI by default; KNOB 1 OFF < DIM LO < DIM HI < INV < INV LO < INV HI (stops at the ends), OCT+ / OCT- the same; "
                  "a change from the editor redraws the shown MENU", ok && !ui.menu);
     {
         persist_t p = {0};
@@ -4034,7 +4035,7 @@ static int test_quick_layers(void)
     a = leds_at(0); b2 = leds_at(250);
     ok &= ((a & b2) >> black(0)) & 1u && !(((a | b2) >> black(1)) & 1u);           /* T1 sounding lit, T2 muted dark */
     ok &= ((a ^ b2) >> white(0)) & 1u && ((a ^ b2) >> white(7)) & 1u && ((a ^ b2) >> white(5)) & 1u &&   /* (D4: LEARN) */
-          !(((a | b2) >> white(6)) & 1u);
+          ((a ^ b2) >> white(6)) & 1u && !(((a | b2) >> white(8)) & 1u);   /* (E4: FILL, 1.5.5; G4 none) */
     key_up(black(1)); btn_up(B_GLO); frame();
     bad += check("GLO + black key 2: T2 MUTE latched (SET), silent, no MIDI; LEDs: sounding lit, muted dark", ok &&
                  trk[1].p[P_MUTE] == 1 && !ui.layer);
@@ -5043,61 +5044,6 @@ static int test_fm_charts(void)
            check("DIGITAL charts: carriers on the bottom row, modulators a row up, one per cell, distinct", layout && distinct);
 }
 #endif
-
-/* The FM6 algorithm charts (ui_graph.c graph_fm6: FM6_CELL, its routes fm6_routes and feedback operator
- * fm6_fb_op read from fm6_core.c FM6_ALG) against the 32 algorithms of 6-operator FM written out here as
- * "source>destination" routes, the carriers and the operator with feedback (fm6_core.c's: on algorithms 4 and
- * 6 the loop is the sixth operator's own, as msfa plays it). Also against the core itself: the carriers
- * fm6_carriers (fm6_car_ops), the feedback flags. The layout: the carriers on the bottom row and only they, a modulator one
- * row above everything it modulates, one operator per cell, columns 0..5, at most 4 rows. (The charts as drawn:
- * tests/ui_render.c's lint, fm6_lint.) */
-static int test_fm6_charts(void)
-{
-    static const struct { const char *r, *car; char fb; } ALGS[32] = {
-        {"2>1 4>3 5>4 6>5", "13", '6'}, {"2>1 4>3 5>4 6>5", "13", '2'}, {"2>1 3>2 5>4 6>5", "14", '6'},
-        {"2>1 3>2 5>4 6>5", "14", '6'}, {"2>1 4>3 6>5", "135", '6'}, {"2>1 4>3 6>5", "135", '6'},
-        {"2>1 4>3 5>3 6>5", "13", '6'}, {"2>1 4>3 5>3 6>5", "13", '4'}, {"2>1 4>3 5>3 6>5", "13", '2'},
-        {"2>1 3>2 5>4 6>4", "14", '3'}, {"2>1 3>2 5>4 6>4", "14", '6'}, {"2>1 4>3 5>3 6>3", "13", '2'},
-        {"2>1 4>3 5>3 6>3", "13", '6'}, {"2>1 4>3 5>4 6>4", "13", '6'}, {"2>1 4>3 5>4 6>4", "13", '2'},
-        {"2>1 3>1 5>1 4>3 6>5", "1", '6'}, {"2>1 3>1 5>1 4>3 6>5", "1", '2'}, {"2>1 3>1 4>1 5>4 6>5", "1", '3'},
-        {"2>1 3>2 6>4 6>5", "145", '6'}, {"3>1 3>2 5>4 6>4", "124", '3'}, {"3>1 3>2 6>4 6>5", "1245", '3'},
-        {"2>1 6>3 6>4 6>5", "1345", '6'}, {"3>2 6>4 6>5", "1245", '6'}, {"6>3 6>4 6>5", "12345", '6'},
-        {"6>4 6>5", "12345", '6'}, {"3>2 5>4 6>4", "124", '6'}, {"3>2 5>4 6>4", "124", '3'},
-        {"2>1 4>3 5>4", "136", '5'}, {"4>3 6>5", "1235", '6'}, {"4>3 5>4", "1236", '5'},
-        {"6>5", "12345", '6'}, {"", "123456", '6'}};
-    uint32_t a, k, j, routes = 1, layout = 1, core = 1;
-    for (a = 0; a < 32u; a++) {
-        uint8_t m[6], want[6] = {0, 0, 0, 0, 0, 0};
-        uint32_t car = 0, ok = 1, fbs = 0;
-        const char *s;
-        for (s = ALGS[a].r; *s; s++)
-            if (*s == '>') want[s[1] - '1'] |= (uint8_t)(1u << (s[-1] - '1'));
-        for (s = ALGS[a].car; *s; s++) car |= 1u << (*s - '1');
-        fm6_routes(a, m);
-        if (memcmp(m, want, 6) || fm6_fb_op(a) != (uint32_t)(ALGS[a].fb - '1')) {
-            printf("ui: FM6 algorithm %u: the chart's routes or feedback differ from the written ones\n", a + 1u);
-            routes = 0;
-        }
-        for (k = 0; k < 6u; k++)                                    /* the core: who writes the output, who has FB */
-            fbs += (FM6_ALG[a][k] & 0xC0u) == 0xC0u;
-        if (fm6_car_ops(a) != car || fbs != 1u) {
-            printf("ui: FM6 algorithm %u: fm6_core.c's carriers / feedback differ\n", a + 1u);
-            core = 0;
-        }
-        for (k = 0; k < 6u; k++) {
-            uint32_t row = FM6_CELL[a][k] >> 4, outs = 0;
-            if ((row == 0u) != ((car >> k) & 1u) || (FM6_CELL[a][k] & 0x0Fu) > 5u || row > 3u) ok = 0;
-            for (j = 0; j < 6u; j++) {
-                if (j != k && FM6_CELL[a][j] == FM6_CELL[a][k]) ok = 0;
-                if (m[j] >> k & 1u) { outs++; if (FM6_CELL[a][k] >> 4 != (FM6_CELL[a][j] >> 4) + 1u) ok = 0; }
-            }
-            if (!outs && !((car >> k) & 1u)) ok = 0;               /* every operator heard */
-        }
-        if (!ok) { printf("ui: FM6 algorithm %u: the chart's layout is off\n", a + 1u); layout = 0; }
-    }
-    return check("FM6 charts: the 32 algorithms' routes, carriers and feedback operator equal fm6_core.c's", routes && core) +
-           check("FM6 charts: carriers on the bottom row, modulators a row up, one per cell, at most 4 rows", layout);
-}
 
 #if !FELUCCA_FM4
 /* DIGITAL retired (src/fm4_convert.c): engine 1 is on no track and in no list; its sounds arrive as FM6 with a patch
@@ -6218,6 +6164,193 @@ static int test_screen_off(void)
     return bad;
 }
 
+/* 1.5.5: MENU > MIDI > SCREEN WAKE (ui.c scr_input, PREF_WAKE_PANEL: bit 5 of ui_prefs2). +MIDI (the default, 0 in every
+ * older setting): a MIDI IN note-on (USB or TRS, a channel that plays a track) keeps the screen on and wakes it, and plays
+ * (not swallowed as a panel key is); clock, CCs, bend, note-offs, SysEx and channels nobody hears do nothing to it.
+ * PANEL: the panel only, as up to 1.5.1 */
+static void sw_usb(uint32_t cin, uint32_t b0, uint32_t b1, uint32_t b2)   /* a USB-MIDI event packet in, the ISR run */
+{
+    midi_in_event(cin | b0 << 8 | b1 << 16 | b2 << 24);
+    events_block(32);
+}
+static void sw_trs(const uint8_t *b, uint32_t n)       /* TRS MIDI IN bytes, the ISR run */
+{
+    uint32_t i;
+    for (i = 0; i < n; i++)
+        um_byte(b[i]);
+    events_block(32);
+}
+static void sw_noise(void)                             /* everything that is not a note-on */
+{
+    static const uint8_t TRS[] = {0xF8, 0xB0, 7, 90, 0xF8, 0xE0, 0, 70, 0xF0, 0x7D, 1, 2, 0xF7, 0x94, 60, 100, 0xF8};
+    uint32_t i;
+    for (i = 0; i < 48u; i++)                          /* two beats of USB clock (clock in: MIDI USB) */
+        sw_usb(0xF, 0xF8, 0, 0);
+    sw_usb(0xB, 0xB0, 1, 64);                          /* CC1, CC64 */
+    sw_usb(0xB, 0xB0, 64, 127);
+    sw_usb(0xB, 0xB0, 64, 0);
+    sw_usb(0xE, 0xE0, 0, 80);                          /* bend */
+    sw_usb(0xD, 0xD0, 50, 0);                          /* aftertouch */
+    sw_usb(0x4, 0xF0, 0x7D, 0x01);                     /* SysEx (not the soft key) */
+    sw_usb(0x6, 0x02, 0xF7, 0);
+    sw_usb(0x9, 0x95, 60, 100);                        /* channel 6: no track hears it (MIDI IN CH1-4) */
+    sw_usb(0x8, 0x80, 61, 0);                          /* a note-off, and a note-on of velocity 0 */
+    sw_usb(0x9, 0x90, 61, 0);
+    sw_trs(TRS, sizeof TRS);                           /* TRS: clock, CC7, bend, SysEx, channel 5 */
+}
+static int test_screen_wake(void)
+{
+    static const uint8_t TRS_ON[] = {0x90, 64, 100}, TRS_OFF[] = {0x80, 64, 0};
+    int bad = 0, ok;
+    uint32_t n, i;
+
+    ui_power_on();
+    ok = !(ui_prefs2 & 0x20u) && menu_get(MI_SCRWAKE) == 0u && str_eq(MI_NAME[MI_SCRWAKE], "SCREEN WAKE") &&
+         MI_TAB[MI_SCRWAKE] == MTAB_MIDI && menu_n(MI_SCRWAKE) == 2u && str_eq(menu_vname(MI_SCRWAKE, 0), "+MIDI") &&
+         str_eq(menu_vname(MI_SCRWAKE, 1), "PANEL") && PREF_WAKE_PANEL == (0x20u << 16) && !MI_PROJECT(MI_SCRWAKE) &&
+         menu_valued(MI_SCRWAKE);
+    menu_put(MI_SCRWAKE, 1u);
+    ok &= ui_prefs2 == 0x20u && menu_get(MI_SCRWAKE) == 1u;
+    menu_put(MI_SCRWAKE, 0u);
+    ok &= ui_prefs2 == 0u;
+    bad += check("SCREEN WAKE: MENU > MIDI row, +MIDI (default, bit 5 of ui_prefs2 clear) / PANEL", ok);
+
+    {   /* the settings: every older record reads +MIDI; PANEL kept */
+        persist_t p = {0};
+        p.magic = PERSIST_MAGIC; p.panel = panel;
+        menu_put(MI_SCRWAKE, 1u);
+        settings_export(&p);
+        ok = p.favorites.factory[15][24] == 0x20u;
+        ui_prefs2 = 0;
+        ok &= settings_import(&p, sizeof p) && menu_get(MI_SCRWAKE) == 1u;
+        p.favorites.factory[15][24] = 0x1Fu;          /* 1.5.5 before SCREEN WAKE: every other flag of the byte set */
+        ok &= settings_import(&p, sizeof p) && menu_get(MI_SCRWAKE) == 0u && (ui_prefs2 & 0x10u);
+        memset(&p.favorites, 0, sizeof p.favorites);   /* 1.0 .. 1.5.1: the byte 0 */
+        ok &= settings_import(&p, sizeof p) && menu_get(MI_SCRWAKE) == 0u;
+        p.magic = 0x50455233u;                         /* PER3 (no favorites at all) */
+        ui_prefs2 = 0x20u;
+        ok &= settings_import(&p, (int)(sizeof p - sizeof p.favorites)) == 2 && menu_get(MI_SCRWAKE) == 0u;
+        bad += check("SCREEN WAKE: older settings (the byte 0, PER3) read +MIDI; PANEL saved and read back", ok);
+    }
+
+    ui_power_on();
+    menu_put(MI_SCROFF, 3u);                           /* 30 MIN */
+    scr_idle(31u * 60000u);
+    n = host_pw_n;
+    ok = !host_bl && scrn.st == SCR_OFF && kb_asleep && !gates();
+    sw_usb(0x9, 0x90, 60, 100);                        /* USB note-on, channel 1 = T1: it plays at once */
+    ok &= gates() == 1u && midi_seen == 1u;
+    frame();
+    ok &= scrn.st == SCR_SLPOUT && host_pw_n == n + 1u && host_pw[n] == 1u && gates() == 1u;
+    frames(300u);
+    ok &= scr_woke(n) && gates() == 1u && !midi_seen;   /* (midi_follow had it as before: the light) */
+    sw_usb(0x8, 0x80, 60, 0);
+    ok &= !gates();
+    frames(50u);
+    ok &= !kb_asleep && !scrn.eat;
+    key_down(white(0)); frame();                       /* the panel as ever: a key plays */
+    ok &= gates() == 1u;
+    key_up(white(0)); frame();
+    bad += check("SCREEN WAKE +MIDI: a USB note-on wakes it (SLPOUT, DISPON) and plays (not swallowed); keys after play", ok);
+
+    scr_idle(31u * 60000u);
+    n = host_pw_n;
+    ok = !host_bl;
+    sw_trs(TRS_ON, sizeof TRS_ON);                     /* TRS note-on */
+    ok &= gates() == 1u;
+    frames(300u);
+    ok &= scr_woke(n) && gates() == 1u;
+    sw_trs(TRS_OFF, sizeof TRS_OFF);
+    ok &= !gates();
+    bad += check("SCREEN WAKE +MIDI: a TRS note-on wakes it and plays", ok);
+
+    frames(50u);
+    n = host_pw_n;
+    scr_idle(29u * 60000u);
+    sw_usb(0x9, 0x90, 60, 100); frame();               /* a note at 29 minutes: the time counts from it */
+    ok = scrn.idle == fm1_ms && host_bl;
+    sw_usb(0x8, 0x80, 60, 0);
+    scr_idle(29u * 60000u);
+    ok &= host_pw_n == n && host_bl;
+    for (i = 0; i < 3u; i++) {                         /* notes keep it on for hours */
+        sw_trs(TRS_ON, sizeof TRS_ON); frame(); sw_trs(TRS_OFF, sizeof TRS_OFF);
+        scr_idle(25u * 60000u);
+    }
+    ok &= host_pw_n == n && host_bl;
+    scr_idle(6u * 60000u);
+    ok &= host_pw_n == n + 1u && !host_bl;
+    bad += check("SCREEN WAKE +MIDI: a note-on resets the idle time (on for hours while played; dark 30 MIN after the last)", ok);
+
+    song.g[G_CLOCK] = 1;                               /* (clock in from USB: the pulses are taken) */
+    n = host_pw_n;
+    for (i = 0; i < 5u; i++) { sw_noise(); frames(100u); }
+    ok = host_pw_n == n && !host_bl && scrn.st == SCR_OFF && !gates();
+    sw_usb(0x9, 0x90, 60, 100); frames(300u);
+    ok &= scr_woke(n);
+    sw_usb(0x8, 0x80, 60, 0);
+    n = host_pw_n;
+    scr_idle(25u * 60000u);
+    for (i = 0; i < 24u; i++) { sw_noise(); scr_idle(15000u); }   /* six minutes of clock, CCs, SysEx while on */
+    ok &= host_pw_n == n + 1u && !host_bl;            /* (dark at 30 minutes all the same) */
+    song.g[G_CLOCK] = 0;
+    bad += check("SCREEN WAKE +MIDI: clock, CCs, bend, aftertouch, note-offs, SysEx, unheard channels neither wake it nor keep it on", ok);
+
+    menu_put(MI_SCRWAKE, 1u);                          /* PANEL: as up to 1.5.1 */
+    n = host_pw_n;
+    ok = !host_bl;
+    sw_usb(0x9, 0x90, 60, 100); frames(300u);
+    ok &= host_pw_n == n && !host_bl && scrn.st == SCR_OFF && gates() == 1u;   /* (the note plays in the dark) */
+    sw_usb(0x8, 0x80, 60, 0);
+    sw_trs(TRS_ON, sizeof TRS_ON); frames(300u); sw_trs(TRS_OFF, sizeof TRS_OFF);
+    ok &= host_pw_n == n && !host_bl && !gates();
+    key_down(white(0)); frame();                       /* a key wakes it, swallowed */
+    ok &= !gates();
+    frames(300u);
+    ok &= scr_woke(n) && !gates();
+    key_up(white(0)); frame(); frames(50u);
+    n = host_pw_n;
+    scr_idle(29u * 60000u);
+    sw_usb(0x9, 0x90, 60, 100); frame(); sw_usb(0x8, 0x80, 60, 0);
+    scr_idle(2u * 60000u);
+    ok &= host_pw_n == n + 1u && !host_bl;            /* (a note kept nothing on) */
+    bad += check("SCREEN WAKE PANEL: MIDI notes play but neither wake it nor keep it on; a key wakes it, swallowed", ok);
+
+    ui_power_on();                                     /* in the MENU: OCT+ / a knob, up is +MIDI */
+    hold(B_HOME);
+    ui.menu_sel = MI_SCRWAKE; ui.force = 1; frame();
+    ok = ui.menu == 1 && menu_get(MI_SCRWAKE) == 0u;
+    press(B_OCTUP); ok &= menu_get(MI_SCRWAKE) == 0u;  /* (stops at the end) */
+    press(B_OCTDN); ok &= menu_get(MI_SCRWAKE) == 1u && (ui_prefs2 & 0x20u);
+    press(B_OCTDN); ok &= menu_get(MI_SCRWAKE) == 1u;
+    turn(EN_K3, 1); ok &= menu_get(MI_SCRWAKE) == 0u && !(ui_prefs2 & 0x20u);
+    turn(EN_K3, -1); ok &= menu_get(MI_SCRWAKE) == 1u;
+    press(B_OCTUP); ok &= menu_get(MI_SCRWAKE) == 0u;
+    press(B_HOME); ok &= ui.menu == 0;
+    bad += check("SCREEN WAKE: the MENU row steps PANEL / +MIDI (up +MIDI), stops at the ends", ok);
+
+    ui_power_on();                                     /* +MIDI: one note with the menu up, or in NAME, then nothing */
+    menu_put(MI_SCROFF, 3u);                           /* 30 MIN */
+    hold(B_HOME);
+    n = host_pw_n;
+    sw_usb(0x9, 0x90, 60, 100); frame(); sw_usb(0x8, 0x80, 60, 0);
+    ok = ui.menu && !midi_seen && scrn.idle == fm1_ms;
+    scr_idle(31u * 60000u);
+    ok &= host_pw_n == n + 1u && !host_bl && scrn.st == SCR_OFF;   /* (dark 30 MIN after it: not kept on for ever) */
+    key_down(white(0)); frame(); key_up(white(0)); frames(400u);
+    ok &= scrn.st == SCR_ON;
+    hold(B_HOME);
+    name_open(NK_USER_SAVE, 5);
+    n = host_pw_n;
+    sw_usb(0x9, 0x90, 60, 100); frame(); sw_usb(0x8, 0x80, 60, 0);
+    ok &= name_on() && !midi_seen;
+    scr_idle(31u * 60000u);
+    ok &= host_pw_n == n + 1u && !host_bl;
+    name_close();
+    bad += check("SCREEN WAKE +MIDI: a note with the menu up or in NAME keeps it on 30 MIN, not for ever (its flag taken)", ok);
+    ui_power_on();
+    return bad;
+}
+
 static int test_scale_leds(void)
 {
     static const int8_t MAP[6][FM1_NCOL] = {     /* (hal/fm1_input.h FM1_KEYMAP; the host stub is zero) */
@@ -6353,8 +6486,11 @@ static int test_seq_quant(void)
     ok = cur_page()->id[2] == P_QUANT && t->p[P_QUANT] == 0;
     turn(EN_K3, 10);
     param_format(&TP[P_QUANT], t->p[P_QUANT], val, &unit);
-    bad += check("SCL KNOB 3 MAP: legacy values kept, ALL appended (default chromatic)", ok && t->p[P_QUANT] == QN_ALL &&
-                 str_eq(val, "ALL"));
+    ok &= t->p[P_QUANT] == QN_SEQT && str_eq(val, "SEQ+T");
+    turn(EN_K3, -1);
+    param_format(&TP[P_QUANT], t->p[P_QUANT], val, &unit);
+    bad += check("SCL KNOB 3 QNT: OFF SNAP WHITE SEQ ALL SEQ+T (ALL: GHOULBOX; SEQ+T 1.5.6, #218, last; default OFF)",
+                 ok && t->p[P_QUANT] == QN_ALL && str_eq(val, "ALL"));
     t->p[P_QUANT] = QN_SEQ;
     t->p[P_SCALE] = 1;
     t->p[P_ROOT] = 0;
@@ -6892,7 +7028,7 @@ static int test_seq_tools(void)
     ok &= tl_count(TSEL, DV_TOM) >= 1u && tl_lanes_of(TSEL, DV_KICK) == 0x1111u;
     bad += check("  A4 / G4 / C5: the lane reversed (its accents with it), cleared, at random; the others stay", ok);
     a = leds_at(0); b2 = leds_at(250);
-    ok = ((a ^ b2) >> white(0)) & 1u && ((a ^ b2) >> white(11)) & 1u && !(((a | b2) >> white(7)) & 1u) &&
+    ok = ((a ^ b2) >> white(0)) & 1u && ((a ^ b2) >> white(11)) & 1u && ((a ^ b2) >> white(7)) & 1u &&   /* (F4 EUCLID) */
          ((a & b2) >> black(DV_TOM)) & 1u && ((a ^ b2) >> black(0)) & 1u && !(((a | b2) >> black(8)) & 1u);
     btn_up(B_SEQ); frame();
     ui_power_on();
@@ -6901,7 +7037,8 @@ static int test_seq_tools(void)
     btn_down(B_SEQ); frames(500);                       /* (the map: a peek) */
     memcpy(ref, TSEL->step, sizeof ref);
     a = leds_at(0); b2 = leds_at(250);
-    ok &= ((a ^ b2) >> white(5)) & 1u && !(((a | b2) >> white(6)) & 1u) && !(((a | b2) >> black(0)) & 1u);
+    ok &= ((a ^ b2) >> white(5)) & 1u && !(((a | b2) >> white(6)) & 1u) && !(((a | b2) >> black(0)) & 1u) &&
+          ((a ^ b2) >> white(7)) & 1u;                  /* (1.5.5: F4 EUCLID on every track) */
     tl_key(6); tl_key(10);
     key_down(black(2)); frame(); key_up(black(2)); frame();
     ok &= !memcmp(TSEL->step, ref, sizeof ref) && ui.lane == 0u && !gates();
@@ -8253,7 +8390,7 @@ static int test_menu_prefs(void)
 {
     int bad = 0, ok = 1;
     uint32_t k, j;
-    uint64_t seen = 0;
+    uint64_t seen = 0;                               /* (1.5.5: more than 32 rows) */
     static uint16_t shot[MTAB_COUNT][240 * 240];
     ui_power_on();
     ui_prefs = 0;
@@ -8499,11 +8636,13 @@ static int test_head_centres(void)
                     head_geo(&g, "124");
                     okp &= head_span2(g.bx + g.b[2] + 20, 239, &a, &b) && a >= 142;
                 }
-                if (!msg) {                            /* the BPM's ink on x 120 (between the metronome and the lock) */
+                if (!msg) {                            /* 1.5.6: the group's ink on x 120 (the play state .. the BPM /
+                                                        * its lock; a song's disc 4 px wider than the slot: -2.5) */
                     head_geo_t g;
                     head_geo(&g, s == HS_BPM90 ? "90" : "124");
-                    c2 = head_span2(g.mx1, g.bx + g.b[2] + HEAD_GAP - 1, &a, &b);
-                    okp &= c2 >= 236 && c2 <= 244;
+                    c2 = head_span2(g.gx0 - 6, g.gx1 - 1, &a, &b);
+                    okp &= s == HS_SONG ? c2 >= 234 && c2 <= 242 : c2 >= 238 && c2 <= 242;
+                    okp &= a >= 40 && b < (s == HS_OCT ? 160 : 180);   /* (clear of the REC mark, the octave) */
                 } else {                               /* the message centred on x 120 */
                     c2 = head_span2(40, 205, &a, &b);
                     okp &= c2 >= 234 && c2 <= 246 && a >= 40 && b <= 205;
@@ -8557,6 +8696,53 @@ static int test_head_metronome(void)
     bad += check("header metronome: still on every beat, as stopped", ok);
     bad += check("header metronome: a beat changes nothing in the header", only);
     song.playing = 0;
+    ui_power_on();
+    return bad;
+}
+
+/* 1.5.6: the header's centre group (ui_draw.c head_geo): the ink from the play state's left to the BPM's (or its
+ * lock's) right centred on x 120 within +-1 px, 2- and 3-digit tempi, stopped and playing, BPM LOCK off and on; the
+ * group (the play state, the metronome) stays put on PLAY and while the tempo changes within a digit count */
+static int test_head_group(void)
+{
+    static const int16_t T[] = {40, 60, 88, 99, 100, 120, 124, 188, 200, 240};
+    int bad = 0, ok = 1, still = 1;
+    int32_t m0[2][2] = {{-1, -1}, {-1, -1}};
+    uint32_t i, pl, lk;
+    for (lk = 0; lk < 2u; lk++)
+        for (i = 0; i < sizeof T / sizeof T[0]; i++)
+            for (pl = 0; pl < 2u; pl++) {
+                int32_t a, b, c2, j, play = -1, metro = -1;
+                head_geo_t g;
+                char s[8];
+                ui_power_on();
+                settings.palette = 0; palette_set(0);
+                if (lk) ui_prefs |= PREF_BPM_LOCK;
+                song.playing = (uint8_t)pl; clk_pos = 0; clk_step = 8u;
+                song.g[G_BPM] = T[i]; ui.roll_bpm = T[i];
+                fmt_int(s, T[i]);
+                head_geo(&g, s);
+                memset(host_screen, 0, sizeof host_screen);
+                ui.force = 1; draw_head(); ui.force = 0;
+                head_centres("group", 0);
+                c2 = head_span2(g.gx0 - 6, g.gx1 + 2, &a, &b);
+                ok &= c2 >= 238 && c2 <= 242;
+                for (j = 0; j < nhel; j++) {           /* the play state, the metronome: their ink's left */
+                    if (hel[j][0] >= a && play < 0) play = hel[j][0];
+                    else if (hel[j][0] > a && metro < 0) metro = hel[j][0];
+                }
+                still &= metro == g.mx0 && play >= g.px0 && play <= g.px0 + 2;
+                if (m0[lk][T[i] >= 100] < 0) m0[lk][T[i] >= 100] = metro;
+                still &= m0[lk][T[i] >= 100] == metro; /* (the same for every tempo of as many digits) */
+                if (!lk && (T[i] == 60 || T[i] == 120 || T[i] == 200))
+                    printf("    head group %3d BPM %-7s ink x %3d..%3d centre %5.1f (play state %3d.., metronome %3d..)\n",
+                           T[i], pl ? "playing" : "stopped", a, b, c2 / 2.0, play, metro);
+                ui_prefs &= ~PREF_BPM_LOCK;
+                song.playing = 0;
+            }
+    bad += check("header: the group (play state .. BPM / lock) centred on x 120 (+-1 px): 2 and 3 digits, stopped and "
+                 "playing, BPM LOCK off and on", ok);
+    bad += check("header: the play state and the metronome stay put on PLAY / STOP and while the tempo changes", still);
     ui_power_on();
     return bad;
 }
@@ -9140,74 +9326,6 @@ static int test_fx_map_columns(void)
     return bad;
 }
 
-/* 1.5 (Discussion #156): HELP. MENU > SYSTEM > HELP (OFF by default, bit 3 of ui_prefs2 alone); every page a button
- * reaches (DIGITAL's retired OP pages aside), HOME, HOME LEVELS, the DRUM grid and every layer has a hint of 2..3 key
- * hints that fits its footer row with every word (cv_key_row drops none); ON: a page entered shows its hint ~2 s, then
- * the footer as before; OFF: none */
-static int help_fits(const char *s)
-{
-    khint_t kh[3];
-    char b[48];
-    uint32_t n = help_parse(s, kh, b, sizeof b), i;
-    int32_t w = 6 * ((int32_t)n - 1);
-    int ok = n >= 2u && n <= 3u;
-    for (i = 0; i < n; i++) {
-        ok &= kh[i].key < KC_COUNT && kh[i].act[0] != 0;
-        w += kh_w(kh[i].key, kh[i].act);
-    }
-    if (!ok || w > 224) printf("  help: \"%s\" %u hints, %d px of 224\n", s, n, w);
-    return ok && w <= 224;
-}
-static int test_help(void)
-{
-    int bad = 0, ok;
-    uint8_t before[32];
-    uint32_t i, l;
-    ui_power_on();
-    memcpy(before, favorites.factory[15], 32);
-    ok = !help_on() && menu_get(MI_HELP) == 0u && str_eq(MI_NAME[MI_HELP], "HELP") && MI_TAB[MI_HELP] == MTAB_SYSTEM &&
-         MI_HELP < MI_VALUES && str_eq(menu_vname(MI_HELP, 1), "ON");
-    menu_put(MI_HELP, 1);
-    ok &= help_on() && menu_get(MI_HELP) == 1u && favorites.factory[15][24] == (uint8_t)(before[24] | 8u);
-    for (i = 0; i < 32u; i++)
-        ok &= i == 24u || favorites.factory[15][i] == before[i];
-    bad += check("1.5 MENU > SYSTEM > HELP: OFF by default, ON a bit of its own (ui_prefs2 bit 3)", ok);
-
-    ok = 1;
-    for (i = 0; i < NPAGES; i++) {                     /* every page but DIGITAL's OP1..4 ENV / OP LEVEL (FM4 only) */
-        uint8_t h = ui.home, pg = ui.page;
-        if (PAGES[i].fam == FAM_EDIT && PAGES[i].id[0] >= P_FM1_ATK && PAGES[i].id[0] <= P_FM4_LEVEL)
-            continue;
-        ui.home = 0; ui.page = (uint8_t)i;
-        if (!help_page()) { printf("  help: no hint for %s\n", PAGES[i].title); ok = 0; }
-        else ok &= help_fits(help_page());
-        ui.home = h; ui.page = pg;
-    }
-    ok &= help_fits(H_HOME) && help_fits(H_LEVELS) && help_fits(H_GRID);
-    for (l = LAYER_FX; l < LAYER_N; l++)
-        ok &= help_fits(HELP_LAYER[l]);
-    bad += check("1.5 HELP: a hint for every page, HOME, LEVELS, the grid and every layer; each fits its row, no word dropped", ok);
-
-    ui_power_on();
-    menu_put(MI_HELP, 1);
-    press(B_ENV);
-    ok = ui.help_t > 0u && str_eq(help_page(), "[K1-4]A D S R[ENV]ENV DEST");
-    frames(2200);
-    ok &= ui.help_t == 0u;
-    press(B_SAVE);
-    ok &= ui.help_t > 0u && cur_page()->graph == GR_USER && str_eq(help_page(), "[K1]SLOT[OCT+]SAVE[SAVE]PRESETS");
-    press(B_HOME);
-    ok &= ui.home && ui.help_t > 0u && str_eq(help_page(), H_HOME);
-    menu_put(MI_HOME, HV_LEVELS);
-    ok &= str_eq(help_page(), H_LEVELS);
-    menu_put(MI_HOME, HV_SCOPE);
-    menu_put(MI_HELP, 0);
-    press(B_ENV);
-    ok &= ui.help_t == 0u;
-    bad += check("1.5 HELP ON: a page entered (a button, HOME) shows its hint ~2 s, then not; OFF: never", ok);
-    return bad;
-}
-
 static int test_home_tracks(void)
 {
     int bad = 0, ok;
@@ -9719,7 +9837,7 @@ static int test_hidden_presets(void)
     bad += check("hidden presets: 54 names (PIANO covers SAMPLE's two), each one a real preset",
                  ok && NELEM(GB_HIDDEN) == 54u);
     preset_all_pos(&total);
-    ok = total == 71u + (FELUCCA_FM4 ? ENGINES[ENGI_DIGITAL]->npresets : 0u);   /* + two santurs, MIJWIZ, ARGHUL */
+    ok = total == 74u + (FELUCCA_FM4 ? ENGINES[ENGI_DIGITAL]->npresets : 0u);   /* + two santurs, MIJWIZ, ARGHUL; 1.5.6: DEEP TIGHT PERC */
     for (i = 0; i < total; i++) {
         e = preset_all_at(i, &k);
         ok &= e < NENGINES && !preset_hidden(ENGINES[e], k);
@@ -9870,7 +9988,7 @@ static int test_scenes(void)
     }
     bad += check("1.3 SCENE: DUNGEON CRYPT TAVERN CHAPEL BLANK CITADEL load their sounds, patterns (BLANK: none), tempo, HALL", ok);
     ui_power_on();
-    ok = MI_TAB[row] == MTAB_SYSTEM && MI_TAB[row + 1u] == MTAB_SYSTEM && row + 1u == MI_SERIAL &&
+    ok = MI_TAB[row] == MTAB_SYSTEM && MI_TAB[row + 1u] == MTAB_SYSTEM && row + 1u == MI_NAMES &&
          menu_n(row) == GB_NSCENE && str_eq(MI_NAME[row], "SCENE") && menu_get(row) == 0 &&
          str_eq(menu_vname(row, 0), "DUNGEON") && str_eq(menu_vname(row, 4), "BLANK");
     menu_put(row, 2);
@@ -10030,6 +10148,7 @@ int main(void)
     bad += test_style();
     bad += test_head_centres();
     bad += test_head_metronome();
+    bad += test_head_group();
     bad += test_div_order();
     bad += test_knob_accel();
     bad += test_usb_level();
@@ -10058,13 +10177,12 @@ int main(void)
     bad += test_step_leds();
     bad += test_scale_leds();
     bad += test_screen_off();
+    bad += test_screen_wake();
     bad += test_idle_leds();
     bad += test_momentary();
-    bad += test_fm6_charts();
     bad += test_fm6_ops();
     bad += test_home_tracks();
     bad += test_fx_map_columns();
-    bad += test_help();
     bad += test_no_flash();
 #if FELUCCA_FM4
     bad += test_fm_charts();                        /* (DIGITAL's charts: built with FELUCCA_FM4=1 only) */

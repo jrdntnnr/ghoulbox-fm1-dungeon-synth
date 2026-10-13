@@ -109,6 +109,7 @@ ENV = {"wave":(5, 80, 100, 50), "kit": (0, 127, 127, 60), "multi": (0, 85, 0, 75
 SET_KEEP = {"PIANO": 0.75,
             "PSALTERY": 0.80, "RENORGAN": 0.70, "RECORDER": 0.60, "FOLKHARP": 1.10}   # GHOULBOX: <= 130 KB, the four
 SET_FADE = {"PIANO": 0.15, "FOLKHARP": 0.50}
+SET_SKIP = {"PIANO": ("_C1_",)}               # GHOULBOX: recordings left out (flash); the next zone covers their keys
 
 _wavs = {}
 
@@ -150,7 +151,7 @@ def octave_conv(files):
 
 def cc0_entries(setname, kind):
     """-> [(file name, int16 samples at TR, loop or None, root)]"""
-    files = sorted((CC0 / setname).glob("*.wav"))
+    files = sorted(p for p in (CC0 / setname).glob("*.wav") if not any(s in p.name for s in SET_SKIP.get(setname, ())))
     out = []
     if kind != "kit":
         conv = octave_conv(files)

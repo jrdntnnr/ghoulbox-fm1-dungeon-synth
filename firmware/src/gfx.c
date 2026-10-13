@@ -21,17 +21,17 @@ typedef struct {
     const uint8_t *hc;                  /* data's Huffman code (cv_alpha_hc), 0 = 2 px per byte (cv_alpha) */
 } aafont_t;
 typedef struct { const char *name; uint16_t bg, surf, text, theme, accent; } ui_pal_t;
-typedef struct { uint16_t off; uint8_t w; const char *label; } kc_t;
+typedef struct { const char *label; } kc_t;
 #include "ui_fonts.h"                   /* AF_S 12 px / 400, AF_M 15 px / 500, AF_L 28 px / 600 */
 #include "ui_palettes.h"
 #include "ui_keycaps.h"                 /* KC_*: the keycaps / badges (tools/gen_aa_keycaps.py), KNOB_* arcs */
-#include "ghoulbox_art.h"               /* GB_LOGO, GB_LOGO_S, GB_SKULL (tools/gen_ghoulbox_art.py) */
 #define ELLIPSIS '\x85'                 /* the ellipsis glyph of AF_S and AF_M */
 
 /* host tests hook in here (layout lint, draw cost); nothing in the firmware */
 #ifndef GFX_HOOK_TEXT
 #define GFX_HOOKS 0                     /* (the firmware: what only the hooks read is not even computed) */
-#define GFX_HOOK_TEXT(x0, y0, x1, y1, s, flags) ((void)0)   /* an ink box; flags 1 ellipsised, 2 cut, 4 icon, 8 free text, 32 in a scrolled view */
+#define GFX_HOOK_TEXT(x0, y0, x1, y1, s, flags) ((void)0)   /* an ink box; flags 1 ellipsised, 2 cut, 4 icon, 8 free text, 32 in a scrolled view;
+                                                        * 16 (cv_text_flags only): no box, the caller reports its own (a keycap's label) */
 #define GFX_HOOK_BLIT(x, y, r0) ((void)0)
 #define GFX_HOOK_BEGIN() ((void)0)
 #define GFX_HOOK_PIXELS(n) ((void)0)
@@ -671,7 +671,8 @@ static int32_t cv_text_flags(int32_t x, int32_t y, const aafont_t *f, const char
             if (y1 + cv_oy > cv_cy1) y1 = cv_cy1 - cv_oy;
         }
         GFX_HOOK_PEN(y, f);
-        GFX_HOOK_TEXT(b[0], y0 + cv_oy, b[2], y1 + cv_oy, s, flags);
+        if (!(flags & 16u))
+            GFX_HOOK_TEXT(b[0], y0 + cv_oy, b[2], y1 + cv_oy, s, flags);
     }
     (void)flags;
     return x + ((pen + 8) >> 4);
@@ -756,56 +757,34 @@ static int32_t cv_free_text(int32_t x, int32_t y, const aafont_t *f, const char 
 }
 
 /* ---------------------------------------------------------- keycaps --- */
-/* a pre-rendered pill (tools/gen_aa_keycaps.py): nibble 0 outside, 1..4 the edge over `under`, 5 the fill,
- * 6..15 the label over the fill; the 16 colours per (under, fill, ink) are cached like the text ramps */
-#define NKRAMP 4u
-static struct {
-    uint16_t key[NKRAMP][3], v[NKRAMP][16];
-    uint32_t gen;
-    uint8_t next, n;
-} kr __attribute__((section(".pool")));      /* (zero-initialised; outside .bss) */
-static const uint16_t *kc_ramp(uint16_t under, uint16_t fill, uint16_t ink)
+/* a pill KC_H tall drawn on the spot (GHOULBOX: no bitmaps, flash), its label in S with KC_PAD px of fill at each end
+ * of the ink; the widths are measured once (kc_wt: 0 = not yet) */
+static uint8_t kc_wt[KC_COUNT];
+static int32_t kc_w(uint32_t id)
 {
-    uint32_t i, a;
-    uint16_t *v;
-    if (ink == fill)                             /* (as ramp) */
-        ink = ux.bg;
-    GFX_HOOK_INK(ink, fill);
-    if (kr.gen != ux.gen) {
-        kr.gen = ux.gen;
-        kr.n = kr.next = 0;
+    int32_t b[4];
+    if (id >= KC_COUNT)
+        return 0;
+    if (!kc_wt[id]) {
+        text_ink(&AF_S, KC[id].label, b);
+        kc_wt[id] = (uint8_t)(b[2] - b[0] + 2 * KC_PAD);
     }
-    for (i = 0; i < kr.n; i++)
-        if (kr.key[i][0] == under && kr.key[i][1] == fill && kr.key[i][2] == ink)
-            return kr.v[i];
-    i = kr.next;
-    kr.next = (uint8_t)((i + 1u) % NKRAMP);
-    if (kr.n < NKRAMP)
-        kr.n++;
-    kr.key[i][0] = under;
-    kr.key[i][1] = fill;
-    kr.key[i][2] = ink;
-    v = kr.v[i];
-    v[0] = swap16(under);
-    for (a = 1; a < 16u; a++) {
-        int32_t p = a < 5u ? (int32_t)a * 20 : (int32_t)(a - 5u) * 10;
-        v[a] = swap16(a < 5u ? ux_mix(under, fill, p) : ux_mix(fill, ink, p));
-    }
-    return v;
+    return kc_wt[id];
 }
-static int32_t kc_w(uint32_t id) { return id < KC_COUNT ? KC[id].w : 0; }
 /* keycap / badge `id` with its top-left at (x, y), KC_H tall: fill and label tinted with tokens, `under` what lies
  * behind its corners; returns its right edge */
 static int32_t cv_keycap(int32_t x, int32_t y, uint32_t id, uint16_t fill, uint16_t ink, uint16_t under)
 {
     const kc_t *k = &KC[id < KC_COUNT ? id : 0u];
-    const uint16_t *rv = kc_ramp(under, fill, ink);
-    cv_alpha_hc(x, y, k->w, KC_H, KC_DATA + k->off, KC_HC, rv);
-    if (x < 0 || x + k->w > (int32_t)cv_w || y + cv_oy < 0 || y + KC_H + cv_oy > (int32_t)cv_h)
-        GFX_HOOK_TEXT(x, y + cv_oy, x + k->w, y + KC_H + cv_oy, k->label, 6u);      /* cut by the canvas */
+    int32_t w = kc_w(id < KC_COUNT ? id : 0u);
+    GFX_HOOK_INK(ink, fill);
+    cv_rrect(x, y, w, KC_H, KC_R, fill, under);
+    cv_text_flags(x + ink_in(&AF_S, k->label, w), y + CAP_IN(S, KC_H), &AF_S, k->label, ink, fill, 16u);
+    if (x < 0 || x + w > (int32_t)cv_w || y + cv_oy < 0 || y + KC_H + cv_oy > (int32_t)cv_h)
+        GFX_HOOK_TEXT(x, y + cv_oy, x + w, y + KC_H + cv_oy, k->label, 6u);      /* the pill: cut by the canvas */
     else
-        GFX_HOOK_TEXT(x, y + cv_oy, x + k->w, y + KC_H + cv_oy, k->label, 4u);
-    return x + k->w;
+        GFX_HOOK_TEXT(x, y + cv_oy, x + w, y + KC_H + cv_oy, k->label, 4u);      /* the pill, one box */
+    return x + w;
 }
 
 /* a key hint: the keycap, then what it does (S, TEXT); unavailable: a DIM keycap and a DIM word. The word sits on
@@ -926,12 +905,4 @@ static void draw_text_box(uint32_t x, uint32_t y, uint32_t w, const aafont_t *f,
                           uint16_t c, int align)
 {
     draw_text_line(x, y, w, f, s, c, T_BG, align);
-}
-/* GHOULBOX: a 4-bit alpha picture (ghoulbox_art.h) centred on a full-width band at row y, in c (one-shots: boot) */
-static void draw_art_box(uint32_t y, uint32_t w, uint32_t h, const uint8_t *d, uint16_t c)
-{
-    cv_begin(240, h, T_BG);
-    cv_alpha_hc((240 - (int32_t)w) / 2, 0, w, h, d, GB_ART_HC, ramp(c, T_BG));
-    cv_blit(0, y);
-    lcd_sync();
 }

@@ -184,29 +184,29 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    /* 1: PIANO, the 5 zones of 1.0 .. 1.1.5 */
+    /* 1: PIANO, 4 of the 5 zones of 1.0 .. 1.1.5 (GHOULBOX: no C1 recording, flash; C2 covers its keys) */
     {
-        static const uint8_t ROOT[5] = {36, 48, 60, 72, 84}, LO[5] = {0, 43, 55, 67, 79}, HI[5] = {42, 54, 66, 78, 127};
+        static const uint8_t ROOT[4] = {48, 60, 72, 84}, LO[4] = {0, 55, 67, 79}, HI[4] = {54, 66, 78, 127};
         const smp_set_t *s = &SMP_SETS[0];
         const smp_zone_t *z = &SMP_ZONES[s->z0];
-        uint32_t bytes = 0, ok = s->nz == 5u;
+        uint32_t bytes = 0, ok = s->nz == 4u;
         check("PIANO: SET 0, its aliases 1 and 4 the same zones; FLUTE 2, SAX 3, USR1..3 5..7; appended dungeon sets and 12 presets",
               SMP_NSETS == 9u && str_eq(SMP_SETS[0].name, "PIANO") && SMP_SETS[1].z0 == s->z0 && SMP_SETS[4].z0 == s->z0 &&
               SMP_SETS[1].nz == s->nz && SMP_SETS[4].nz == s->nz && str_eq(SMP_SETS[2].name, "FLUTE") &&
               str_eq(SMP_SETS[3].name, "SAX") && str_eq(SMP_ALL_NAMES[5], "USR1") && ENG_SAMPLE.edit[0].max == 11 &&
               ENG_SAMPLE.npresets == 12u);
-        for (i = 0; ok && i < 5u; i++) {
+        for (i = 0; ok && i < 4u; i++) {
             bytes += (z[i].n + 1u) / 2u;
             ok &= z[i].rate == 32768u && z[i].root16 == ROOT[i] * 16u && z[i].lo == LO[i] && z[i].hi == HI[i] &&
                   !z[i].looped && z[i].n == 16537u;
         }
-        snprintf(m, sizeof m, "PIANO: 5 one-shot zones at 22,050 Hz, roots 36 48 60 72 84, 0.75 s (%u B ADPCM, as 1.1.5)",
+        snprintf(m, sizeof m, "PIANO: 4 one-shot zones at 22,050 Hz, roots 48 60 72 84, 0.75 s (%u B ADPCM)",
                  bytes);
-        check(m, ok && bytes == 41345u);
+        check(m, ok && bytes == 33076u);
         render(ENGI_SAMPLE, 0, 54, 0, &zone);
         render(ENGI_SAMPLE, 0, 55, 0, &zone2);
         check("PIANO: note 54 plays the zone of root 48, 55 the zone of root 60 (a split)",
-              zone == (int32_t)s->z0 + 1 && zone2 == (int32_t)s->z0 + 2);
+              zone == (int32_t)s->z0 && zone2 == (int32_t)s->z0 + 1);
         for (i = 0; i < sizeof NOTES; i++) {
             render(ENGI_SAMPLE, 0, NOTES[i], 0, 0);
             pitch_ok("PIANO", NOTES[i]);
@@ -220,13 +220,13 @@ int main(int argc, char **argv)
                  rms(FS * 73u / 100u, FS * 75u / 100u) < 0.05 * rms(FS / 5u, FS / 4u));
         render(8u, 0, 60, 0, &zone);
         check("PIANO: GRAIN SRC 0 takes its zones (the middle C zone for note 60, not the sine)",
-              zone == 2 && rms(FS / 2u, FS) > 100.0);
+              zone == 1 && rms(FS / 2u, FS) > 100.0);
     }
 
     /* 2: SLICE's PIANO, SAMPLE PIANO's middle C zone itself */
     check("SLICE PIANO: SAMPLE PIANO's middle C zone itself (16537 samples at 22,050 Hz, no copy)",
-          SLC_PIANO.len == 16537u && SLC_PIANO.rate == 32768u && SLC_PIANO.seg[0].off == SMP_ZONES[2].off &&
-          SLC_PIANO.len == SMP_ZONES[2].n);
+          SLC_PIANO.len == 16537u && SLC_PIANO.rate == 32768u && SLC_PIANO.seg[0].off == SMP_ZONES[1].off &&
+          SLC_PIANO.len == SMP_ZONES[1].n);
 
     /* 3: PIANO HD (1.2's file of the old piano), from a user slot: as SET 0, bit for bit */
     snprintf(path, sizeof path, "%s.hdr", argv[1]);
@@ -241,10 +241,10 @@ int main(int argc, char **argv)
     {
         /* both from the same state (a fork each: the mix keeps state from render to render) */
         int32_t *ref = mmap(0, 2u * sizeof buf, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0), *usr = ref + FS * SECS;
-        const smp_zone_t *z = &usr_zone[0][2];
+        const smp_zone_t *z = &usr_zone[0][1];
         uint32_t same = 0;
-        check("PIANO HD: USR1 holds 5 zones (roots 36 .. 84, 22,050 Hz, 0.75 s), 41 KB of a 79.5 KB slot",
-              usr_nz[0] == 5u && usr_zone[0][0].root16 == 36 * 16 && usr_zone[0][4].root16 == 84 * 16 &&
+        check("PIANO HD: USR1 holds 4 zones (roots 48 .. 84, 22,050 Hz, 0.75 s), 33 KB of a 79.5 KB slot",
+              usr_nz[0] == 4u && usr_zone[0][0].root16 == 48 * 16 && usr_zone[0][3].root16 == 84 * 16 &&
               z->root16 == 60 * 16 && z->rate == 32768u && z->n == 16537u);
         if (ref == MAP_FAILED)
             return 1;

@@ -496,12 +496,12 @@ int main(void)
         fm1_ms += 1000;
         settings_poll();
         bad += check("... and retried by the settings path", !persist_pending && leds_from_stored(persist_saved.zoom) == LEDS_INV);
-        {   /* 1.3: SCENE (editor id 25), saved in favorites.factory[15][12] (read back with the favorites: device only) */
-            const uint8_t tavern[] = {25, 2, 64};
+        {   /* 1.3: SCENE (editor id 31), saved in favorites.factory[15][12] (read back with the favorites: device only) */
+            const uint8_t tavern[] = {31, 2, 64};         /* (id 31: HELP's 24 retired, the ids after it one lower) */
             ed_repn = 0; ed_menu_handle(ED_MENU_SET, tavern, 3);
             ok = ed_rep[0] == 0 && ui_scene == 2u && st_load(OBJ_SETTINGS, &q, sizeof q) == (int)sizeof q &&
                  q.favorites.factory[15][12] == 2u;
-            bad += check("1.3 MENU_SET SCENE (id 25): saved in the settings record (favorites.factory[15][12])", ok);
+            bad += check("1.3 MENU_SET SCENE (id 31): saved in the settings record (favorites.factory[15][12])", ok);
             ui_scene = 0;
         }
         settings_hold = HOLD_DEF; settings_leds = LEDS_DIM;
@@ -599,6 +599,32 @@ int main(void)
         bad += check("project rename: flash has the new name, the music as it was", project_rename(0, "DUB") == 0 &&
                       !strcmp(ui.msg, "RENAMED") && (memset(proj_slot[0].raw, 0, 8), proj_fetch(0), project_name(0, n)) &&
                       !strcmp(n, "DUB") && proj_scratch.t[0].step[0].note[0] == st0.note[0]);
+    }
+    {   /* 1.5.5 (#199): SAVE > PROJECT ERASE: an empty record committed as a save is (A/B, the record last) */
+        project_store_t keep = proj_slot[0];
+        int ok2;
+        fail_after = 0;                                        /* (the commit record's write fails: a power cut) */
+        ok2 = project_erase(0) == 2 && !strcmp(ui.msg, "ERASE ERROR") && !memcmp(&proj_slot[0], &keep, sizeof keep) &&
+              st_load(OBJ_PROJECT0, &got, sizeof got) == (int)sizeof got && !memcmp(&got, &keep, sizeof got);
+        fail_after = -1;
+        bad += check("failed project erase (cut before its record): ERASE ERROR, the project in RAM and flash", ok2);
+        before = erases;
+        transport_req = 1;
+        ok2 = project_erase(0) == 1 && erases == before && !strcmp(ui.msg, "STOP TO ERASE") && project_used(0);
+        transport_req = 0;
+        ok2 &= project_erase(3) == 1 && erases == before && !strcmp(ui.msg, "EMPTY SLOT");
+        bad += check("project erase refused while playing and on an empty slot (no flash erase)", ok2);
+        (void)project_save(1);
+        before = erases;
+        proj_cur = 0;
+        pat_from[0] = 1; pat_from[1] = 2;
+        ok2 = project_erase(0) == 0 && !strcmp(ui.msg, "PROJECT A ERASED") && !project_used(0) && erases == before + 1u &&
+              st_load(OBJ_PROJECT0, &got, sizeof got) == 0 && proj_cur == PROJ_NO_SLOT && !pat_from[0] && pat_from[1] == 2u;
+        proj_fetch(0);
+        ok2 &= !project_used(0) && project_used(1);           /* (read back from flash: empty; the next slot kept) */
+        bad += check("project erase: the slot empty in RAM and flash (no older copy comes back), the others kept", ok2);
+        bad += check("an erased slot takes a new save", project_save(0) == 0 && project_used(0) &&
+                      (memset(proj_slot[0].raw, 0, 8), proj_fetch(0), project_used(0)));
     }
     {   /* FUN7 itself refuses a step outside its fields: a damaged slot is empty, the tracks stay */
         step_t keep = trk[0].step[0];

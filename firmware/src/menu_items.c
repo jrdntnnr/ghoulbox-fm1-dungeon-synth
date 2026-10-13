@@ -4,8 +4,8 @@
  * MENU_DESC / MENU_SET). One apply path for both: menu_put. Grouped: the screen (COLOR, STYLE, LARGE, ANIM, LEDS; 1.1.5:
  * SCREEN OFF; 1.2: SCOPE; 1.3: HOME), the
  * controls (HOLD: the layer threshold, KNOB ACCEL, FX LATCH, BPM LOCK; 1.2: SCALE LEDS, the keys, STEP PREVIEW, CHORD
- * ENTRY), the sound (SPEAKER EQ: FLAT LOWCUT BASS+,
- * USB LEVEL; 1.1: CLICK, CLICK LEVEL, COUNT-IN; 1.2: TUNE), MIDI (1.2: MIDI IN; 1.5: LEARN CLEAR), USB SERIAL, RESTORE
+ * ENTRY; 1.5.5: SELECT, BPM or PAGE), the sound (SPEAKER EQ: FLAT LOWCUT BASS+,
+ * USB LEVEL; 1.1: CLICK, CLICK LEVEL, COUNT-IN; 1.2: TUNE), MIDI (1.2: MIDI IN; 1.5.5: T1..T4 CHANNEL, AUTO SELECT, SCREEN WAKE; 1.5: LEARN CLEAR), USB SERIAL, RESTORE
  * LAST (1.2), then CALIBRATION (the setup screen: HARDWARE CALIBRATION), INFO (1.2) and ABOUT, the rows with no value
  * (MI_VALUES: the rows before them hold one, but LEARN CLEAR: menu_valued). 1.0.5: in four tabs (MI_TAB); 1.2: five.
  * 1.5: LEARN CLEAR (MIDI) is an action, not a setting: OCT+ clears MIDI LEARN's map (midi_learn.c ml_clear_all; the editor
@@ -14,20 +14,25 @@
  * GLO > SYSTEM), the values the project holds and saves as before (no format change; a project load brings its own);
  * nothing of theirs is in the settings record (MI_PROJECT: menu_get / menu_put read and write song.g) */
 enum { MI_COLOR, MI_STYLE, MI_LARGE, MI_ANIM, MI_LEDS, MI_SCROFF, MI_SCOPE, MI_HOME, MI_HOLD, MI_ACCEL, MI_LATCH, MI_BPMLOCK, MI_SCLLED,
-       MI_PREVIEW, MI_CHADD, MI_NAMES, MI_LOWCUT, MI_USB,
-       MI_CLICK, MI_CLKLVL, MI_COUNTIN, MI_TUNE, MI_MIDIIN, MI_LCLEAR, MI_T1CH, MI_T2CH, MI_T3CH, MI_T4CH, MI_OTHER, MI_SCENE, MI_SERIAL, MI_RESTORE, MI_HELP, MI_PANEL, MI_INFO,
+       MI_PREVIEW, MI_CHADD, MI_SELECT, MI_LOWCUT, MI_USB,
+       MI_CLICK, MI_CLKLVL, MI_COUNTIN, MI_TUNE, MI_MIDIIN, MI_TCH1, MI_TCH2, MI_TCH3, MI_TCH4, MI_MFOLLOW, MI_SCRWAKE, MI_LCLEAR, MI_SCENE, MI_NAMES, MI_SERIAL, MI_RESTORE, MI_PANEL, MI_INFO,
        MI_ABOUT, MI_COUNT };
                                                        /* (1.1: the metronome's rows in AUDIO; 1.2: RESTORE LAST in
                                                         * SYSTEM, SCALE LEDS STEP PREVIEW CHORD ENTRY in CONTROL, SCOPE in
                                                         * DISPLAY, TUNE in AUDIO, MIDI IN in MIDI, INFO in SYSTEM;
-                                                        * 1.3: HOME in DISPLAY; 1.5: HELP in SYSTEM) */
+                                                        * 1.3: HOME in DISPLAY; 1.5: HELP in SYSTEM; 1.5.5: SELECT
+                                                        * in CONTROL, T1..T4 CHANNEL, AUTO SELECT and SCREEN WAKE
+                                                        * in MIDI) */
 #define MI_VALUES MI_PANEL
 static int menu_valued(uint32_t row) { return row < MI_VALUES && row != MI_LCLEAR; }   /* (a row with a value) */
-#define MI_PROJECT(row) ((row) == MI_TUNE || (row) == MI_MIDIIN)   /* the project's values (song.g), not settings */
+#define MI_PROJECT(row) ((row) == MI_TUNE || ((row) >= MI_MIDIIN && (row) <= MI_TCH4))   /* the project's values (song.g,
+                                                                                         * song.mch), not settings */
+#define MI_TCH(row) ((row) >= MI_TCH1 && (row) <= MI_TCH4)   /* 1.5.5 (#202): T1..T4 CHANNEL, MIDI IN TRACK's */
 static const char *const MI_NAME[MI_COUNT] = {"COLOR", "STYLE", "LARGE", "ANIM", "LEDS", "SCREEN OFF", "SCOPE", "HOME", "HOLD", "KNOB ACCEL",
-                                              "FX LATCH", "BPM LOCK", "SCALE LEDS", "STEP PREVIEW", "CHORD ENTRY", "NOTE NAMES",
+                                              "FX LATCH", "BPM LOCK", "SCALE LEDS", "STEP PREVIEW", "CHORD ENTRY", "SELECT",
                                               "SPEAKER EQ", "USB LEVEL", "CLICK", "CLICK LEVEL", "COUNT-IN", "TUNE",
-                                              "MIDI IN", "LEARN CLEAR", "T1 CH", "T2 CH", "T3 CH", "T4 CH", "OTHER", "SCENE", "USB SERIAL", "RESTORE LAST", "HELP", "CALIBRATION", "INFO",
+                                              "MIDI IN", "T1 CHANNEL", "T2 CHANNEL", "T3 CHANNEL", "T4 CHANNEL",
+                                              "AUTO SELECT", "SCREEN WAKE", "LEARN CLEAR", "SCENE", "NOTE NAMES", "USB SERIAL", "RESTORE LAST", "CALIBRATION", "INFO",
                                               "ABOUT"};
 /* 1.0.5: the MENU's tabs (ui_menu.c: ALGORITHM steps between them, PRESETS among one tab's rows; the editor gets a
  * row's tab after its MENU_DESC reply). A tab's rows follow each other in MI order (tests/ui_test.c checks it); at
@@ -46,15 +51,18 @@ static const uint8_t MI_TAB[MI_COUNT] = {
     MTAB_CONTROL, MTAB_CONTROL, MTAB_CONTROL, MTAB_CONTROL,                 /* HOLD KNOB ACCEL FX LATCH BPM LOCK */
     MTAB_CONTROL,                                                           /* SCALE LEDS (1.2) */
     MTAB_CONTROL, MTAB_CONTROL,                                             /* STEP PREVIEW, CHORD ENTRY (1.2) */
-    MTAB_CONTROL,                                                           /* NOTE NAMES (GHOULBOX 2.1) */
+    MTAB_CONTROL,                                                           /* SELECT (1.5.5) */
     MTAB_AUDIO, MTAB_AUDIO, MTAB_AUDIO, MTAB_AUDIO, MTAB_AUDIO,             /* SPEAKER EQ, USB LEVEL, CLICK, CLICK LEVEL,
                                                                              * COUNT-IN */
     MTAB_AUDIO,                                                             /* TUNE (1.2) */
     MTAB_MIDI,                                                              /* MIDI IN (1.2) */
+    MTAB_MIDI, MTAB_MIDI, MTAB_MIDI, MTAB_MIDI,                             /* T1..T4 CHANNEL (1.5.5) */
+    MTAB_MIDI,                                                              /* AUTO SELECT (1.5.5) */
+    MTAB_MIDI,                                                              /* SCREEN WAKE (1.5.5: DISPLAY is full) */
     MTAB_MIDI,                                                              /* LEARN CLEAR (1.5) */
-    MTAB_MIDI, MTAB_MIDI, MTAB_MIDI, MTAB_MIDI, MTAB_MIDI,                  /* T1 CH .. T4 CH, OTHER (ROUT TRACKS) */
-    MTAB_SYSTEM, MTAB_SYSTEM, MTAB_SYSTEM,                                  /* USB SERIAL, RESTORE LAST, HELP (1.5) */
-    MTAB_SYSTEM, MTAB_SYSTEM, MTAB_SYSTEM, MTAB_SYSTEM,                     /* SCENE, CALIBRATION, INFO (1.2), ABOUT */
+    MTAB_SYSTEM, MTAB_SYSTEM,                                               /* SCENE, NOTE NAMES (GHOULBOX; CONTROL is full) */
+    MTAB_SYSTEM, MTAB_SYSTEM,                                               /* USB SERIAL, RESTORE LAST */
+    MTAB_SYSTEM, MTAB_SYSTEM, MTAB_SYSTEM,                                  /* CALIBRATION, INFO (1.2), ABOUT */
 };
 /* TUNE: the project's tuning in cents (G_TUNE, -50..+50); as a row its values 0..TUNE_N - 1 (value - TUNE_MIN). The
  * editor gets it as a number (EDM_INT: the cents, min..max, its unit) */
@@ -95,8 +103,9 @@ static const menu_flag_t MENU_FLAGS[] = {
     {MI_SCOPE, PREF_SCOPE_MIX, {"OUT", "MIX"}},        /* 1.2, Discussion #165: MIX, the scope before MASTER (fx.c) */
     {MI_PREVIEW, PREF_PREVIEW, {"OFF", "ON"}},         /* 1.2, Discussion #169: ON, the cursor's step sounds (ui_input.c) */
     {MI_CHADD, PREF_CHORD_ADD, {"HOLD", "ADD"}},       /* 1.2, #155: ADD, keys add to the cursor step (ui_input.c) */
-    {MI_HELP, PREF_HELP, {"OFF", "ON"}},               /* 1.5, Discussion #156: ON, a hint per page / layer (ui_help.c) */
     {MI_NAMES, PREF_NAMES_OFF, {"ON", "OFF"}},         /* GHOULBOX 2.1: OFF, no note / chord name in the header */
+    {MI_MFOLLOW, PREF_MIDI_FOLLOW, {"OFF", "ON"}},     /* 1.5.5, #208: ON, MIDI IN notes select their track (ui_input.c) */
+    {MI_SCRWAKE, PREF_WAKE_PANEL, {"+MIDI", "PANEL"}}, /* 1.5.5: PANEL, only the panel wakes SCREEN OFF (ui.c scr_input) */
 };
 /* SPEAKER EQ (settings.lowcut, fx.c fx_lowcut): an EQ on the master for the small speaker, not a speaker switch
  * (#42: "OFF" read as the speaker off). FLAT is the old OFF (0, stored as before). The built-in speaker cannot be
@@ -115,21 +124,6 @@ static const char *const SCROFF_N[5] = {"NEVER", "5 MIN", "15 MIN", "30 MIN", "6
  * ui_idle). Its values keep 1.1's: 0 ON, 1 OFF (the editor's), 2 IDLE; the menu steps them OFF, ON, IDLE (ANIM_ORD) */
 static const char *const ANIM_N[3] = {"ON", "OFF", "IDLE"};
 static const uint8_t ANIM_ORD[3] = {1, 0, 2};          /* (a value's place in the menu's order, and back: its own inverse) */
-/* MIDI IN TRACKS (seq.c ROUT_TRACKS, after SLOOP 2.6): T1 CH .. T4 CH, each track's channel in and out (the values
- * 0..15 channels 1..16, MIDI_CH_NONE OFF; two tracks never share one: menu_step skips the others'), and OTHER, what the
- * channels no track has play. Settings of the FM-1 (ui.c ui_midi_tch, ui_midi_other), not of a project */
-static const char *const OTHER_N[2] = {"SEL", "OFF"};
-static int menu_tch(uint32_t row) { return row >= MI_T1CH && row <= MI_T4CH; }
-static uint32_t tch_taken(uint32_t row, uint32_t v)    /* channel v (0..15) is another track's */
-{
-    uint32_t i;
-    for (i = 0; i < NTRK; i++) {
-        if (i != row - MI_T1CH && midi_tch_of(i) == v) {
-            return 1;
-        }
-    }
-    return 0;
-}
 /* 1.3 (Discussions #112, #134): what HOME shows under its cards (ui.c ui_home_view): the scope, or the four tracks */
 static const char *const HOME_N[HV_COUNT] = {"SCOPE", "TRACKS", "LEVELS"};   /* (1.5, #134: LEVELS) */
 
@@ -160,12 +154,21 @@ static const menu_flag_t *menu_flag(uint32_t row)
     return 0;
 }
 
-/* a row's value as 0..menu_n(row) - 1 in the order the menu steps it (LEDS: OFF DIM LO DIM HI INV, LEDS_MENU) */
+/* MENU > LEDS's values: the stored modes in the menu's order (LEDS_MENU: OFF DIM LO DIM HI INV), then 1.5.6's INV LO and
+ * INV HI (#212, ui.c ui_leds_inv), appended so that the editor's values 0..3 keep their meaning */
+#define LEDS_ROWS (LEDS_COUNT + 2u)
+static const char *const LEDS_ROW_N[LEDS_ROWS] = {"OFF", "DIM LO", "DIM HI", "INV", "INV LO", "INV HI"};
+
+/* MENU > CONTROL > SELECT (ui.c sel_mode): BPM, PAGE (1.5.5, #188), MODW, VEL (1.5.6, #84), append-only */
+static const char *const SELECT_N[SEL_N] = {"BPM", "PAGE", "MODW", "VEL"};
+
+/* a row's value as 0..menu_n(row) - 1 in the order the menu steps it (LEDS: OFF DIM LO DIM HI INV INV LO INV HI) */
 static uint32_t menu_n(uint32_t row)
 {
     return row == MI_COLOR ? NPALETTES : row == MI_LOWCUT || (row >= MI_CLICK && row <= MI_COUNTIN) ? 3u :
-           row == MI_HOLD ? 4u : row == MI_LEDS ? LEDS_COUNT : row == MI_SCROFF ? NELEM(SCROFF_N) :
-           row == MI_SCENE ? GB_NSCENE : row == MI_TUNE ? TUNE_N : row == MI_MIDIIN ? NELEM(N_ROUTE) : menu_tch(row) ? MIDI_CH_NONE + 1u : row == MI_ANIM ? 3u : row == MI_HOME ? HV_COUNT : 2u;
+           row == MI_HOLD ? 4u : row == MI_LEDS ? LEDS_ROWS : row == MI_SCROFF ? NELEM(SCROFF_N) :
+           row == MI_SCENE ? GB_NSCENE : row == MI_TUNE ? TUNE_N : row == MI_MIDIIN ? NELEM(N_ROUTE) : MI_TCH(row) ? MCH_N : row == MI_ANIM ? 3u : row == MI_HOME ? HV_COUNT :
+           row == MI_SELECT ? SEL_N : 2u;
 }
 static uint32_t menu_get(uint32_t row)
 {
@@ -181,16 +184,16 @@ static uint32_t menu_get(uint32_t row)
     case MI_SCROFF: return scr_get();
     case MI_ANIM: return ui_prefs & PREF_ANIM_OFF ? 1u : (ui_idle & 1u) ? 2u : 0u;
     case MI_HOME: return ui_home_view < HV_COUNT ? ui_home_view : HV_SCOPE;
+    case MI_SELECT: return sel_mode();
     case MI_CLICK: case MI_CLKLVL: case MI_COUNTIN: return rp_get(row - MI_CLICK);
     case MI_TUNE: return (uint32_t)(clamp(song.g[G_TUNE], TUNE_MIN, TUNE_MIN + (int32_t)TUNE_N - 1) - TUNE_MIN);
     case MI_MIDIIN: return (uint32_t)clamp(song.g[G_ROUTE], 0, (int32_t)NELEM(N_ROUTE) - 1);
-    case MI_T1CH: case MI_T2CH: case MI_T3CH: case MI_T4CH: return midi_tch_of(row - MI_T1CH);
-    case MI_OTHER: return midi_other == MIDI_OTHER_OFF;
+    case MI_TCH1: case MI_TCH2: case MI_TCH3: case MI_TCH4: return mch_get(row - MI_TCH1);
     case MI_SCENE: return ui_scene < GB_NSCENE ? ui_scene : 0u;   /* (a later version's: DUNGEON, as played) */
     case MI_LEDS:
         while (i + 1u < LEDS_COUNT && LEDS_MENU[i] != settings_leds)
             i++;
-        return i;
+        return leds_inv() ? LEDS_COUNT - 1u + leds_inv() : i;
     }
     return 0;
 }
@@ -211,14 +214,13 @@ static const char *menu_vname(uint32_t row, uint32_t v)
     case MI_ANIM: return ANIM_N[v % 3u];
     case MI_HOME: return HOME_N[v % HV_COUNT];
     case MI_SCENE: return GB_SCENES[v % GB_NSCENE].name;
-    case MI_LEDS: return LEDS_NAME[LEDS_MENU[v % LEDS_COUNT]];
+    case MI_SELECT: return SELECT_N[v % SEL_N];
+    case MI_LEDS: return LEDS_ROW_N[v % LEDS_ROWS];
     case MI_MIDIIN: return N_ROUTE[v % NELEM(N_ROUTE)];
-    case MI_OTHER: return OTHER_N[v & 1u];
-    case MI_T1CH: case MI_T2CH: case MI_T3CH: case MI_T4CH: {   /* "1" .. "16", "OFF" */
+    case MI_TCH1: case MI_TCH2: case MI_TCH3: case MI_TCH4: {   /* "1".."16", OMNI, OFF */
         static char b[4];
-        if (v >= MIDI_CH_NONE) {
-            return "OFF";
-        }
+        if (v >= 16u)
+            return v == MCH_OMNI ? "OMNI" : "OFF";
         fmt_int(b, (int32_t)v + 1);
         return b;
     }
@@ -270,17 +272,19 @@ static void menu_put(uint32_t row, uint32_t v)
         ui.force = 1;
         break;
     case MI_SCENE: ui_scene = (uint8_t)v; break;      /* (played at the next power-on: main.c felucca_init) */
-    case MI_LEDS: settings_leds = LEDS_MENU[v]; break;
+    case MI_SELECT:                                    /* (1.5.5 PAGE bit 4; 1.5.6 MODW VEL bit 6 too: ui.c sel_mode) */
+        ui_prefs2 = (uint8_t)((ui_prefs2 & ~((PREF_SEL_PAGE | PREF_SEL_HI) >> 16)) | (v & 1u) << 4 | (v & 2u) << 5);
+        break;
+    case MI_LEDS:                                      /* (INV LO / INV HI: INV and its level, ui.c ui_leds_inv) */
+        settings_leds = LEDS_MENU[v < LEDS_COUNT ? v : LEDS_COUNT - 1u];
+        ui_leds_inv = (uint8_t)(v < LEDS_COUNT ? 0u : v - (LEDS_COUNT - 1u));
+        break;
     case MI_CLICK: case MI_CLKLVL: case MI_COUNTIN: rp_put(row - MI_CLICK, v); break;   /* (at once: click.c, seq.c) */
     case MI_TUNE: song.g[G_TUNE] = (int16_t)((int32_t)v + TUNE_MIN); break;
     case MI_MIDIIN: song.g[G_ROUTE] = (int16_t)v; break;
-    case MI_T1CH: case MI_T2CH: case MI_T3CH: case MI_T4CH:   /* (seq.c reads it at the next block) */
-        midi_tch[row - MI_T1CH] = (uint8_t)(v < MIDI_CH_NONE ? v + 1u : MIDI_TCH_OFF);
-        ui_midi_tch[row - MI_T1CH] = midi_tch[row - MI_T1CH];
-        break;
-    case MI_OTHER:
-        midi_other = (uint8_t)(v ? MIDI_OTHER_OFF : MIDI_OTHER_SEL);
-        ui_midi_other = midi_other;
+    case MI_TCH1: case MI_TCH2: case MI_TCH3: case MI_TCH4:   /* (MIDI IN TRACK: what the channel no longer hears let */
+        mch_set(row - MI_TCH1, v);                     /* go, seq.c events_block) */
+        midi_route = MIDI_ROUTE_AGAIN;
         break;
     }
 }
@@ -293,16 +297,10 @@ static uint32_t menu_step(uint32_t row, int32_t s)
     uint32_t v = menu_get(row), n = menu_n(row);
     if (row == MI_TUNE)
         return (uint32_t)clamp((int32_t)v + s, 0, (int32_t)n - 1);
-    if (menu_tch(row)) {                               /* the next channel no other track has, OFF at the top */
-        int32_t d = (s > 0) - (s < 0), x = (int32_t)v + d;
-        while (d && x >= 0 && x < (int32_t)MIDI_CH_NONE && tch_taken(row, (uint32_t)x)) {
-            x += d;
-        }
-        return x >= 0 && x <= (int32_t)MIDI_CH_NONE ? (uint32_t)x : v;
-    }
     if (row == MI_ANIM)                                /* OFF ON IDLE, stopping at the ends */
         return ANIM_ORD[clamp((int32_t)ANIM_ORD[v % 3u] + (s > 0) - (s < 0), 0, 2)];
-    if (f && str_eq(f->name[0], "ON"))                 /* (ANIM, USB SERIAL, RESTORE LAST: ON is their value 0) */
+    if (f && (str_eq(f->name[0], "ON") || row == MI_SCRWAKE))   /* (ANIM, USB SERIAL, RESTORE LAST: ON is their value 0;
+                                                                 * SCREEN WAKE: up is +MIDI, the more that wakes it) */
         s = -s;
     if (s > 0)
         return v + 1u < n ? v + 1u : row == MI_COLOR ? 0u : v;

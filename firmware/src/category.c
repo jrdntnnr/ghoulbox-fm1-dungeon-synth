@@ -31,7 +31,7 @@ static const char *const PRESET_CAT[16] = {
     "PFPP",                      /* 8 GRAIN: CLOUD PAD, GLITCH, FROZEN, SHIMMER */
     "UUUPUDDPUUKUPXXXX",               /* 9 PHYS: appended SANTUR / DUSK SANTUR plucks; BELL TREE, MARIMBA, PLUCK, BOWED METAL, KALIMBA, HAND DRUM, TOMS, DRONE
                                   * STRING, HARP */
-    "DDDX",                         /* 10 DRUM: DRUM KIT */
+    "DDDXDDD",                      /* 10 DRUM: DRUM KIT, CRYPT KIT, TOMB DRUMS, DUNE DRUMS (DESERT); 1.5.6: DEEP, TIGHT, PERC */
     "FFFFFFX",                      /* 11 NOISE: SAND WIND in DESERT */
     "KUBLPUKULKPPLKB",                  /* 12 FM6: TINE EP, BELL, FM BASS, BRASS, PAD, MARIMBA, ORGAN, PLUCK */
     "DD",                        /* 13 SLICE: CHOP, STUTTER */

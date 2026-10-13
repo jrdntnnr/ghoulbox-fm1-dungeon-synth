@@ -187,8 +187,8 @@ int main(void)
     ui.msg_t = 0;
     menu_put(MI_NAMES, 1);                              /* the MENU row itself: OFF */
     keys(1u << 7); names_notice();
-    bad += check("  MENU > CONTROL > NOTE NAMES: OFF from the row silences the names, ON back",
-                 menu_get(MI_NAMES) == 1u && !ui.msg_t && MI_TAB[MI_NAMES] == MTAB_CONTROL);
+    bad += check("  MENU > SYSTEM > NOTE NAMES (CONTROL is full since 1.6): OFF from the row silences the names, ON back",
+                 menu_get(MI_NAMES) == 1u && !ui.msg_t && MI_TAB[MI_NAMES] == MTAB_SYSTEM);
     keys(0);
     menu_put(MI_NAMES, 0);
     keys(1u << 7); names_notice();

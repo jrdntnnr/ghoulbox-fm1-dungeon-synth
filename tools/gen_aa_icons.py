@@ -278,7 +278,7 @@ def main():
     ap.add_argument("out", nargs="?")
     ap.add_argument("--font", default=str(ROOT / "web" / "fukiai.ttf"))
     ap.add_argument("--json", default=str(ROOT / "assets" / "icons.json"), help="legacy icon names (order = enum)")
-    ap.add_argument("--sizes", default="12,16,24")
+    ap.add_argument("--sizes", default="12,16")   # (GHOULBOX: no 24 px set, flash)
     ap.add_argument("--big", default=",".join(BIG_DEFAULT))
     ap.add_argument("--gamma", type=float, default=1.0)
     ap.add_argument("--prefix", default="ICON_", help="enum prefix (the preview uses XI_ next to the firmware's ICON_)")
