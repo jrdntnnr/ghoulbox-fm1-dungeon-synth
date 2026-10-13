@@ -157,5 +157,58 @@
     "bytes": 22248,
     "header": "ney-air.hdr",
     "data": "ney-air.bin"
+  },
+  {
+    "name": "TAR",
+    "slot": null,
+    "files": [
+      {
+        "file": "tar-C3.wav",
+        "root": 48,
+        "source": "tar-C3",
+        "start": 0.06412698412698413,
+        "frames": 37533,
+        "calibration_cents": -2.223,
+        "median_error_cents": -0.071,
+        "natural_pitch_span_cents": 8.17,
+        "sha256": "b9adeef2b94d7a0f296fa019f06e671e08209857cac29e2453520bd19ac42847"
+      },
+      {
+        "file": "tar-C4.wav",
+        "root": 60,
+        "source": "tar-C4",
+        "start": 0.05401360544217687,
+        "frames": 37518,
+        "calibration_cents": -1.539,
+        "median_error_cents": -0.114,
+        "natural_pitch_span_cents": 5.51,
+        "sha256": "c0c9cbdf242ca1440e72e1585f1682d8b80a0776eb935f736f0cb85652608d58"
+      },
+      {
+        "file": "tar-Ab4.wav",
+        "root": 68,
+        "source": "tar-Ab4",
+        "start": 0.13165532879818595,
+        "frames": 37207,
+        "calibration_cents": 12.866,
+        "median_error_cents": 0.299,
+        "natural_pitch_span_cents": 5.8,
+        "sha256": "dbd3a3101427bc19413531684493e2a07c27fc43a5fb89108c1279f2b2ffd1a4"
+      },
+      {
+        "file": "tar-Db5.wav",
+        "root": 73,
+        "source": "tar-Db5",
+        "start": 0.06680272108843538,
+        "frames": 37384,
+        "calibration_cents": 4.662,
+        "median_error_cents": -0.157,
+        "natural_pitch_span_cents": 11.81,
+        "sha256": "e414b73e47251e7f180ac9f3968e6f1d9f79cbaa25a4f058f4d2dfc5cbd08480"
+      }
+    ],
+    "bytes": 74822,
+    "header": "tar.hdr",
+    "data": "tar.bin"
   }
 ]

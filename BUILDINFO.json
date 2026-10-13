@@ -1,0 +1,13 @@
+{
+  "version": "sardab-2.1-preview",
+  "source_commit": "bb65defc37dabdfad641936b9003ded6b2da1dce",
+  "source_repository": "https://github.com/jrdntnnr/ghoulbox-fm1-dungeon-synth",
+  "built_date": "2026-10-13",
+  "package": "felucca-sardab-2.1-preview.fwsc",
+  "sha256": "2ab4bd41b416f432b0068c2ffc8117da0c023508ba19825403a9f7b94c082e76",
+  "bytes": 610086,
+  "application_bytes": 579304,
+  "static_ram_bytes": 56068,
+  "sdram_pool_bytes": 333172,
+  "hardware_validated": false
+}

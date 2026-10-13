@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Optional banks are prepared in memory. Upload uses the existing explicit action.
 export const DESERT_BASE = new URL('../assets/desert/', import.meta.url);
-export const DESERT_NAMES = ['Oud', 'Qanun', 'Ney Air'];
+export const DESERT_NAMES = ['Oud', 'Qanun', 'Ney Air', 'Tar'];
 export async function prepareDesertBank(k, decode, fetcher = fetch) {
-  if (!Number.isInteger(k) || k < 0 || k > 2) throw new Error('Unknown desert bank');
+  if (!Number.isInteger(k) || k < 0 || k >= DESERT_NAMES.length) throw new Error('Unknown desert bank');
   const get = async (file) => {
     const response = await fetcher(new URL(file, DESERT_BASE));
     if (!response.ok) throw new Error(`Cannot load ${file} (${response.status})`);
