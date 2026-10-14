@@ -8,7 +8,7 @@ Arabic rhythm, oud and ney recordings, and the sound of stone rooms.
 
 Version SARDAB 2.1. One FM-1 has run it. Install at your own risk.
 
-![boot, HOME, PRESETS, MENU](docs/ghoulbox-1.0.png)
+![boot, HOME on DESERT OUD, PRESETS, MENU](docs/sardab-2.1.png)
 
 ## Install
 

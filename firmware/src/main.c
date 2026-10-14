@@ -177,7 +177,7 @@ static void fm1_main(void)
     usb_serial_apply();                                 /* (#67: the saved USB SERIAL before usb_start) */
     lcd_init();
     lcd_fill(0, 0, 240, 240, T_BG);
-    draw_text_box(0, 92, 240, &AF_L, "GHOULBOX", T_THEME, 1);     /* GHOULBOX (text: flash) */
+    draw_text_box(0, 92, 240, &AF_L, "SARDAB", T_THEME, 1);       /* SARDAB (text: flash) */
     draw_text_box(0, 136, 240, &AF_S, "DUNGEON SYNTH", T_MID, 1);
     if (felucca_dbg.magic != DBG_MAGIC) {
         memset(&felucca_dbg, 0, sizeof felucca_dbg);
