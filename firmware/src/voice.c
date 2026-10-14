@@ -554,7 +554,9 @@ static void engine_block(track_t *t)
  * up once a block here instead of once a voice in env_tick: the same numbers) */
 static uint32_t beat_samples(void);                /* (fx.c) */
 _Static_assert(CTL == 32, "esync_one: 4.6 CTL in Q16 is 9646899");
-static uint32_t esync_k[3];      /* ATK's step, DEC's and REL's coefficient (Q16): the part's, this block (env_tick) */
+static uint32_t esync_kc[2][3];  /* ATK's step, DEC's and REL's coefficient (Q16): the part's, this block (env_tick);
+                                  * (JIANT 0.6.71) a core's own */
+#define esync_k (esync_kc[MC_CPU() & 1u])
 static uint32_t esync_one(uint32_t quarter, int32_t v, uint32_t i)
 {
     uint32_t u = ESYNC_UNITS[esync_idx(v)], T = quarter * u / 96u, x, x2, x3, x4;   /* T: samples */
@@ -602,6 +604,10 @@ static int32_t env_tick(track_t *t, voice_t *v)
         break;
     case 2:
         v->env += mulq16(sus - v->env, esync_k[1]);
+        if (p[P_ELOOP] > 0 && v->gate && v->env - sus < (1 << 18)) {   /* ENV LOOP (GHOULBOX desert, JIANT 0.4): at the
+                                                         * sustain (within 1/64), held: the attack again from here */
+            v->stage = 1;
+        }
         break;
     case 3:
         v->env -= mulq16(v->env, esync_k[2]);
@@ -626,24 +632,64 @@ static int32_t env_tick(track_t *t, voice_t *v)
 /* SPREAD (#148, fx.c mix_spread): while spread_on (mix_part sets it for the part it renders), track_render renders the
  * voices of side 0 into spread_buf and the others into out, then adds spread_buf to out: out is every voice, as always
  * (the engines add into either the same way), spread_buf the left ones. A cost per block, none per voice */
-static uint8_t spread_on;
-static int32_t spread_buf[CTL];
+static uint8_t spread_onc[2];                        /* (JIANT 0.6.71) a core's own: each renders its parts at once */
+static int32_t spread_bufc[2][CTL];
+#define SPREAD_ON (spread_onc[MC_CPU() & 1u])
+#define SPREAD_BUF (spread_bufc[MC_CPU() & 1u])
 static __attribute__((noinline)) void spread_clear(void)
 {
     uint32_t i;
+    int32_t *b = SPREAD_BUF;
     for (i = 0; i < CTL; i++)
-        spread_buf[i] = 0;
+        b[i] = 0;
 }
 static __attribute__((noinline)) void spread_sum(int32_t *out)
 {
     uint32_t i;
+    const int32_t *b = SPREAD_BUF;
     for (i = 0; i < CTL; i++)
-        out[i] += spread_buf[i];
+        out[i] += b[i];
 }
 
 /* render one block of a part into out (cleared here); returns the voices rendered */
 /* Channel bend is live performance state, outside projects/presets. Q8 semitones. */
 static int32_t midi_bend_q8[NTRK], midi_bend_target[NTRK];
+/* FILTER TYPE COMB (GHOULBOX desert, after JIANT 0.5; ANALOG only): the part's sum through a feedback comb tuned to
+ * its newest note moved by CUT (+-32 semitones; 64: the note itself, a resonance at the pitch), RES its feedback (up to
+ * ~0.99: long metallic rings); the level kept about the dry's. One line a part (1024 samples: down to ~43 Hz).
+ * 1: it still sounds (its ring after the last voice: the part keeps rendering, fx.c mix_part_run) */
+#define COMB_LEN 1024u
+static int16_t comb_buf[NTRK][COMB_LEN] __attribute__((section(".pool")));
+static uint16_t comb_w[NTRK];
+static int16_t comb_p16[NTRK];
+static __attribute__((noinline)) uint32_t track_comb(track_t *t, int32_t *out, uint32_t n, int32_t cut, int32_t res)
+{
+    uint32_t ti = (uint32_t)(t - trk) % NTRK, i, per, age = 0, w = comb_w[ti], loud = 0;
+    int32_t p16 = comb_p16[ti], fb = 16000 + res * 130, g = 32768 - fb;
+    int16_t *b = comb_buf[ti];
+    for (i = 0; i < NVOICE; i++) {                      /* the newest note sounding */
+        if (t->v[i].active && t->v[i].age >= age) {
+            age = t->v[i].age;
+            p16 = t->v[i].pitch_cur;
+        }
+    }
+    comb_p16[ti] = (int16_t)p16;
+    p16 = clamp(p16 + (cut - 64) * 8, 0, 2047);
+    per = 0xFFFFFFFFu / ((pitch_inc((uint32_t)p16) >> 8) | 1u);   /* the period, Q8 */
+    per = per < (2u << 8) ? 2u << 8 : per > ((COMB_LEN - 2u) << 8) ? (COMB_LEN - 2u) << 8 : per;
+    for (i = 0; i < n; i++) {
+        uint32_t d = per >> 8;
+        int32_t a = b[(w - d) & (COMB_LEN - 1u)], c = b[(w - d - 1u) & (COMB_LEN - 1u)];
+        int32_t x = (a + (((c - a) * (int32_t)(per & 255u)) >> 8)) << 1, y = out[i] + mulq15(x, fb);
+        b[w & (COMB_LEN - 1u)] = (int16_t)clamp(y >> 1, -32768, 32767);
+        w++;
+        out[i] = soft_knee(mulq15(y, g) * 2 + (out[i] >> 2), 24000);
+        loud |= (uint32_t)(out[i] + 16) > 32u;
+    }
+    comb_w[ti] = (uint16_t)w;
+    return loud;
+}
+
 static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
 {
     const engine_t *e = ENGINES[t->engine];
@@ -671,7 +717,7 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
         out[i] = 0;
     if (mod.on && mod.ldep < 32767)                     /* the matrix's DEPTH (mod.c) */
         lfo = mulq15(lfo, mod.ldep);
-    if (spread_on)
+    if (SPREAD_ON)
         spread_clear();
     if (fade)                                           /* engine switch: the old engine, its own values */
         for (i = 0; i < 8u; i++) {
@@ -734,15 +780,20 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
         m.shape = (64 << 8) + ((lfo * p[P_LD_SHP]) >> 7) + ((m.envq15 * p[P_ED_SHP]) >> 7);
         if (mod.on)                                     /* the modulation matrix (mod.c) */
             mod_voice(t, v, &m, m.fine);
-        e->render(t, v, spread_on > v->side ? spread_buf : out, n, &m);   /* (SPREAD: the left ones) */
+        e->render(t, v, SPREAD_ON > v->side ? SPREAD_BUF : out, n, &m);   /* (SPREAD: the left ones) */
         nr++;
     }
-    if (spread_on)
+    if (SPREAD_ON)
         spread_sum(out);                                /* out: every voice; spread_buf: the left ones */
     if (fade) {
         for (i = 0; i < 8u; i++)
             t->p[P_E0 + i] = pe_new[i];
         t->xf--;
+    }
+    if (e == &ENG_ANALOG && p[P_FTYPE] == FT_COMB) {   /* COMB: the sum through the comb (the voices came unfiltered) */
+        if (track_comb(t, out, n, p[P_E4], p[P_E5]) && !nr) {
+            nr = 1;                                     /* (its ring after the last voice counts as one) */
+        }
     }
     return nr;
 }

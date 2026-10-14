@@ -114,6 +114,36 @@ def drum_rim():
     return out
 
 
+# GHOULBOX desert: a darbuka for SLICE's BREAK (gen_samples.py): dum (the centre, a low membrane with a pitch drop),
+# tek (the rim, a ringing fingertip), ka (the other hand's lighter rim)
+def drum_dum():
+    out, ph = [], 0.0
+    for i in range(int(0.4 * SR)):
+        t = i / SR
+        ph += 2 * math.pi * (85 + 160 * math.exp(-t * 35)) / SR
+        out.append(math.sin(ph) * math.exp(-t * 9) + 0.3 * math.sin(1.5 * ph) * math.exp(-t * 30) +
+                   random.uniform(-1, 1) * 0.15 * math.exp(-t * 600))
+    return out
+
+
+def drum_rim_hand(decay, f, secs):
+    out = []
+    for i in range(int(secs * SR)):
+        t = i / SR
+        ring = (0.5 * math.sin(2 * math.pi * f * t) + 0.8 * math.sin(2 * math.pi * f * 2.9 * t) +
+                0.4 * math.sin(2 * math.pi * f * 4.6 * t))
+        out.append(ring * math.exp(-t * decay) + random.uniform(-1, 1) * 0.6 * math.exp(-t * 300))
+    return out
+
+
+def drum_tek():
+    return drum_rim_hand(45, 720, 0.15)
+
+
+def drum_ka():
+    return drum_rim_hand(70, 900, 0.1)
+
+
 def drum_cowbell():
     out = []
     for i in range(int(0.4 * SR)):
@@ -188,7 +218,8 @@ def main(outdir):
     kit = [("KICK", drum_kick()), ("SNARE", drum_snare()), ("CHAT", drum_metal_hat(0.045)),
            ("OHAT", drum_metal_hat(0.28)),
            ("CLAP", drum_clap()), ("TOM LO", drum_tom(95)), ("TOM HI", drum_tom(150)), ("RIM", drum_rim()),
-           ("COWBELL", drum_cowbell()), ("CRASH", drum_cymbal(0.25, False)), ("RIDE", drum_cymbal(0.3, True))]
+           ("COWBELL", drum_cowbell()), ("CRASH", drum_cymbal(0.25, False)), ("RIDE", drum_cymbal(0.3, True)),
+           ("DUM", drum_dum()), ("TEK", drum_tek()), ("KA", drum_ka())]
     for name, s in kit:
         write_wav(out / f"D {name}.wav", norm(s), SR)
     for note, f in (("C2", 65.41), ("C3", 130.81), ("C4", 261.63)):    # note names: C3 = MIDI 60

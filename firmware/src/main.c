@@ -5,6 +5,41 @@
  * power-on start the USB RESCUE instead (rescue.c, bootguard.h). */
 extern uint32_t _data_start[], _data_end[], _data_load[], _bss_start[], _bss_end[];
 extern uint32_t _pool_start[], _pool_end[], _rt_start[], _rt_end[], _rt_load[];
+extern char _ustack_top[];                 /* (the others: hal/fm1_guard.h) */
+
+/* The stacks' high-water marks (GHOULBOX desert): painted at boot (fm1_cstart, below what it uses itself), scanned
+ * from the bottom now and then (stack_scan: the bytes still painted have never been written; USB SERIAL's `status`
+ * shows them as ustack_free / sstack_free). What app.ld gives them (24 + 8 KiB) can be cut by what is never used */
+#define STACK_PAINT 0x5AC3B00Fu
+#define STACK_SCAN_MS 1000u
+
+static void stack_paint(char *lo, char *hi)
+{
+    uint32_t *d;
+    for (d = (uint32_t *)lo; d < (uint32_t *)hi; d++)
+        *d = STACK_PAINT;
+}
+
+static uint32_t stack_free(const char *lo, const char *hi)
+{
+    const uint32_t *d;
+    for (d = (const uint32_t *)lo; d < (const uint32_t *)hi && *d == STACK_PAINT; d++)
+        ;
+    return (uint32_t)((uintptr_t)d - (uintptr_t)lo);
+}
+
+static void stack_scan(void)
+{
+    static uint32_t last;
+    if (fm1_ms - last < STACK_SCAN_MS)
+        return;
+    last = fm1_ms;
+    felucca_dbg.ustack_free = stack_free(_ustack_lo, _ustack_top);
+    felucca_dbg.sstack_free = stack_free(_sstack_lo, _sstack_top);
+}
+#if FELUCCA_DUAL_CORE
+extern uint32_t _c1t_start[], _c1t_end[], _c1t_load[];   /* (JIANT 0.6.71) the second core's loop (app.ld .c1_text) */
+#endif
 
 
 /* TIMER5 outranks ALNK0, so the scan keeps its 100 us pace while a half buffer renders: before,
@@ -76,6 +111,11 @@ static void fm1_fault(const fm1_crash_t *c)
 {
     char b[12];
     uint32_t t0;
+#if FELUCCA_DUAL_CORE
+    if (fm1_mc_on)
+        fm1_mc_bar_set();                             /* (JIANT 0.6.71) a crash beside the second core: one core until power-off */
+    fm1_mc_hold();
+#endif
     fm1_audio_stop();
     scr_wake_now();                                   /* (MENU > SCREEN OFF: the panel on first) */
     lcd_fill(0, 0, 240, 240, UI_CRASH_BG);            /* fixed, outside the palettes */
@@ -172,6 +212,19 @@ static void fm1_main(void)
         panel_setup();                        /* OCT- + OCT+ held at power-on */
         settings_save();
     }
+#if FELUCCA_DUAL_CORE
+    /* (JIANT 0.6.71) the second core, unless REC is held at power-on (one core this session: mc_off), a boot failed (a
+     * second would enter the rescue), or it was given up / beside a crash since power-on (hal/fm1_multicore.h
+     * fm1_mc_bar). Its entry word is in the protected top of RAM: opened for it, interrupts off (up to 20 ms) */
+    mc_off = (uint8_t)((fm1_in.buttons >> panel.btn[B_REC]) & 1u);
+    if (!mc_off && !bootguard.failed && !fm1_mc_barred()) {
+        fm1_irq_off();
+        fm1_guard_unlock_top();
+        fm1_mc_start();
+        fm1_guard_lock_top();
+        fm1_irq_on();
+    }
+#endif
     autosave_boot(boot_clean);                /* (1.2) the last session's music, under the splash */
     for (ms = 0; ms < 400u; ms += 10u) {      /* the splash; the pot followed (MIDI IN plays under it) */
         fm1_delay_ms(10);
@@ -262,6 +315,7 @@ static void fm1_main(void)
         ui_leds();
         ui_draw();
         felucca_dbg.stage = 9;
+        stack_scan();
         while (fm1_ms - m < 15u) {                               /* ~60 UI frames/s at most */
             ui_input();
 #if FELUCCA_OTA
@@ -280,6 +334,8 @@ void fm1_cstart(void)
     src = fm1_boot.rst_src;
     wdt = fm1_boot.wdt_con;
     fm1_wdt_arm(0x0D);
+    fm1_core1_stop();                           /* (JIANT 0.6.71) a second core a reset left running would read
+                                                 * the RAM cleared below */
     bootguard_reset(&bootguard, p3);            /* GHOULBOX (after dinghy): a power-on starts the count again */
     boot_mode = bootguard_begin(&bootguard);    /* the second failed boot in a row: the USB RESCUE; one in it: UBOOT */
 #if !FELUCCA_OTA
@@ -299,6 +355,16 @@ void fm1_cstart(void)
         *d = *s;
     for (s = _rt_load, d = _rt_start; d < _rt_end; s++, d++)
         *d = *s;                                /* flash driver code that must run from RAM */
+#if FELUCCA_DUAL_CORE
+    for (s = _c1t_load, d = _c1t_start; d < _c1t_end; s++, d++)
+        *d = *s;                                /* (JIANT 0.6.71) the second core's waiting loop (hal/fm1_multicore.h) */
+#endif
+    {   /* the stacks' paint (stack_scan): the user stack below this frame (with a margin), the supervisor
+         * stack whole (interrupts are off until fm1_main's fm1_irq_enable_all) */
+        uint32_t sp_now = (uint32_t)(uintptr_t)&sp_now;
+        stack_paint(_ustack_lo, (char *)(uintptr_t)(sp_now - 256u));
+        stack_paint(_sstack_lo, _sstack_top);
+    }
     fm1_mailbox_clear();
     fm1_guard_enable(FM1_GUARD_STACK | FM1_GUARD_WRITE | FM1_GUARD_BUS | FM1_GUARD_PC);
     fm1_boot.p3_rst = (uint8_t)p3;

@@ -30,6 +30,11 @@
 #define FM1_DBG_MSG (*(volatile uint32_t *)0x1EEE244u)
 #define FM1_DBG_MSG_CLR (*(volatile uint32_t *)0x1EEE248u)
 #define FM1_DBG_EN (*(volatile uint32_t *)0x1EEE340u)
+/* (JIANT 0.6.71) DBG_MSG's error bits by core (SDK cpu/wl82/debug.c, as Melodee found them): MMU, PC / write limits,
+ * bus-invalid fetch / read / write */
+#define FM1_DBG_C1 ((1u << 6) | (1u << 8) | (1u << 10) | (1u << 11) | (7u << 16))
+#define FM1_DBG_C0 ((1u << 7) | (1u << 9) | (1u << 12) | (1u << 13) | (7u << 19))
+static inline uint32_t fm1_cnum(void) { uint32_t v; __asm__ volatile("%0 = cnum" : "=r"(v)); return v; }   /* this core: 0 or 1 */
 
 enum { FM1_IRQ_EXCEPTION = 1, FM1_IRQ_ALNK0 = 11, FM1_IRQ_SPI1 = 16, FM1_IRQ_UART1 = 20,
        FM1_IRQ_SARADC = 24, FM1_IRQ_SPI2 = 37, FM1_IRQ_TIMER5 = 63, FM1_IRQ_SOFT0 = 120 };
@@ -88,14 +93,50 @@ static void fm1_irq_enable_all(void)
     fm1_irq_on();
 }
 
+/* (JIANT 0.6.71) the second core's faults (hal/fm1_multicore.h). They are not a crash of the unit: core 1 is held, the
+ * fault counted, and core 0 plays every track again. Core 1 enables no interrupt, so the debug unit's errors about it
+ * (a fetch outside the PC limits, a bad bus access) raise the exception on core 0, whose own state is intact: core 0
+ * holds core 1, clears those bits and resumes (fm1_vec.S). Core 1 may also take an exception itself: it records it and
+ * stops there, never drawing the crash screen or resetting the unit under core 0, which gives the job up when it does
+ * not come back. (Melodee found both: keremimo/melodee#17) */
+static struct { volatile uint32_t count; uint32_t cpu, dbg, pc; } fm1_core1_fault;
+static int fm1_core1_fault_c(const uint32_t *f)   /* 1: core 1's, core 0 resumes */
+{
+#if FELUCCA_DUAL_CORE
+    uint32_t cpu = fm1_cnum(), dbg = FM1_DBG_MSG;
+    if (!cpu && ((dbg & FM1_DBG_C0) || !(dbg & FM1_DBG_C1) || fm1_core1_fault.count >= 16u))
+        return 0;                                   /* core 0's own (or a hold that did not take): the crash report */
+    fm1_core1_stop();
+    fm1_core1_fault.cpu = cpu;
+    fm1_core1_fault.dbg = dbg;
+    fm1_core1_fault.pc = f[16];
+    fm1_core1_fault.count++;
+    if (!(FM1_DBG_WR_EN & 1u))
+        FM1_DBG_WR_EN = 0xE7u;                      /* (unlock) */
+    FM1_DBG_MSG_CLR = dbg & FM1_DBG_C1;
+    __asm__ volatile("csync" ::: "memory");
+    if (cpu)
+        for (;;)
+            ;                                       /* (held: it goes no further) */
+    return 1;
+#else
+    (void)f;
+    return 0;
+#endif
+}
+
 /* called from fm1_fatal_common (fm1_vec.S) with the saved frame:
  * f[0..15] r0..r15, f[16] reti, f[17] rete, f[18] retx, f[19] stub+6,
- * f[20] psr, f[21] icfg, f[22] usp, f[23] ssp, f[24] sp, f[25] interrupted rets */
+ * f[20] psr, f[21] icfg, f[22] usp, f[23] ssp, f[24] sp, f[25] interrupted rets.
+ * Returns only after a fault of the second core, to resume core 0 (JIANT 0.6.71) */
 void fm1_fault_c(uint32_t *f)
 {
     static volatile uint32_t in_fault;
-    uint32_t i, count = fm1_crash.magic == FM1_CRASH_MAGIC ? fm1_crash.count : 0;
-    uint32_t early = fm1_crash.magic == FM1_CRASH_MAGIC ? fm1_crash.early : 0;
+    uint32_t i, count, early;
+    if (fm1_core1_fault_c(f))
+        return;
+    count = fm1_crash.magic == FM1_CRASH_MAGIC ? fm1_crash.count : 0;
+    early = fm1_crash.magic == FM1_CRASH_MAGIC ? fm1_crash.early : 0;
     fm1_irq_off();
     if (in_fault++)                           /* fault while reporting: reset at once */
         *(volatile uint32_t *)0x10000u |= 1u << 4;

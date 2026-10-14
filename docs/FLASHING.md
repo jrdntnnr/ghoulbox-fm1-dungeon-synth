@@ -20,7 +20,7 @@ and a pre-existing PHASER host-cost estimate remain unresolved.
 3. In **Chrome or Edge**, open
    <http://127.0.0.1:8792/webapp/installer/>. This local page contains
    **sardab-2.1-preview**. The same preview is available from the
-   [public installer](https://jrdntnnr.github.io/ghoulbox-fm1-dungeon-synth/webapp/installer/).
+   [public installer](https://jrdntnnr.github.io/sardab/webapp/installer/).
    Check that its label says **sardab-2.1-preview** before installing.
 4. Click **Install** and allow **MIDI / SysEx** access when prompted.
 5. Keep USB connected and the computer awake through **Verifying**, **Writing**

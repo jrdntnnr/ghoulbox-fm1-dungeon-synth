@@ -142,6 +142,11 @@ static int fun7_89(void)
     for (k = 0; k < NTRK; k++)
         for (i = 0; i < 8u; i++) trk[k].p[P_E0 + i] = (int16_t)(ENGINES[trk[k].eng_req]->edit[i].min + (int16_t)(k + i) %
             (ENGINES[trk[k].eng_req]->edit[i].max - ENGINES[trk[k].eng_req]->edit[i].min + 1));
+    for (k = 0; k < NTRK; k++) {
+        if (trk[k].eng_req == ENGI_ANALOG) {
+            trk[k].p[P_E7] = 0;                                    /* (ANALOG's E7 was KTR then: INT loads as 0) */
+        }
+    }
     t->p[P_FM1_ATK] = 33; t->p[P_REV] = 20;
     t->step[2] = (step_t){{60, 64, 67}, 3, ST_NOTE, 0, 100};
     project_capture(&before);
@@ -253,14 +258,24 @@ static int arp_new_modes(void)
     track_t *t;
     ui_power_on();
     t = &trk[0];
-    ok = TP[P_AMODE].max == 14 && str_eq(TP[P_AMODE].names[6], "REPEAT") && str_eq(TP[P_AMODE].names[7], "DNUP") &&
+    ok = TP[P_AMODE].max == 16 && str_eq(TP[P_AMODE].names[16], "DRONE") && str_eq(TP[P_AMODE].names[6], "REPEAT") && str_eq(TP[P_AMODE].names[7], "DNUP") &&
          str_eq(TP[P_AMODE].names[8], "UP+8") && str_eq(TP[P_AMODE].names[9], "CONV") &&
          str_eq(TP[P_AMODE].names[10], "DIVG") && str_eq(TP[P_AMODE].names[11], "PINKY") &&
          str_eq(TP[P_AMODE].names[12], "THUMB") && str_eq(TP[P_AMODE].names[13], "WALK") &&
-         str_eq(TP[P_AMODE].names[14], "CHORD");
-    for (i = 0; i <= 14u; i++)
+         str_eq(TP[P_AMODE].names[14], "CHORD") && str_eq(TP[P_AMODE].names[15], "TRILL");
+    for (i = 0; i <= 16u; i++)
         ok &= strlen(TP[P_AMODE].names[i]) <= 6u;
-    bad += check("ARP modes: OFF..REPEAT keep their numbers, DNUP UP+8 CONV DIVG PINKY THUMB WALK CHORD appended (<= 6 chars)", ok);
+    bad += check("ARP modes: OFF..REPEAT keep their numbers, DNUP UP+8 CONV DIVG PINKY THUMB WALK CHORD TRILL DRONE appended (<= 6 chars)", ok);
+    /* TRILL (GHOULBOX desert): each held note, then its upper neighbour in the track's scale (CHR: a semitone) */
+    t->p[P_SCALE] = 1; t->p[P_ROOT] = 0;               /* MAJ on C */
+    arp_fresh(t, AM_TRILL, 1, CEG, 3);  ok = arp_plays(t, (const uint8_t[]){60, 62, 64, 65, 67, 69, 60}, 7);
+    t->p[P_SCALE] = 18; t->p[P_ROOT] = 2;              /* BAYATI on D: D trills with its half-flat E (note 64) */
+    arp_fresh(t, AM_TRILL, 1, (const uint8_t[]){62}, 1); ok &= arp_plays(t, (const uint8_t[]){62, 64, 62}, 3);
+    t->p[P_SCALE] = 0;                                 /* CHR: the semitone */
+    arp_fresh(t, AM_TRILL, 1, (const uint8_t[]){71}, 1); ok &= arp_plays(t, (const uint8_t[]){71, 72, 71}, 3);
+    arp_fresh(t, AM_TRILL, 1, (const uint8_t[]){127}, 1); ok &= arp_plays(t, (const uint8_t[]){127, 127}, 2);
+    t->p[P_ROOT] = 0;
+    bad += check("ARP TRILL: C D E F G A over MAJ, D E over BAYATI on D, B C over CHR, the top note stays", ok);
     /* the modes before 1.2 play as they did */
     arp_fresh(t, AM_UP, 1, CEG, 3);   ok = arp_plays(t, (const uint8_t[]){60, 64, 67, 60}, 4);
     arp_fresh(t, AM_DN, 1, CEG, 3);   ok &= arp_plays(t, (const uint8_t[]){67, 64, 60, 67}, 4);
@@ -576,7 +591,7 @@ static int lock_project(void)
             motion_store_t m = before.motion;
             for (i = 0; i < m.count; i++)
                 if ((m.event[i].param & 0x7Fu) == P_E4)
-                    m.event[i].param = (uint8_t)((P_E4 - (P_COUNT - np[n])) | MOTION_LOCK);
+                    m.event[i].param = (uint8_t)((P_E4 - (P_E0 + 8u - np[n])) | MOTION_LOCK);   /* (that store's E0 at np - 8) */
             ok = proj_motion_ids(&m, np[n]);
             bad += check(n ? "  FUN8 of 91: a lock's id moves up with P_E0 (87 -> P_E4), still a lock"
                            : "  FUN7 of 89: a lock's id moves up with P_E0 (85 -> P_E4), still a lock",

@@ -136,7 +136,7 @@ static const struct { uint8_t e; const char *name; } GB_HIDDEN[] = {
     {0, "SAW LEAD"}, {0, "SQR BASS"}, {0, "ACID"}, {0, "SINE KEY"}, {0, "RAVE"}, {0, "PLUCK"}, {0, "BRASS"},
     {2, "BRASS"}, {2, "ORGAN"}, {2, "RESO"}, {2, "BELL"}, {2, "WIRE"},
     {3, "PULSE LD"}, {3, "WAVE BASS"}, {3, "ARP 8BIT"}, {3, "WAVE LEAD"}, {3, "STEP LEAD"},
-    {4, "PIANO"}, {4, "FLUTE"}, {4, "SAX"},
+    {4, "PIANO"}, {4, "NEY"}, {4, "OUD"},
     {5, "VOX LEAD"}, {5, "WOW BASS"}, {5, "WHISPER"},
     {6, "FAT BASS"}, {6, "ARP LEAD"}, {6, "SYNC LEAD"}, {6, "RING BELL"},
     {7, "JAZZ PERC"}, {7, "GOSPEL"}, {7, "ROCK DRIVE"},
@@ -170,7 +170,8 @@ static uint32_t eng_step(uint32_t e, int32_t dir)
 /* factory sequence patterns: SAVE > PHRASES loads one into the selected track (ui.c pat_load); a preset
  * only suggests one with PAT(n), loading a sound never touches the steps. Absolute notes, loaded as they
  * are (DRUM plays them as GM drums, SLICE as slices; SCL TRANS and OCT transpose): 0 = rest;
- * flags 1 = accent, 2 = slide, 4 = tie (holds the previous note). Names: at most 8 characters */
+ * flags 1 = accent, 2 = slide, 4 = tie (holds the previous note), 8 16 = RATCH x2..x4 (SF_RATCH). Names: at
+ * most 8 characters */
 #define T_ 4
 static const struct {
     const char *name;
@@ -234,6 +235,20 @@ static const struct {
      {1, T_, 0, 0, 0, T_, 0, T_, 0, 0, 0, 0, 0, 1, T_, T_}},
     {"SANDSTEP", {36, 0, 39, 42, 38, 0, 39, 0, 36, 42, 0, 39, 38, 0, 42, 0},
      {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0}},
+    /* GHOULBOX desert: RISHA, CARAVAN plucked twice a beat (flag 8: RATCH x2, the oud's down-up stroke); the
+     * iqa'at on DUNE DRUMS' lanes (36 FRAME dum, 39 SLAP tek, 38 ROPE ka), a 4/4 bar of 16ths (AYYUB, MALFUF: 2/4 twice) */
+    {"RISHA", {50, 57, 62, 64, 65, 64, 62, 57, 50, 57, 60, 62, 64, 62, 57, 0},     /* 26 */
+     {9, 0, 0, 0, 9, 0, 0, 0, 9, 0, 0, 0, 8, 0, 0, 0}},
+    {"MAQSUM", {36, 0, 39, 0, 0, 0, 39, 0, 36, 0, 0, 0, 39, 0, 0, 0},              /* 27 D T - T D - T - */
+     {1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0}},
+    {"BALADI", {36, 0, 36, 0, 0, 0, 39, 0, 36, 0, 0, 0, 39, 0, 0, 0},              /* 28 D D - T D - T - */
+     {1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0}},
+    {"SAIDI", {36, 0, 39, 0, 0, 0, 36, 0, 36, 0, 0, 0, 39, 0, 0, 0},               /* 29 D T - D D - T - */
+     {1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0}},
+    {"AYYUB", {36, 0, 0, 38, 36, 0, 39, 0, 36, 0, 0, 38, 36, 0, 39, 0},            /* 30 D - k D - T - */
+     {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0}},
+    {"MALFUF", {36, 0, 0, 39, 0, 0, 39, 0, 36, 0, 0, 39, 0, 0, 39, 0},             /* 31 D - - T - - T - */
+     {1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0}},
 
 };
 #undef T_

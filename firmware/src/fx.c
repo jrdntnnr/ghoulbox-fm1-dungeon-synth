@@ -16,14 +16,20 @@ static union {                          /* ROOM's allpasses; SPRING's allpass ch
 #define rev_ap (rev_u.ap)
 static struct {
     uint32_t dly_w, cho_w, cho_ph;
+    uint32_t gr_ph, gr_sp[2];            /* GHOULBOX desert: the GRAIN delay (dly_grain): grain 0's phase (Q16), each
+                                          * grain's spray (samples) */
     int32_t dly_lp;
+    int32_t dl_s1, dl_s2;                /* GHOULBOX desert: the delay read point (Q12 samples) on its way to G_DTIME's,
+                                          * two poles (DLY_SLEW): a time change bends the echoes' pitch like a tape
+                                          * machine's motor (0: not yet set, snaps) */
     uint16_t comb_i[4], ap_i[2];
     int32_t comb_lp[4];
-    uint8_t rtype;                       /* the reverb model running (G_RTYPE: 0 ROOM, 1 SPRING, 2 HALL) */
+    uint8_t rtype;                       /* the reverb model running (G_RTYPE: 0 ROOM, 1 SPRING, 2 HALL, 3 STRINGS) */
     uint16_t sp_w;                       /* SPRING: the loop's write index (SP_MASK) */
     int32_t sp_lp, sp_hp, sp_he, sp_size;   /* .. its loop low-pass, low cut (and its remainder), the loop
                                              * length (Q8, glides) */
     uint32_t sp_ph;                      /* .. the output tap's wobble */
+    int32_t st_len[4], st_tgt[4];        /* STRINGS (GHOULBOX desert): each line's delay (Q8 samples) and its tuning */
 } fx;
 
 /* SPRING (G_RTYPE 1): one spring of a spring tank, mono like the other buses, in the ROOM's own buffers (no
@@ -309,6 +315,17 @@ static uint32_t div_samples(uint32_t div)
 /* the delay's TIME (params.c N_DTIME): N_DIV's ten (div_samples), then 1.5.1's dotted 1/8D 1/16D 1/4D (10, 11, 12: 3/4,
  * 3/8, 3/2 of a quarter); at most DLY_LEN - 1 samples (1.486 s): 1/4D clamps at 60 BPM and below (1/2 below 81) */
 static const uint8_t DIV_DOT[3] = {2, 3, 1};           /* 3 quarters >> this */
+#define DLY_SLEW 12                      /* each pole's time constant: 2^12 samples (~93 ms) */
+#define DLY_Q 12                         /* the read point's fraction bits (65536 samples fit an int32) */
+
+/* one pole's step toward its target: d / 2^DLY_SLEW rounded away from 0, so it arrives (an integer slew would stop
+ * 2^DLY_SLEW short) and never overshoots */
+static inline int32_t slew_step(int32_t d)
+{
+    int32_t m = (1 << DLY_SLEW) - 1;
+    return d >= 0 ? (d + m) >> DLY_SLEW : -((-d + m) >> DLY_SLEW);
+}
+
 static uint32_t delay_samples(void)
 {
     uint32_t d = (uint32_t)song.g[G_DTIME];
@@ -351,6 +368,99 @@ static __attribute__((noinline)) void rev_room(const int32_t *rev_in, int32_t *o
             if (++fx.ap_i[k] >= REV_AP[k])
                 fx.ap_i[k] = 0;
             c += REV_AP[k];
+        }
+        out[i] += a;
+    }
+}
+
+/* STRINGS (G_RTYPE 3, GHOULBOX desert): sympathetic strings, as a tanbur's or an oud's open courses ring behind
+ * what is played. ROOM's four comb lines, each tuned (a fractional, interpolated delay) to a degree of the scale
+ * of the track holding the lowest note: that note, and its third, fifth and seventh scale degrees above (the
+ * maqam's own intervals, SCALE_CENTS and all: tuning_pitch16). No note held: the last tuning stays (at power-on
+ * the selected track's ROOT, octave 3). A new tuning is reached by a glide (ST_GLIDE, ~40 ms a fifth), so chord
+ * changes bend the ringing. SIZE the strings' sustain (the feedback: ~0.3 s .. ~6 s at C3; lower strings ring
+ * longer), DAMP their brightness (ROOM's one-pole in the loop). Mono, added to out, no allpasses (they would
+ * smear the tone) */
+#define ST_GLIDE 16                      /* Q8 samples a sample the delay moves toward its tuning */
+#define ST_MIN_LEN (24 * 256)            /* the shortest line (~1.8 kHz) */
+#define ST_DEGREES 4
+
+static int32_t scale_snap(const track_t *t, int32_t n);   /* (seq.c, after this file) */
+static int32_t scale_up(const track_t *t, int32_t n);
+
+/* the lowest note held on a pitched part, and that part; none: 0 and 0 */
+static int32_t st_lowest(const track_t **tp)
+{
+    uint32_t k, i;
+    int32_t low = 128;
+    *tp = 0;
+    for (k = 0; k < NTRK; k++) {
+        const track_t *t = &trk[k];
+        if (t->eng_req == ENGI_DRUM || t->eng_req == ENGI_SLICE) {
+            continue;
+        }
+        for (i = 0; i < NVOICE; i++) {
+            const voice_t *v = &t->v[i];
+            if (v->gate && v->note < low) {
+                low = v->note;
+                *tp = t;
+            }
+        }
+    }
+    return low < 128 ? low : 0;
+}
+
+/* the four lines' tunings from the lowest held note (a block's start) */
+static void st_tune(void)
+{
+    const track_t *t;
+    int32_t n = st_lowest(&t), k;
+    if (!t) {
+        if (fx.st_tgt[0]) {
+            return;                                     /* (keeps ringing as tuned) */
+        }
+        t = &trk[song.sel];
+        n = 48 + t->p[P_ROOT];
+    }
+    n = scale_snap(t, clamp(n, 36, 108));
+    for (k = 0; k < ST_DEGREES; k++) {
+        uint32_t inc = pitch_inc((uint32_t)tuning_pitch16(t, (uint32_t)n)) | 1u;
+        int32_t len = (int32_t)(((uint64_t)1 << 40) / inc);          /* the period, Q8 samples */
+        fx.st_tgt[k] = clamp(len, ST_MIN_LEN, ((int32_t)REV_COMB[k] - 2) * 256);
+        if (!fx.st_len[k]) {
+            fx.st_len[k] = fx.st_tgt[k];                /* (from silence: no glide in) */
+        }
+        n = scale_up(t, scale_up(t, n));
+    }
+}
+
+static __attribute__((noinline)) void rev_strings(const int32_t *rev_in, int32_t *out, uint32_t n)
+{
+    uint32_t i, k;
+    int32_t fb = 27460 + song.g[G_RSIZE] * 40, damp = song.g[G_RDAMP] * 200;
+    st_tune();
+    for (i = 0; i < n; i++) {
+        int32_t a = 0;
+        int16_t *c = rev_comb;
+        int32_t in = mulq15(rev_in[i], 2580);
+        for (k = 0; k < 4u; k++) {
+            int32_t len = (int32_t)REV_COMB[k], d = fx.st_tgt[k] - fx.st_len[k];
+            int32_t w = fx.comb_i[k], r, r1, o, o1;
+            fx.st_len[k] += clamp(d, -ST_GLIDE, ST_GLIDE);
+            r = w - (fx.st_len[k] >> 8);                /* the read point, fx.st_len behind the write */
+            r += r < 0 ? len : 0;
+            r1 = r - 1 + (r == 0 ? len : 0);
+            o = c[r];
+            o1 = c[r1];
+            o += ((o1 - o) * (fx.st_len[k] & 255)) >> 8;
+            fx.comb_lp[k] = o + mulq15z(fx.comb_lp[k] - o, damp);
+            c[w] = (int16_t)clamp(in + mulq15z(fx.comb_lp[k], fb), -32768, 32767);
+            if (++w >= len) {
+                w = 0;
+            }
+            fx.comb_i[k] = (uint16_t)w;
+            a += o;
+            c += len;
         }
         out[i] += a;
     }
@@ -581,8 +691,10 @@ static void rev_clear(void)
         rev_comb[i] = 0;
     for (i = 0; i < sizeof rev_u.ap / 2u; i++)          /* (int16: 997 of them, an odd count the int32 view misses one of) */
         rev_u.ap[i] = 0;
-    for (i = 0; i < 4u; i++)
+    for (i = 0; i < 4u; i++) {
         fx.comb_lp[i] = 0;
+        fx.st_len[i] = fx.st_tgt[i] = 0;                 /* STRINGS: tuned afresh, no glide in */
+    }
     for (i = 0; i < HL_NL; i++)
         hl.lp[i] = hl.le[i] = 0;
     fx.sp_lp = fx.sp_hp = fx.sp_he = 0;
@@ -590,6 +702,7 @@ static void rev_clear(void)
 }
 
 static int32_t part_buf[CTL];                            /* a part's block (mix_part); the fade of a model change */
+static int32_t c1_buf[CTL];                              /* (JIANT 0.6.71) the second core's part_buf (mix_part) */
 
 /* the model changed (to rt): the old one's block fades out (HALL's stereo difference with it), its buffers are
  * cleared, the new one starts from silence */
@@ -599,7 +712,9 @@ static __attribute__((noinline)) void rev_switch(const int32_t *rev_in, int32_t 
     uint32_t i;
     for (i = 0; i < n; i++)
         t[i] = 0;
-    if (fx.rtype == 2u)
+    if (fx.rtype == 3u)
+        rev_strings(rev_in, t, n);
+    else if (fx.rtype == 2u)
         rev_hall(rev_in, t, n);
     else if (fx.rtype)
         rev_spring(rev_in, t, n);
@@ -652,12 +767,50 @@ static void bus_settle(uint32_t b, int zero, int loud, uint32_t n)
     }
 }
 /* process the three buses for one block; sends in, wet stereo-equal out */
+/* the GRAIN delay (GHOULBOX desert, after JIANT; G_DPIT / G_DSPRY not 0): the line is read by two grains of GR_LEN
+ * samples, half a grain apart, each faded in and out (triangles: their sum is flat), each sweeping its read point so it
+ * plays PITCH semitones up / down (as a tape pitch shifter); a grain starting again jumps back, SPRAY further by a random
+ * amount (up to ~190 ms). In the feedback: each repeat a further PITCH away (shimmer, falling echoes), scattered. The
+ * same line (dly_buf), no RAM of its own */
+#define GR_LEN 2048u
+static const uint32_t GR_RATIO[25] = {32768, 34716, 36781, 38968, 41285, 43740, 46341, 49097, 52016, 55109, 58386, 61858,
+                                      65536, 69433, 73562, 77936, 82570, 87480, 92682, 98193, 104032, 110218, 116772,
+                                      123715, 131072};   /* 2^(st/12), Q16 */
+static __attribute__((noinline)) int32_t dly_grain(uint32_t dl)
+{
+    int32_t s = (int32_t)GR_RATIO[clamp(song.g[G_DPIT], -12, 12) + 12] - 65536, x = 0;
+    uint32_t e = (GR_LEN * (uint32_t)(s < 0 ? -s : s)) >> 8, j;   /* the read point's sweep over a grain, Q8 */
+    fx.gr_ph = (fx.gr_ph + 65536u / GR_LEN) & 0xFFFFu;
+    for (j = 0; j < 2u; j++) {
+        uint32_t ph = (fx.gr_ph + j * 32768u) & 0xFFFFu, d, di, gl = dl;
+        int32_t a, b, w;
+        if (ph < 65536u / GR_LEN) {                     /* this grain starts again: its spray */
+            fx.gr_sp[j] = song.g[G_DSPRY] ? rng() % ((uint32_t)song.g[G_DSPRY] * 64u + 1u) : 0u;
+        }
+        if (gl + fx.gr_sp[j] > DLY_LEN - 2u - GR_LEN * 2u) {   /* a long TIME (the whole line): room for the sweep */
+            gl = DLY_LEN - 2u - GR_LEN * 2u - fx.gr_sp[j];
+        }
+        d = ((gl + fx.gr_sp[j]) << 8) + ((e * ((s > 0 ? 65535u - ph : ph) >> 4)) >> 12);   /* Q8: up, the delay shrinks
+                                                         * over the grain; down, it grows */
+        di = d >> 8;
+        if (di > DLY_LEN - 2u) {
+            di = DLY_LEN - 2u;
+        }
+        a = dly_buf[(fx.dly_w - di) & (DLY_LEN - 1u)];
+        b = dly_buf[(fx.dly_w - di - 1u) & (DLY_LEN - 1u)];
+        w = (int32_t)(ph < 32768u ? ph : 65535u - ph);  /* the triangle, 0 .. 32767 */
+        x += ((a + (((b - a) * (int32_t)(d & 255u)) >> 8)) * w) >> 15;
+    }
+    return x;
+}
+
 static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t *rev_in, int32_t *wet,
                      uint32_t n)
 {
     uint32_t i, dl = delay_samples();
     int32_t fb = song.g[G_DFDBK] * 230, col = 2000 + song.g[G_DCOLOR] * 240;
     int32_t dmix = song.g[G_DMIX] * 258;
+    int32_t gr = song.g[G_DPIT] || song.g[G_DSPRY];     /* the GRAIN delay (dly_grain) */
     int32_t cdepth = song.g[G_CDEPTH] * 6, rt;
     uint32_t cinc = LFO_INC[song.g[G_CRATE] & 127] / CTL;
     int zc = blk_zero(cho_in, n), zd = blk_zero(dly_in, n), zr = blk_zero(rev_in, n);
@@ -692,10 +845,25 @@ static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t
     /* delay with a low-passed feedback; loud: what it read was above BUS_QUIET */
     if (bus_idle(BUS_DLY, zd)) {
         fx.dly_w += n;
+        fx.dl_s1 = fx.dl_s2 = (int32_t)dl << DLY_Q;    /* (silent: the motor is there already) */
     } else {
         uint32_t loud = 0;
+        int32_t tgt = (int32_t)dl << DLY_Q;
+        if (!fx.dl_s2)
+            fx.dl_s1 = fx.dl_s2 = tgt;
         for (i = 0; i < n; i++) {
-            int32_t x = dly_buf[(fx.dly_w - dl) & (DLY_LEN - 1u)];
+            int32_t x;
+            uint32_t rd;
+            fx.dl_s1 += slew_step(tgt - fx.dl_s1);
+            fx.dl_s2 += slew_step(fx.dl_s1 - fx.dl_s2);
+            rd = (uint32_t)fx.dl_s2 >> DLY_Q;
+            if (gr) {
+                x = dly_grain(rd);
+            } else {
+                int32_t c0 = dly_buf[(fx.dly_w - rd) & (DLY_LEN - 1u)];
+                int32_t c1 = dly_buf[(fx.dly_w - rd - 1u) & (DLY_LEN - 1u)];
+                x = c0 + (((c1 - c0) * ((fx.dl_s2 >> (DLY_Q - 8)) & 255)) >> 8);   /* (between samples while it moves) */
+            }
             fx.dly_lp += mulq15(x - fx.dly_lp, col);
             dly_buf[fx.dly_w & (DLY_LEN - 1u)] =
                 (int16_t)clamp((dly_in[i] >> 1) + mulq15(fx.dly_lp, fb), -32768, 32767);
@@ -708,7 +876,7 @@ static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t
 
     /* the reverb: its input 0, into rev_tmp first to see whether it is quiet */
     rt = song.g[G_RTYPE];
-    rt = rt == 1 || rt == 2 ? rt : 0;
+    rt = rt >= 1 && rt <= 3 ? rt : 0;                    /* ROOM, SPRING, HALL, STRINGS (GHOULBOX desert) */
     hl.side = 0;
     if (rt != fx.rtype) {
         bus_q[BUS_REV] = 0;
@@ -726,7 +894,9 @@ static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t
                 o[i] = 0;
             }
         }
-        if (rt == 2)
+        if (rt == 3)
+            rev_strings(rev_in, o, n);
+        else if (rt == 2)
             rev_hall(rev_in, o, n);
         else if (rt)
             rev_spring(rev_in, o, n);
@@ -951,6 +1121,8 @@ static __attribute__((noinline)) void track_insert(track_t *t, int32_t *b, uint3
  * -> dist -> INSERT -> SLICER -> level / pan / sends -> buses -> master; out: stereo Q15 */
 static void events_block(uint32_t n);                    /* seq.c */
 static int32_t send_c[CTL], send_d[CTL], send_r[CTL], wet[CTL], mix_l[CTL], mix_r[CTL];
+/* (JIANT 0.6.71) what the second core's parts add, summed into the above after it is done (mix_block mc_join) */
+static struct { int32_t l[CTL], r[CTL], c[CTL], d[CTL], rv[CTL]; } c1_mix;
 
 /* SPREAD (#148): a POLY or UNISON part whose SPRD is above 0. Its voices start left and right of PAN in turn (voice.c
  * voice_start; UNISON's detuned voices alternate), at PAN -/+ SPRD / 2 (SPRD 127: hard left and right), with the pan
@@ -963,8 +1135,10 @@ static int32_t send_c[CTL], send_d[CTL], send_r[CTL], wet[CTL], mix_l[CTL], mix_
  * clear and sum of spread_buf, the side and a wider mix loop, per part; per voice none (it picks its buffer) */
 static __attribute__((noinline)) void mix_spread(track_t *t, int32_t *b, uint32_t n)
 {
-    int32_t *d = spread_buf;
-    uint32_t i;
+    int32_t *d = SPREAD_BUF;
+    uint32_t i, c1 = MC_CPU() & 1u;                     /* (JIANT 0.6.71) on the second core: its own mix and sends */
+    int32_t *ol = c1 ? c1_mix.l : mix_l, *or_ = c1 ? c1_mix.r : mix_r;
+    int32_t *sc = c1 ? c1_mix.c : send_c, *sd = c1 ? c1_mix.d : send_d, *sr = c1 ? c1_mix.rv : send_r;
     int32_t lvl = LEVEL_Q12[t->p[P_LEVEL] & 127], pan = t->p[P_PAN], s = (t->p[P_SPRD] + 1) >> 1;
     int32_t pa = clamp(pan - s, -64, 63), pb = clamp(pan + s, -64, 63);
     int32_t gla = 4096 - (pa > 0 ? pa * 64 : 0), gra = 4096 + (pa < 0 ? pa * 64 : 0);
@@ -987,13 +1161,13 @@ static __attribute__((noinline)) void mix_spread(track_t *t, int32_t *b, uint32_
         if (a > pk)
             pk = a;
         if (c)
-            send_c[i] += mulq15(xs, c);
+            sc[i] += mulq15(xs, c);
         if (dl)
-            send_d[i] += mulq15(xs, dl);
+            sd[i] += mulq15(xs, dl);
         if (r)
-            send_r[i] += mulq15(xs, r);
-        mix_l[i] += ((x * glm) >> 12) + ((y * gld) >> 12);
-        mix_r[i] += ((x * grm) >> 12) + ((y * grd) >> 12);
+            sr[i] += mulq15(xs, r);
+        ol[i] += ((x * glm) >> 12) + ((y * gld) >> 12);
+        or_[i] += ((x * grm) >> 12) + ((y * grd) >> 12);
     }
     t->peak = pk;
 }
@@ -1005,24 +1179,25 @@ static int32_t send_top[NTRK], send_lim[NTRK];        /* mix_part_run: a part's 
 /* a sound's fade (voice.c sound_change): the whole part rendered with the sound it had, then the new one back */
 static void mix_part(track_t *t, uint32_t n)
 {
-    static int16_t pnew[P_COUNT];
+    static int16_t pnew[2][P_COUNT];                    /* (JIANT 0.6.71: a core's own) */
+    int16_t *pn = pnew[MC_CPU() & 1u];
     uint32_t k = (uint32_t)(t - trk) % NTRK;
     if (!(snd_is_fading(t) && t->xf_on && t->xf)) {
         mix_part_run(t, n);
         return;
     }
-    memcpy(pnew, t->p, sizeof pnew);
+    memcpy(pn, t->p, sizeof pnew[0]);
     memcpy(t->p, snd_old[k], sizeof t->p);
     mix_part_run(t, n);
-    memcpy(t->p, pnew, sizeof pnew);
+    memcpy(t->p, pn, sizeof pnew[0]);
 }
 
 static void mix_part_run(track_t *t, uint32_t n)
 {
-    int32_t *b = part_buf;
-    uint32_t i;
+    uint32_t i, c1 = MC_CPU() & 1u;                     /* (JIANT 0.6.71) on the second core: its own buffers */
+    int32_t *b = c1 ? c1_buf : part_buf;
     mod_begin(t);                                       /* the matrix's per-block values into t->p (mod.c) */
-    spread_on = t->p[P_SPRD] > 0 && (trk_vmode(t) == V_POLY || trk_vmode(t) == V_UNISON);   /* (SPREAD, mix_spread) */
+    SPREAD_ON = t->p[P_SPRD] > 0 && (trk_vmode(t) == V_POLY || trk_vmode(t) == V_UNISON);   /* (SPREAD, mix_spread) */
     if (track_render(t, b, n))
         t->tail = t->p[P_ITYPE] ? 64 : 16;              /* blocks of DIST / INSERT state to run out after the last
                                                          * voice (the INSERT's: 46 ms, a flanger's feedback) */
@@ -1034,7 +1209,7 @@ static void mix_part_run(track_t *t, uint32_t n)
             mod_end(t);
         return;
     }
-    if (spread_on)
+    if (SPREAD_ON)
         mix_spread(t, b, n);
     else {
         track_dist(t, b, n);
@@ -1044,12 +1219,14 @@ static void mix_part_run(track_t *t, uint32_t n)
         if ((pf.mute >> (t - trk)) & 1u)
             perf_mute((uint32_t)(t - trk), b, n);       /* perform.c: a black key in the FX layer */
     }
-    if (!spread_on) {                                   /* (the mix's values read after the calls: none is held over
+    if (!SPREAD_ON) {                                   /* (the mix's values read after the calls: none is held over
                                                          * them, no spill in the loop: the ISR's cost as before 1.5) */
         int32_t lvl = LEVEL_Q12[t->p[P_LEVEL] & 127], pan = t->p[P_PAN];
         int32_t gl = 4096 - (pan > 0 ? pan * 64 : 0), gr = 4096 + (pan < 0 ? pan * 64 : 0);
         int32_t c = t->p[P_CHOR] * 258, d = t->p[P_DLY] * 258, r = t->p[P_REV] * 258, pk = t->peak;
         int32_t xmax = c > d ? c : d, k = (int32_t)((uint32_t)(t - trk) % NTRK);
+        int32_t *ol = c1 ? c1_mix.l : mix_l, *or_ = c1 ? c1_mix.r : mix_r;
+        int32_t *sc = c1 ? c1_mix.c : send_c, *sd = c1 ? c1_mix.d : send_d, *sr = c1 ? c1_mix.rv : send_r;
         xmax = (xmax > r ? xmax : r) | 1;
         if (xmax != send_top[k]) {                      /* (the divide only when a send moved) */
             send_top[k] = xmax;
@@ -1062,18 +1239,18 @@ static void mix_part_run(track_t *t, uint32_t n)
             if (a > pk)
                 pk = a;
             if (c)
-                send_c[i] += mulq15(xs, c);
+                sc[i] += mulq15(xs, c);
             if (d)
-                send_d[i] += mulq15(xs, d);
+                sd[i] += mulq15(xs, d);
             if (r)
-                send_r[i] += mulq15(xs, r);
-            mix_l[i] += (x * gl) >> 12;
-            mix_r[i] += (x * gr) >> 12;
+                sr[i] += mulq15(xs, r);
+            ol[i] += (x * gl) >> 12;
+            or_[i] += (x * gr) >> 12;
         }
         t->peak = pk;
     }
-    if (pf.thr)
-        perf_throw(t, b, send_d, send_r, n);            /* perform.c: REV / ECHO THROW (1.5.1), the sends towards full */
+    if (pf.thr)                                         /* perform.c: REV / ECHO THROW (1.5.1), the sends towards full */
+        perf_throw(t, b, c1 ? c1_mix.d : send_d, c1 ? c1_mix.rv : send_r, n);
     if (mod.on)
         mod_end(t);                                     /* the stored values back */
 }
@@ -1369,17 +1546,168 @@ static __attribute__((noinline)) void texture_mix(int32_t *l, int32_t *r, uint32
         texture_reset(src);                             /* faded out: the new source from rest */
 }
 
-static void mix_block(int32_t *out, uint32_t n)
+/* (JIANT 0.6.71) the second core (hal/fm1_multicore.h). Each block, while core 0 renders its parts, core 1 renders
+ * some synth parts of its own into its own buffers (c1_buf, c1_mix; mod.c, fm6_core.c, voice.c, eng_phase.c keep
+ * theirs a core); they are added in after it is done: the same sum, the same sound as one core (the buses, TEXTURE,
+ * TAPE and the master stay on core 0, after both). The parts go to whichever core has less to do, by what each took
+ * the last blocks (TIMER4), the voices breaking ties; the GURDY parts go together (one crank). A core 1 that misread,
+ * faulted or did not come back is held for good: its block of those parts is dropped and core 0 renders every part
+ * from the next one. REC held at power-on: core 0 alone (mc_off). MENU > ABOUT says which (mc_status) */
+#if FELUCCA_DUAL_CORE
+#define mc_run(f, a) fm1_mc_run(f, a)
+#define mc_wait() fm1_mc_wait()
+#define mc_live() (fm1_mc_on != 0)
+#define MC_TICKS() fm1_mc_ticks()
+#define MC_VW 24u                                        /* a voice-weight unit in ticks (~1 us) */
+#else
+static int mc_run(void (*f)(uint32_t), uint32_t a)      /* (the host: at once, as core 1) */
+{
+    if (!mc_host)
+        return 0;
+    mc_host_cpu = 1;
+    f(a);
+    mc_host_cpu = 0;
+    return 1;
+}
+static int mc_wait(void) { return 0; }
+#define mc_live() (mc_host != 0)
+#define MC_TICKS() 0u                                    /* (no clock: the voices alone) */
+#define MC_VW 1u
+#endif
+static volatile uint8_t mc_off;                          /* REC held at power-on: one core this session (main.c) */
+static volatile int8_t mc_cur = -1;                      /* the part core 1 is in (a job given up: its matrix put back) */
+static uint8_t mc_mask_last;                             /* the parts core 1 had the last block (MENU > ABOUT, tests) */
+static uint32_t mc_jobs;                                 /* blocks core 1 rendered parts in (console status) */
+static uint32_t mc_tk[NTRK];                             /* what each part took the last blocks, smoothed (ticks) */
+static void mix_part_t(track_t *t, uint32_t n)          /* mix_part, timed (on either core) */
+{
+    uint32_t t0 = MC_TICKS(), i = (uint32_t)(t - trk) % NTRK, d;
+    mix_part(t, n);
+    d = MC_TICKS() - t0;
+    mc_tk[i] = d > mc_tk[i] ? mc_tk[i] + ((d - mc_tk[i]) >> 1) : mc_tk[i] - ((mc_tk[i] - d) >> 3);   /* (up fast) */
+}
+static __attribute__((noinline)) void mc_job(uint32_t a)  /* core 1: the parts of mask a & 0xF, a >> 8 samples */
+{
+    uint32_t i, n = a >> 8;
+    for (i = 0; i < n; i++)
+        c1_mix.l[i] = c1_mix.r[i] = c1_mix.c[i] = c1_mix.d[i] = c1_mix.rv[i] = 0;
+    for (i = 0; i < NPART; i++)
+        if ((a >> i) & 1u) {
+            mc_cur = (int8_t)i;
+            mix_part_t(&trk[i], n);
+        }
+    mc_cur = -1;
+}
+static uint32_t mc_cost(const track_t *t)               /* a part's share of the work, roughly: its voices by engine */
+{
+    uint32_t k, v = 0, w = ENGINES[t->engine] == &ENG_FM6 ? 4u : 3u;
+    for (k = 0; k < NVOICE; k++)
+        v += t->v[k].active;
+    return v ? 1u + v * w : 0u;
+}
+/* the parts for core 1 this block (a bit each): whichever core has less to do takes the dearest left. The GURDY parts
+ * go together, as one (the crank is one for all): on one core or the other */
+static __attribute__((noinline)) uint32_t mc_split(void)
+{
+    uint32_t i, j, c0 = 0, c1 = 0, mask = 0, cost[NPART + 1], unit[NPART + 1], nu = 1, left = 0;
+    cost[0] = unit[0] = 0;                               /* (item 0: the GURDY parts) */
+    for (i = 0; i < NPART; i++) {
+        uint32_t v = mc_cost(&trk[i]), c = v ? mc_tk[i] + v * MC_VW : 0u;
+        if (!c)
+            continue;
+        if (ENGINES[trk[i].engine] == &ENG_GURDY) {
+            cost[0] += c;
+            unit[0] |= 1u << i;
+        } else {
+            cost[nu] = c;
+            unit[nu++] = 1u << i;
+        }
+    }
+    for (i = 0; i < nu; i++)
+        if (unit[i])
+            left |= 1u << i;
+    while (left) {
+        for (j = nu, i = 0; i < nu; i++)
+            if (((left >> i) & 1u) && (j == nu || cost[i] > cost[j]))
+                j = i;
+        left &= ~(1u << j);
+        if (c1 < c0) {
+            c1 += cost[j];
+            mask |= unit[j];
+        } else {
+            c0 += cost[j];
+        }
+    }
+    return mask;
+}
+static __attribute__((noinline)) void mc_join(uint32_t n)   /* core 1's parts into the mix */
 {
     uint32_t i;
+    for (i = 0; i < n; i++) {
+        mix_l[i] += c1_mix.l[i];
+        mix_r[i] += c1_mix.r[i];
+        send_c[i] += c1_mix.c[i];
+        send_d[i] += c1_mix.d[i];
+        send_r[i] += c1_mix.rv[i];
+    }
+}
+static __attribute__((noinline)) void mc_lost(void)    /* core 1 given up mid-job: a part's matrix values put back */
+{
+    int32_t k = mc_cur;
+    if (k >= 0 && k < (int32_t)NPART && mod_c[1].on) {
+        mod_c[0] = mod_c[1];
+        mod_end(&trk[k]);
+    }
+    mc_cur = -1;
+#if FELUCCA_DUAL_CORE
+    fm1_mc_bar_set();                                    /* one core until power-off (hal/fm1_multicore.h) */
+#endif
+}
+static const char *mc_status(void)                      /* MENU > ABOUT's line, the console's */
+{
+#if FELUCCA_DUAL_CORE
+    static const char *const LOST[4] = {"CORES 1 (SINCE A FAULT)", "CORES 1 (BAD READ)", "CORES 1 (NO ANSWER)",
+                                        "CORES 1 (FAULT)"};
+    if (fm1_mc_on)
+        return "CORES 2";
+    if (mc_off)
+        return "CORES 1 (REC AT POWER-ON)";
+    if (fm1_mc_lost)
+        return LOST[fm1_mc_lost & 3u];
+    return fm1_mc_barred() ? LOST[0] : "CORES 1 (NO START)";
+#else
+    return mc_host ? "CORES 2" : "CORES 1";
+#endif
+}
+
+static void mix_block(int32_t *out, uint32_t n)
+{
+    uint32_t i, c1m = 0, c1j = 0;
     int perf;
     int32_t mg = fx_usb_fixed ? MASTER_FULL : (int32_t)song.master_q12;   /* (USB LEVEL FIXED: MASTER after) */
     for (i = 0; i < n; i++)
         send_c[i] = send_d[i] = send_r[i] = mix_l[i] = mix_r[i] = 0;
     events_block(n);
     perf = perf_begin(n);                               /* the FX hold layer at work (perform.c) */
+    if (!mc_off && mc_live()) {                         /* (JIANT 0.6.71) core 1 at its parts meanwhile */
+        c1m = mc_split();
+        if (c1m && mc_run(mc_job, c1m | n << 8))
+            c1j = 1;
+        else
+            c1m = 0;
+    }
     for (i = 0; i < NPART; i++)
-        mix_part(&trk[i], n);
+        if (!((c1m >> i) & 1u))
+            mix_part_t(&trk[i], n);
+    if (c1j) {
+        if (!mc_wait()) {
+            mc_join(n);
+            mc_jobs++;
+        } else {
+            mc_lost();                                  /* (its parts' block dropped; one core from here) */
+        }
+    }
+    mc_mask_last = (uint8_t)c1m;
     texture_mix(mix_l, mix_r, n);                       /* TEXTURE: the bed, dry */
     if (perf)
         perf_pre(mix_l, mix_r, send_d, send_r, n);

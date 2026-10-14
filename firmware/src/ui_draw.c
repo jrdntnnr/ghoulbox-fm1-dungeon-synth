@@ -47,6 +47,24 @@ static uint32_t batt_icon(int32_t lvl)
     static const uint8_t I[5] = {ICON_X_BAT0, ICON_X_BAT1, ICON_X_BAT3, ICON_X_BAT4, ICON_X_BAT_CHG};
     return I[clamp(lvl, 0, 4)];
 }
+/* the CPU load (song.cpu_q8) as a bar growing out of the header's middle row both ways (its ink centred on it, as
+ * every element's), left of the battery (GHOULBOX desert): dim up to 60 %, the theme to 85 %, the accent above (the
+ * audio near its budget: fewer voices, MENU > ABOUT's figure) */
+#define HEAD_CPU_X 209
+#define HEAD_CPU_W 3
+#define HEAD_CPU_H 12                                  /* rows 6..17 at 100 %: 6 each side of row 12 */
+#define HEAD_CPU_MID 12
+static void draw_cpu(int32_t x)
+{
+    int32_t pct = (int32_t)(song.cpu_q8 * 100u / 256u), h = (pct * HEAD_CPU_H / 100 + 1) / 2;   /* rows each side */
+    uint16_t c = pct >= 85 ? T_ACCENT : pct >= 60 ? T_THEME : T_MID;
+    if (!pct) {
+        return;                                        /* (no audio load measured: nothing, as before it) */
+    }
+    h = h > HEAD_CPU_H / 2 ? HEAD_CPU_H / 2 : h < 1 ? 1 : h;
+    cv_rect(x, HEAD_CPU_MID - h, HEAD_CPU_W, 2 * h, c);
+}
+
 static void draw_battery(int32_t bx)
 {
     int32_t lvl = batt_shown();
@@ -334,6 +352,7 @@ static void draw_head(void)
                    (ui.msg_t ? str_hash(7u, ui.msg) : ui.layer * 7919u + (uint32_t)layer_locked() * 3u) + (uint32_t)song.g[G_BPM] * 101u + (ui.bpm_t != 0) * 31u +
                    (uint32_t)seq_counting() * 7u + (ui_prefs & PREF_BPM_LOCK) * 4099u +
                    (uint32_t)batt_shown() * 7777u + (chain.running ? (chain.row + 1u) * 104729u : 0u) +
+                   ((song.cpu_q8 * 100u / 256u * HEAD_CPU_H / 100u + 1u) / 2u) * 131u +   /* (the CPU bar's height) */
                    (slot ? str_hash(11u, sl) : 0u) + (uint32_t)midi_lit(song.sel) * 15485863u;   /* (1.5.5) */
     int msg = ui.msg_t || ui.layer;
     int centre = !msg || ui.bpm_t || ui.layer == LAYER_GLO;   /* the BPM being changed: it stays, the message right */
@@ -407,8 +426,10 @@ static void draw_head(void)
     }
     if (!msg && (chain.running || song.octave))
         head_group();
-    if (!(msg && centre))
+    if (!(msg && centre)) {
+        draw_cpu(HEAD_CPU_X);
         draw_battery(HEAD_BAT_X);
+    }
     cv_blit(0, Y_HEAD);
 }
 /* LINE: 1 px dividers in the BG gaps between the strips, not around them: under the header, above and

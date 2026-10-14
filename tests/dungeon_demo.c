@@ -44,7 +44,7 @@ static uint32_t preset_of(uint32_t e, const char *name)
 
 /* the four parts' sounds: engine, preset (by name) */
 typedef struct { uint32_t e; const char *name; } snd_t;
-static const snd_t STOCK[4] = {{0, "STRINGS"}, {5, "CHOIR AAH"}, {4, "FLUTE"}, {7, "FULL ORGAN"}};
+static const snd_t STOCK[4] = {{0, "STRINGS"}, {5, "CHOIR AAH"}, {4, "NEY"}, {7, "FULL ORGAN"}};
 static const snd_t GHOUL[4] = {{0, "CRYPT PAD"}, {5, "MONKS"}, {7, "TOWER FLUTE"}, {ENGI_GURDY, "DRONE WHEEL"}};
 static const snd_t GURDY[4] = {{0, "CRYPT PAD"}, {5, "MONKS"}, {ENGI_GURDY, "HURDY GURDY"}, {7, "CATHEDRAL"}};
 

@@ -14,6 +14,8 @@
  * GHOULBOX: those 380 again when PIANO lost its C1 recording (flash: the low note plays the C2 zone).
  * SARDAB 2.1: 100/720 references changed for twelve shared voices. Restoring only NVOICE=8 reproduces
  * all 720 original references; no other engine-switch audio change was accepted.
+ * SARDAB 2.1 desert: 550 references rewritten when sets 2 and 3 became NEY and OUD (tools/gen_samples.py SET_SRC):
+ * GRAIN's CLOUD PAD (SRC 2) plays in every sequence's second part. The switches themselves did not change.
  * env: GOLDEN_UPDATE=1 rewrites GOLDEN_FILE (only with a reason: a switch is to sound as it did). */
 #define main hostsim_main
 #include "hostsim.c"

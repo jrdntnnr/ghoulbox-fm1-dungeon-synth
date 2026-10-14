@@ -78,7 +78,8 @@ static struct {                  /* the part in mix_part (one at a time) */
     int8_t vamt[NMSLOT];
     uint8_t kid[NMSLOT];         /* per-block: the parameter, its stored value */
     int16_t keep[NMSLOT];
-} mod;
+} mod_c[2];                      /* (JIANT 0.6.71) one a core: each renders its own parts at once (fx.c mix_block) */
+#define mod (mod_c[MC_CPU() & 1u])
 
 static uint32_t mod_seed = 0x2545F491u;
 static int16_t mod_rand(void)    /* RAND of a note-on: xorshift32, bipolar */

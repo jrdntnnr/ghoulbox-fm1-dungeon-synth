@@ -17,6 +17,7 @@ with tempfile.TemporaryDirectory() as t:
         shutil.copy(ROOT / "tools" / f, t / "tools" / f)
     shutil.copytree(ROOT / "assets" / "samples-cc0", t / "assets" / "samples-cc0",
                     ignore=lambda d, names: ["RENORGAN"] if d.endswith("samples-cc0") else [])
+    shutil.copytree(ROOT / "assets" / "desert", t / "assets" / "desert")     # (OUD and NEY read from there)
     r = subprocess.run([sys.executable, str(t / "tools" / "gen_samples.py"), str(t / "out.h")],
                        capture_output=True, text=True)
     ok = r.returncode != 0 and "RENORGAN" in (r.stdout + r.stderr) and not (t / "out.h").exists()

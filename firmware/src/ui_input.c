@@ -1335,6 +1335,22 @@ static void layer_lock_input(uint32_t pressed);
 
 /* a page button let go (they act on release; a layer's own button: layer_gesture). 1: it acted (EDIT on STEP, USER,
  * PROJECT, AUTOMATION) instead of opening a page */
+/* PRESETS turned with a page button held (ui.pg_down): that family's pages one way or the other (ui.c fam_turn);
+ * the button's release then turns no page (its bit cleared) */
+static void pg_turn(int32_t s)
+{
+    uint32_t id, b = ui.pg_down, f;
+    for (id = 0; !(b & 1u); id++, b >>= 1)
+        ;
+    b = panel_btn_of(id);
+    ui.pg_down &= (uint16_t)~(1u << id);
+    for (f = FAM_HOME + 1u; f < FAM_COUNT; f++)
+        if (FAM_BTN[f] == b && b != B_HOME) {
+            fam_turn(f, s);
+            return;
+        }
+}
+
 static int page_tap(uint32_t b)
 {
     uint32_t f;
@@ -1404,6 +1420,23 @@ static void sample_notice(void)
  * three or more: the chord (Dm, Bb, A7, Gsus4), its root the bass when it can be, another bass after a slash (C/E).
  * The keys' own notes and their chords (kb_chord, LAYER's kb_chord2), whichever track plays them */
 static const char *const NN_NAME[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"};
+/* GHOULBOX desert: on a maqam (SCALE_ARABIC) a single note by its Arabic name, Rast = C (the Cairo convention);
+ * E and B tuned a quarter tone down are SIKAH and AWJ, not BUSALIK / MAHUR */
+static const char *const NN_ARABIC[12] = {"RAST", "ZIRKULA", "DUKAH", "KURDI", "BUSALIK", "JAHARKA",
+                                          "HIJAZ", "NAWA", "HISAR", "HUSAYNI", "AJAM", "MAHUR"};
+#define NN_HALF_FLAT_CT (-25)                /* tuned this far down (or more): the quarter-tone name */
+static const char *arabic_name(uint32_t note)
+{
+    uint32_t pc = note % 12u;
+    int32_t c = tuning_cents(TSEL, note);
+    if (c <= NN_HALF_FLAT_CT && pc == 4u) {
+        return "SIKAH";
+    }
+    if (c <= NN_HALF_FLAT_CT && pc == 11u) {
+        return "AWJ";
+    }
+    return NN_ARABIC[pc];
+}
 static const struct { uint16_t mask; char name[5]; } NN_CHORD[] = {   /* intervals from the root, bit i = i semitones */
     {0x091, ""}, {0x089, "m"}, {0x049, "dim"}, {0x111, "aug"}, {0x085, "sus2"}, {0x0A1, "sus4"},
     {0x491, "7"}, {0x891, "maj7"}, {0x489, "m7"}, {0x249, "dim7"}, {0x449, "m7b5"}, {0x291, "6"}, {0x289, "m6"},
@@ -1434,7 +1467,12 @@ static void names_of(uint32_t m, uint32_t bass, char *out)
         n += (m >> i) & 1u;
     out[0] = 0;
     if (n == 1u) {                                      /* one note: its name and octave */
-        str_cpy(out, NN_NAME[b], 4);
+        if (scale_arabic((uint32_t)TSEL->p[P_SCALE])) {
+            str_cpy(out, arabic_name(bass), 9);
+            str_cpy(out + str_len(out), " ", 2);
+        } else {
+            str_cpy(out, NN_NAME[b], 4);
+        }
         fmt_int(out + str_len(out), (int32_t)bass / 12 - 1);
         return;
     }
@@ -1930,8 +1968,12 @@ static void ui_input(void)
      * pass runs, so one landing after the layer's read went to the page as well: KNOB 1..4 edited the layer's control
      * and the page under it (HOME's sound, motion recorded), PRESETS could load a sound. They stay for the next pass */
     kq |= lay;
-    if (!lay && (s = panel_enc(EN_PRESET)) != 0)
-        presets_turn(s);
+    if (!lay && (s = panel_enc(EN_PRESET)) != 0) {
+        if (ui.pg_down)
+            pg_turn(s);                                 /* a page button held: its family's pages */
+        else
+            presets_turn(s);
+    }
     if (!lay && (s = panel_enc(EN_ALGO)) != 0)     /* ALGORITHM: the selected track, on every page */
         track_select((uint32_t)clamp((int32_t)song.sel + (s > 0 ? 1 : -1), 0, NTRK - 1));
     if ((s = glo ? sel : crank_select() ? 0 : panel_enc(EN_SELECT)) != 0) {   /* SELECT knob = global tempo; */

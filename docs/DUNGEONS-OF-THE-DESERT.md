@@ -40,11 +40,74 @@ These are synthesized interpretations using existing engines. CARAVAN, DUNES
 and SANDSTEP are three new sequencer patterns. The melodic patterns use Bayati
 on D in CITADEL; loading a pattern elsewhere keeps that track's existing scale.
 
+## Rhythm, ornament, names
+
+**Iqa'at.** SAVE > PHRASES holds five Arabic rhythms for DUNE DRUMS (dum on FRAME, tek on
+SLAP, ka on ROPE), one 4/4 bar of 16ths each: MAQSUM, BALADI, SAIDI, AYYUB and MALFUF (the
+last two are 2/4, twice). Odd meters (samai 10/8, karsilama 9/8) do not fit a 16-step phrase.
+
+**BREAK.** SLICE's built-in loop is a darbuka maqsum now (dum, tek, ka synthesised at build
+time, `tools/gen_waves.py`), the same 22 KB as the rock beat it replaces. CHOP and STUTTER chop
+it; projects keep their slice points.
+
+**RISHA.** DESERT OUD's suggested phrase: CARAVAN with every beat plucked twice (RATCH x2),
+the oud's down-up stroke. Set a step's RATCH to 2 on any phrase for the same effect.
+
+**TRILL.** ARP MODE TRILL plays each held note, then its upper neighbour in the track's scale
+(on BAYATI the half-flat E over D; on CHR a semitone). RATE 1/32 is a trill, 1/16 a slow one;
+GATE short for a flutter.
+
+**DRONE.** ARP MODE DRONE keeps the lowest key held sounding, a tanbur's open string, while
+the other keys arpeggiate UP over it. The drone moves with the lowest key and ends with the
+keys; GATE shapes the notes above it only. Best on POLY.
+
+**CANON.** The ARP family's third page: a second playhead plays the track's pattern half its
+LEN behind (one step at least), transposed by a scale interval. 3RD 5TH 7TH OCT and their
+negatives count scale degrees (OCT twelve semitones), so on BAYATI a 3RD above D is the
+half-flat F. R 3RD .. R -OCT play the pattern backwards from its end, a crab canon. The answer
+takes each step's notes at three quarters of their velocity for GATE; TIE holds it, REST and
+empty steps let go; RATCH, NUDGE, CHANCE and the drum hits belong to the first playhead. Not on a
+kit. Saved with the project (older projects load OFF).
+
+**STRINGS.** FX > REVERB TYPE has a fourth model, STRINGS: sympathetic strings behind what is
+played, as an oud's or a tanbur's open courses ring. Four tuned lines follow the lowest note held
+on any pitched track, at that note and its third, fifth and seventh degrees of that track's scale
+(the maqam's own intervals); with nothing held the last tuning stays. A new lowest note bends the
+ringing to its tuning. SIZE is the strings' sustain (about a third of a second up to several), DAMP
+their brightness. Mono. Send a little of each track; a lot of a low pad turns into a drone.
+
+**TAPE.** FX > DLY TIME and the tempo no longer jump the echoes: the read head glides to the new
+time (two poles, ~90 ms each), so a change bends the repeats' pitch like a tape machine's motor.
+The GRAIN delay glides the same way.
+
+**COMB.** An ANALOG track's FILTER TYPE has a fourth setting, COMB: a tuned comb on the
+whole part instead of the filter, pitched at the last note. CUT detunes it (64 = the note),
+RES sets how long it rings (120 and up: a long metallic ring that outlasts the note). Sitar
+and santur colours on a plain saw.
+
+**LOOP.** ENV 2 > LOOP ON restarts a held note's envelope from its sustain each time it gets
+there: slow ATK / DEC for a breathing drone, fast for a tremolo.
+
+**INT.** ANALOG's EDIT 2 knob 4 is INT, oscillator 2's interval in semitones (−24..24): fifths
+and octaves for a tanbur drone, a fourth on SYNC for a harder qanun. Cutoff key tracking is
+fixed (what KTR 64 gave); older sounds load INT as 0.
+
+**GRAIN delay.** FX > DLY 2: PITCH (semitones) and SPRAY turn the delay into a grain delay.
+PITCH +12 with low feedback shimmers an oud or ney an octave up; SPRAY smears the repeats
+into a cloud. Both 0: the plain delay.
+
+**Names.** With NOTE NAMES on, a maqam row names a single held note the Arabic way: DUKAH,
+SIKAH, NAWA … ([the rows](MICROTONAL.md#more-maqamat-ghoulbox-desert)). SABA, KURD, NAHAWAND,
+SIKAH, JIHARKAH, ATH KURD and NAWATHAR join RAST, BAYATI, HIJAZ and the others under SCL.
+
 ## Recorded instruments
 
-The optional [CC0 sample pack](../assets/desert/README.md) includes three oud
-plucks, six qanun notes and three short ney tails. Open the
-[web editor](https://jrdntnnr.github.io/ghoulbox-fm1-dungeon-synth/webapp/editor/),
+The oud plucks and the ney-air tails are built into the firmware as the SAMPLE sets **OUD**
+(SET 3, three zones G2 A2 C3) and **NEY** (SET 2, looped, three zones B4 C5 E5), in place of
+Felucca's FLUTE and SAX; a project saved with those plays the desert sets at the same values.
+The optional [CC0 sample pack](../assets/desert/README.md) has the same oud and ney tails,
+six qanun notes and the tar for the USR slots. Open the
+[web editor](https://jrdntnnr.github.io/sardab/webapp/editor/),
 connect, and select **Samples**. Each USR slot has its own **Prepare** button.
 It fills the draft only; preview the notes and press **Upload** when ready to
 replace that slot. The firmware update itself leaves these slots alone.

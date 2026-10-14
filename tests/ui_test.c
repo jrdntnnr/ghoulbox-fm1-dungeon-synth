@@ -492,9 +492,9 @@ static int test_sound_loads(void)
     project_load(1);
     bad += check("a project load drops the copy and takes none", undo.trk == 0 && undo_depth == 0);
     ui_power_on();
-    bad += check("SAMPLE factory presets: 1.0's four (PIANO .. SAX), PERC's alias, then GHOULBOX's four (BOWED PSALT .. FOLK HARP)",
+    bad += check("SAMPLE factory presets: 1.0's four (PIANO .. OUD), PERC's alias, then GHOULBOX's four (BOWED PSALT .. FOLK HARP)",
                  ENGINES[4]->npresets == 12u && str_eq(ENGINES[4]->presets[0].name, "PIANO") &&
-                 str_eq(ENGINES[4]->presets[3].name, "SAX") && str_eq(ENGINES[4]->presets[5].name, "BOWED PSALT") &&
+                 str_eq(ENGINES[4]->presets[3].name, "OUD") && str_eq(ENGINES[4]->presets[5].name, "BOWED PSALT") &&
                  str_eq(ENGINES[4]->presets[8].name, "FOLK HARP") && preset_hidden(ENGINES[4], 4));
     {   /* TRANH (SET 1, preset 1) is gone: both are PIANO aliases, kept for old data, never offered */
         const param_desc_t *sd = &ENGINES[4]->edit[0];
@@ -1613,7 +1613,7 @@ static int test_categories(void)
     turn(EN_K3, 1);
     press(B_OCTUP);
     bad += check("  KNOB 3 steps the category (no wrap below BASS); OCT+ writes it with the name",
-                 ok && !name_on() && up_used(4) && up_cat(4) == CAT_LEAD && up_rec(4)->packed[UP_CAT_AT] == CAT_LEAD);
+                 ok && !name_on() && up_used(4) && up_cat(4) == CAT_LEAD && (up_rec(4)->packed[UP_CAT_AT] & ~UP_INT_MARK) == CAT_LEAD);
     list_set(1u + CAT_LEAD);
     up_load(4);
     pos = preset_pos(&total);
@@ -3332,15 +3332,15 @@ static int test_layer(void)
     turn(EN_K1, 1);
     ok &= song.g[G_RTYPE] == 1 && str_eq(GP[G_RTYPE].names[song.g[G_RTYPE]], "SPRING");
     turn(EN_K1, 5);
-    ok &= song.g[G_RTYPE] == 2;
-    turn(EN_K1, -1);
+    ok &= song.g[G_RTYPE] == 3 && str_eq(GP[G_RTYPE].names[3], "STRINGS");   /* (GHOULBOX desert: the fourth) */
+    turn(EN_K1, -2);
     ok &= song.g[G_RTYPE] == 1;
     song.playing = 0;
     project_save(2);
     turn(EN_K1, -1);
     ok &= song.g[G_RTYPE] == 0;
     project_load(2);
-    bad += check("REVERB page: TYPE HALL (power-on) / ROOM / SPRING on KNOB 1 (SIZE, DAMP beside it); a project keeps SPRING",
+    bad += check("REVERB page: TYPE HALL (power-on) / ROOM / SPRING / STRINGS on KNOB 1 (SIZE, DAMP beside it); a project keeps SPRING",
                  ok && song.g[G_RTYPE] == 1);
     go_title("CHORUS");
     bad += check("  CHORUS page: CRT CDP", cur_page()->fam == FAM_FX && cur_page()->id[0] == G_CRATE &&
@@ -9890,7 +9890,7 @@ static int test_hidden_presets(void)
                          c2 < ENGINES[ENGI_DRUM]->npresets && t2 < ENGINES[ENGI_DRUM]->npresets &&
                          !preset_hidden(ENGINES[ENGI_DRUM], c2) && !preset_hidden(ENGINES[ENGI_DRUM], t2) &&
                          ENGINES[ENGI_DRUM]->presets[c2].e[0] == DK_CRYPT && ENGINES[ENGI_DRUM]->presets[c2].pat == 22u &&
-                         NPATTERNS == 25u && str_eq(PATTERNS[21].name, "TOMBBEAT"));
+                         NPATTERNS == 31u && str_eq(PATTERNS[21].name, "TOMBBEAT"));
         }
         bad += check("1.2: patterns 18..21 MARCH LAMENT ARPEGGIO ANTIPHON, after 1.0's (none renumbered)", NPATTERNS >= 21u &&
                      str_eq(PATTERNS[13].name, "DIRGE") && str_eq(PATTERNS[16].name, "PEDAL") && str_eq(PATTERNS[17].name, "MARCH") &&

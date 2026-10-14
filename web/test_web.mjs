@@ -54,7 +54,7 @@ async function editorMock() {
   const rq = async (r, o) => link.request(r, o);
   const info = E.parse[E.CMD.INFO](await rq(E.req.info()));
   ok(info.nengines === 15 && info.engines[1] === "-" && info.engines[12] === "FM6" && info.engines[13] === "SLICE"
- && info.engines[5] === "VOICE" && info.engines[6] === "TRIO" && info.engines[7] === "WHEEL" && info.engines[8] === "GRAIN" && info.engines[9] === "PHYS" && info.engines[10] === "DRUM" && info.engines[11] === "NOISE" && info.pcount === 126 && info.pe0 === 118 && info.engines[4] === "SAMPLE",
+ && info.engines[5] === "VOICE" && info.engines[6] === "TRIO" && info.engines[7] === "WHEEL" && info.engines[8] === "GRAIN" && info.engines[9] === "PHYS" && info.engines[10] === "DRUM" && info.engines[11] === "NOISE" && info.pcount === 127 && info.pe0 === 118 && info.engines[4] === "SAMPLE",
     "editor: INFO");
   let descs = 0;
   for (let i = 0; i < info.pcount; i++) if (E.parse[E.CMD.DESC](await rq(E.req.desc(0, i))).label) descs++;
@@ -291,14 +291,14 @@ async function editorMock() {
   }
   {
     /* FX > REVERB TYPE (G_RTYPE 24, the old drum channel's id): ROOM (0) / SPRING (1) / HALL (2, 1.2: the default);
-     * 10 clamps to the last; TEXTURE's globals after CRSH (27..32) */
+     * 10 clamps to the last; TEXTURE's globals after CRSH (27..32), the GRAIN delay's PITCH / SPRAY 37, 38 */
     const rd = E.parse[E.CMD.DESC](await rq(E.req.desc(1, 24)));
     const r1 = E.parse[E.CMD.SET](await rq(E.req.set(1, 24, 10)));
     const r0 = E.parse[E.CMD.SET](await rq(E.req.set(1, 24, 0)));
     const inert = [25, 26].map(async (id) => E.parse[E.CMD.DESC](await rq(E.req.desc(1, id))));
     const [d25, d26] = await Promise.all(inert);
     ok(rd.label === "TYPE" && rd.def === 2 && eq(rd.names, ["ROOM", "SPRING", "HALL"]) && r1.value === 2 && r0.value === 0 &&
-       d25.label === "TAPE" && d26.label === "CRSH" && d25.max === 127 && info.gcount === 37,
+       d25.label === "TAPE" && d26.label === "CRSH" && d25.max === 127 && info.gcount === 39,
       "editor: REVERB TYPE (ROOM / SPRING / HALL, global id 24; 25 TAPE, 26 CRSH)");
   }
   const st = E.parse[E.CMD.STEP_SET](await rq(E.req.stepSet(5, { n: 2, notes: [60, 64], time: 0, flags: 1, vel: 100 })));
@@ -330,7 +330,7 @@ async function editorSamplePresets() {
   const names = E.parse[C.NAMES](await rq(E.req.names(4)));
   await rq(E.req.preset(4, 0));
   const set = E.parse[C.DESC](await rq(E.req.desc(0, info.pe0)));
-  ok(eq(names.names, ["PIANO", "PIANO", "FLUTE", "SAX", "PIANO", "BOWED PSALT", "REN ORGAN", "TENOR RECORD", "FOLK HARP", "USR1", "USR2", "USR3"])
+  ok(eq(names.names, ["PIANO", "PIANO", "NEY", "OUD", "PIANO", "BOWED PSALT", "REN ORGAN", "TENOR RECORD", "FOLK HARP", "USR1", "USR2", "USR3"])
     && eq(set.names.slice(0, 4), ["PIANO", "PIANO", "FLUTE", "SAX"]) && set.names[4] === "PIANO"
     && eq(set.names.slice(5, 8), ["USR1", "USR2", "USR3"]) && eq(set.names.slice(8), ["PSALTERY", "RENORGAN", "RECORDER", "FOLKHARP"]),
     "SAMPLE: TRANH and PERC removed, SET 1 and 4 kept as PIANO aliases, USR1..3 at 5..7; GHOULBOX 1.1's sets after them");

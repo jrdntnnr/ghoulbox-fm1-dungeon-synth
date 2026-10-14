@@ -308,6 +308,12 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "USB/TRS clock, bend, sustain, ownership and panic recovery" "$OUT/midi_control_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/latch_test" tests/latch_test.c -lm
     run "the drone latch (GHOULBOX, GLO + F#4..C#5): new chord, stop press, what ends it, MIDI OUT, recording, voices kept" "$OUT/latch_test"
+    $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/jiant_test" tests/jiant_test.c -lm
+    run "the JIANT ports (GHOULBOX desert): FILTER COMB, ENV LOOP, ANALOG INT (KTR retired, the formats), the GRAIN delay" "$OUT/jiant_test"
+    $CC -O1 -w -Ibuild/gen -Ifirmware/src -Itests -o "$OUT/cores_test" tests/cores_test.c -lm
+    run "the second core (JIANT 0.6.71): the split's render the same as one core's, a job given up, ABOUT's line" "$OUT/cores_test"
+    $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/desert2_test" tests/desert2_test.c -lm
+    run "GHOULBOX desert 2: CANON, ARP DRONE, the delay's tape motor, P_CANON in projects, the header's CPU bar, page turns" "$OUT/desert2_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/keys_test" tests/keys_test.c -lm
     run "HOME > KEYS (GHOULBOX 2.1): LAYER, SPLIT, OCT, release as started, the SEQ pages, saved with the project" "$OUT/keys_test"
     $CC -O1 -w -DFELUCCA_FM4=1 -Ibuild/gen -Ifirmware/src -o "$OUT/digital_test" tests/digital_test.c -lm

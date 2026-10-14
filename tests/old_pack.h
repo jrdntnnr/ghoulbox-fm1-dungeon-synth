@@ -4,7 +4,7 @@
  *   FUN9 (1.1: np 99, 3648 bytes), FUN8 (1.0.x: np 91, 3584), FUN7 (np as given, 3388, no patches)
  * byte for byte as their proj_pack: np parameters mapped by count (the first np - 8 are today's ids 0.., the last 8
  * P_E0..P_E7), 9-byte steps without a nudge (bit 7 of the note bytes 0), the motion block of 260 bytes (count <= 64,
- * 64 x (place, id, i16 value); the ids from P_E0 on at that store's own: id - (P_COUNT - np), a lock's bit kept), the
+ * 64 x (place, id, i16 value); the ids from P_E0 on at that store's own: id - (P_E0 + 8 - np), a lock's bit kept), the
  * patches at name - 512 (not FUN7), the name, the FNV-1a hash. -> its size, 0 when q does not fit the old format.
  * The song's chain as rows {slot, repeat} (chain_v9_t, 36 bytes): a section with its four tracks on one slot each (a
  * section of several slots or a "-" does not fit) */
@@ -64,7 +64,7 @@ static uint32_t old_pack(uint8_t *b, const project_t *q, uint32_t magic, uint32_
         uint32_t id = MOTION_ID(e);
         int16_t v = e->value;
         if (id >= P_E0)
-            id -= P_COUNT - np;
+            id -= P_E0 + 8u - np;                  /* (that store's E0 at np - 8) */
         b[pos + 4u + 4u * i] = e->place;
         b[pos + 5u + 4u * i] = (uint8_t)(id | (e->param & MOTION_LOCK));
         memcpy(b + pos + 6u + 4u * i, &v, 2);

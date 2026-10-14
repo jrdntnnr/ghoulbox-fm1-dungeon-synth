@@ -11,6 +11,19 @@
 #define NVOICE 12                /* voices per part, and the budget shared by all parts */
 #define NPART 4                  /* synth parts: tracks 1..4 */
 #define NTRK NPART               /* tracks (the formats and the protocol count these): every track is a part */
+/* (JIANT 0.6.71) the second core (hal/fm1_multicore.h; fx.c mix_block hands it some synth parts). MC_CPU(): the core
+ * running this, for the scratch each core has its own of (fx.c part_buf and the mix, mod.c's matrix, fm6_core.c's
+ * buses, voice.c's SPREAD and ENV SYNC blocks, eng_phase.c's crossfade). The host (tests): no second core; mc_host
+ * runs its jobs at once, as core 1 */
+#ifndef FELUCCA_DUAL_CORE
+#define FELUCCA_DUAL_CORE 0
+#endif
+#if FELUCCA_DUAL_CORE
+#define MC_CPU() fm1_cnum()
+#else
+static uint8_t mc_host, mc_host_cpu;     /* tests: 1 = jobs handed over (run at once); the core "running" */
+#define MC_CPU() ((uint32_t)mc_host_cpu)
+#endif
 #define NSTEP 64
 #define HALF_FRAMES 128          /* I2S half buffer: 2.9 ms at 44.1 kHz (a key waits 0..1 half, then plays 1 half later) */
 #ifndef FELUCCA_SLICE
@@ -26,6 +39,7 @@
 #define NENGINES 15u             /* SLICE 13 (reserved without FELUCCA_SLICE: never offered), GURDY 14 (GHOULBOX):
                                   * every engine keeps its number in every build */
 #define ENGI_SLICE 13u
+#define ENGI_ANALOG 0u
 #define ENGI_GURDY 14u
 #define ENGI_DIGITAL 1u          /* reserved without FELUCCA_FM4: never selectable (eng_ok), its sounds load as FM6 */
 #define NENG_SHOWN (NENGINES - !FELUCCA_FM4 - 1u)   /* the engines one can pick: PRESETS, the EDIT layer, the editor
@@ -51,7 +65,7 @@ typedef struct {
 enum {                          /* per-track parameters */
     P_LEVEL,
     P_ATK, P_DEC, P_SUS, P_REL,
-    P_ED_FLT, P_ED_PIT, P_ED_SHP, P_ED_FX,     /* P_ED_FX: unused, kept for the formats / protocol */
+    P_ED_FLT, P_ED_PIT, P_ED_SHP, P_ED_FX,     /* P_ED_FX (once unused): ENV LOOP, P_ELOOP (GHOULBOX desert, JIANT 0.4) */
     P_LRATE, P_LWAVE, P_LPHASE, P_LFADE,
     P_LD_PIT, P_LD_FLT, P_LD_SHP, P_LD_AMP,
     P_AMODE, P_ARATE, P_AOCT, P_AGATE,
@@ -84,8 +98,12 @@ enum {                          /* per-track parameters */
     P_TMASK0, P_TMASK1, /* custom Scala scale membership, low/high six bits */
     P_TEMP,                                    /* temperament, after our stable tuning IDs */
     P_E0, P_E1, P_E2, P_E3, P_E4, P_E5, P_E6, P_E7,
+    P_CANON,                     /* GHOULBOX desert: the CANON playhead (seq.c canon_enter); appended after P_E7
+                                  * (project.c byte 111, params_by_count's extras) */
     P_COUNT
 };
+#define P_ELOOP P_ED_FX                /* GHOULBOX desert (JIANT 0.4): ENV LOOP, OFF / ON (voice.c env_tick) */
+enum { FT_LP, FT_BP, FT_HP, FT_COMB };   /* P_FTYPE (eng_analog.c analog_tap; COMB: voice.c track_comb) */
 
 enum {                          /* global parameters */
     G_BPM, G_SWING, G_CLOCK, G_TUNE,
@@ -109,6 +127,8 @@ enum {                          /* global parameters */
     G_KMODE, G_KTRK, G_KSPLIT, G_KOCT,   /* GHOULBOX 2.1: HOME > KEYS, what the keys play (seq.c keyboard_block): OFF,
                                  * LAYER (the selected track and KTRK together) or SPLIT (KTRK below key 3 + KSPLIT);
                                  * KOCT KTRK's octave (0..4: -2..+2). Appended: FUN10's tail (project.c PROJ_KEYS_OFF) */
+    G_DPIT, G_DSPRY,            /* GHOULBOX desert (JIANT): the delay's grains, PITCH semitones and SPRAY (fx.c
+                                 * dly_grain). Appended: the three bytes before KEYS' (project.c PROJ_DESERT_OFF) */
     G_COUNT
 };
 
@@ -118,11 +138,13 @@ enum {                          /* global parameters */
  * (user presets, projects of formats 1 and 2) */
 static void params_by_count(int16_t *out, const int16_t *in, uint32_t np, const int16_t *def)
 {
-    uint32_t i, nc = np - 8u;
+    uint32_t i, extra = np > P_E0 + 8u ? np - P_E0 - 8u : 0u, nc = np - 8u - extra;
     for (i = 0; i < P_E0; i++)
         out[i] = i < nc ? in[i] : def[i];
     for (i = 0; i < 8u; i++)
         out[P_E0 + i] = in[nc + i];
+    for (i = 0; i < P_COUNT - P_E0 - 8u; i++)      /* GHOULBOX desert: the parameters after P_E7 (P_CANON ..) */
+        out[P_E0 + 8u + i] = i < extra ? in[nc + 8u + i] : def[P_E0 + 8u + i];
 }
 
 /* First GHOULBOX tuning prototype: common 0..82, tuning 83..94, engine 95..102.
@@ -423,10 +445,12 @@ typedef struct track {
     /* mix runtime */
     int32_t peak;
     int32_t dist_hp, dist_lp1, dist_lp2;   /* DIST insert state (fx.c) */
+    uint32_t cn_off;             /* CANON (GHOULBOX desert, seq.c canon_enter): samples to its notes' end */
     uint8_t tail;                /* blocks to mix after the last voice (the DIST / INSERT tail) */
     uint8_t ins_run;             /* the INSERT still sounds (fx.c track_insert: its wet share above 0) */
     uint8_t cond_loop;           /* 1.5.5 (#209): the loop of its LEN playing (0..COND_LOOPS - 1, seq.c seq_tick) */
-    uint8_t rsv_sz[18];          /* (sizeof(track_t) a multiple of 16: below) */
+    uint8_t cn_notes[4], cn_n;   /* CANON: its sounding notes */
+    uint8_t rsv_sz[5];           /* (sizeof(track_t) a multiple of 16: below) */
     int16_t armp, aholdp;        /* P_AMODE / P_AHOLD as last seen by the ISR */
     /* engine switch (voice.c engine_block): the old engine's voices fade out, then it switches */
     uint8_t xf_on, xf;           /* fading; blocks of the fade still to render */

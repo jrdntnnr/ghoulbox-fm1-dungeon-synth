@@ -201,8 +201,17 @@ static void con_status(void)
     con_kv("audio_late", (int32_t)felucca_dbg.late);
     con_kv("voices_shed", (int32_t)shed_count);
     con_kv("voices_given_up", (int32_t)voice_kills);
+    con_puts(mc_status());                              /* (JIANT 0.6.71) the second core */
+    con_puts("\r\n");
+    con_kv("cpu2_jobs", (int32_t)mc_jobs);              /* blocks it rendered parts in */
+    con_kv("cpu2_tracks", (int32_t)mc_mask_last);       /* the last block's, a bit a track */
+#if FELUCCA_DUAL_CORE
+    con_kv("cpu2_wait_max_us", (int32_t)(fm1_mc_max_ticks / 24u));   /* the longest core 0 waited for it */
+#endif
     con_kv("track", (int32_t)song.sel + 1);
     con_kv("batt_raw", song.batt_raw);
+    con_kv("ustack_free", (int32_t)felucca_dbg.ustack_free);   /* bytes never touched (main.c stack_scan) */
+    con_kv("sstack_free", (int32_t)felucca_dbg.sstack_free);
     con_puts("engine ");
     con_puts(e->name);
     con_puts("\r\n");

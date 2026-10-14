@@ -103,6 +103,30 @@ static int32_t scale_snap(const track_t *t, int32_t n)
     return n;
 }
 
+/* the scale's next note above n (ARP TRILL's upper neighbour; CHR: a semitone), n itself at the top */
+static int32_t scale_up(const track_t *t, int32_t n)
+{
+    uint32_t mask = scale_mask(t), k;
+    for (k = 1; k <= 12u; k++) {
+        if (n + (int32_t)k <= 127 && (mask >> (uint32_t)((n + (int32_t)k - t->p[P_ROOT] + 120) % 12)) & 1u) {
+            return n + (int32_t)k;
+        }
+    }
+    return n;
+}
+
+/* the scale's next note below n (CANON's intervals down), n itself at the bottom */
+static int32_t scale_down(const track_t *t, int32_t n)
+{
+    uint32_t mask = scale_mask(t), k;
+    for (k = 1; k <= 12u; k++) {
+        if (n - (int32_t)k >= 0 && (mask >> (uint32_t)((n - (int32_t)k - t->p[P_ROOT] + 120) % 12)) & 1u) {
+            return n - (int32_t)k;
+        }
+    }
+    return n;
+}
+
 enum { QN_OFF, QN_SNAP, QN_WHITE, QN_SEQ, QN_ALL, QN_SEQT };   /* P_QUANT: append-only saved values (ALL: GHOULBOX; SEQ+T
                                                          * 1.5.6 #218 after it; older firmware loads SEQ) */
 
@@ -224,7 +248,7 @@ static int rec_on(const track_t *t) { return ((song.rec >> trk_index(t)) & 1u) &
  * C E C G (the bottom one); WALK a random step up or down the list (bouncing off its ends); CHORD all the held
  * notes together (the first 4), an octave higher each step through OCT */
 enum { AM_OFF, AM_UP, AM_DN, AM_UPDN, AM_RND, AM_ORD, AM_REPEAT, AM_DNUP, AM_UP8, AM_CONV, AM_DIVG, AM_PINKY,
-       AM_THUMB, AM_WALK, AM_CHORD };
+       AM_THUMB, AM_WALK, AM_CHORD, AM_TRILL, AM_DRONE };
 
 static void arp_forget(track_t *t)               /* (its notes ended otherwise: trk_all_off) */
 {
@@ -272,6 +296,42 @@ static void arp_silence(track_t *t)              /* the sounding arp note(s) end
     t->arp_note = 0;
 }
 
+/* DRONE (GHOULBOX desert): the lowest key held sounds on (arp_ch[0], a tanbur's open string under the melody), the
+ * others arpeggiate UP over it (arp_note). The drone changes with the lowest key; it ends with the keys (arp_off) */
+static __attribute__((noinline)) void arp_drone(track_t *t, const uint32_t *list, uint32_t len, uint32_t period)
+{
+    uint32_t i, lo = list[0], n = 0, up[64];
+    for (i = 1; i < len; i++)
+        lo = list[i] < lo ? list[i] : lo;
+    for (i = 0; i < len; i++)
+        if (list[i] != lo)
+            up[n++] = list[i];
+    if (t->arp_ch[0] != lo) {
+        if (t->arp_ch[0]) {
+            if (rec_on(t))
+                rec_release(t, t->arp_ch[0]);
+            trk_note_off(t, t->arp_ch[0]);
+        }
+        t->arp_ch[0] = (uint8_t)lo;
+        if (rec_on(t))
+            rec_note(t, lo, 100);
+        trk_note_on(t, lo, 100);
+    }
+    if (t->arp_note) {
+        if (rec_on(t))
+            rec_release(t, t->arp_note);
+        trk_note_off(t, t->arp_note);
+        t->arp_note = 0;
+    }
+    if (!n || (uint32_t)(rng() & 127u) > (uint32_t)t->p[P_APROB])
+        return;
+    t->arp_off = period * (uint32_t)t->p[P_AGATE] / 128u;
+    t->arp_note = (uint8_t)up[t->arp_idx % n];
+    if (rec_on(t))
+        rec_note(t, t->arp_note, 100);
+    trk_note_on(t, t->arp_note, 100);
+}
+
 static void arp_off(track_t *t)                  /* the sounding arp note(s) end (a recorded one too) */
 {
     if (t->arp_ch[0] | t->arp_ch[1] | t->arp_ch[2])
@@ -309,6 +369,8 @@ static __attribute__((noinline)) uint32_t arp_pick(track_t *t, uint32_t *list, u
         return len < 2u ? 0u : (k & 1u) ? len - 1u : k / 2u;
     case AM_THUMB:
         return len < 2u ? 0u : (k & 1u) ? 1u + k / 2u : 0u;
+    case AM_TRILL:                                  /* each note twice: itself, its upper neighbour (arp_fire) */
+        return (i >> 1) % len;
     case AM_WALK:
         w = t->arp_walk;
         if (!i)
@@ -403,6 +465,10 @@ static __attribute__((noinline)) void arp_fire(track_t *t, uint32_t period)
         return;
     }
     t->arp_idx++;
+    if (t->p[P_AMODE] == AM_DRONE) {
+        arp_drone(t, list, len, period);
+        return;
+    }
     j = t->p[P_AMODE] == AM_CHORD ? 0u : arp_pick(t, list, len);
     if (t->arp_note)
         arp_off(t);
@@ -413,6 +479,9 @@ static __attribute__((noinline)) void arp_fire(track_t *t, uint32_t period)
             return;
         }
         t->arp_note = (uint8_t)list[j];
+        if (t->p[P_AMODE] == AM_TRILL && (t->arp_idx & 1u)) {   /* TRILL's off step: the scale's next note up */
+            t->arp_note = (uint8_t)scale_up(t, list[j]);
+        }
         if (rec_on(t))
             rec_note(t, t->arp_note, 100);           /* recording: what the arp plays */
         trk_note_on(t, t->arp_note, 100);
@@ -424,13 +493,18 @@ static void arp_step(track_t *t, uint32_t n, uint32_t gate_n)
     uint32_t period;
     int32_t sw;
     if (t->arp_note) {
-        if (t->arp_off <= gate_n)
-            arp_off(t);
-        else
+        if (t->arp_off > gate_n)
             t->arp_off -= gate_n;
+        else if (t->p[P_AMODE] == AM_DRONE) {        /* (its gate ends the arpeggiated note, the drone sounds on) */
+            if (rec_on(t))
+                rec_release(t, t->arp_note);
+            trk_note_off(t, t->arp_note);
+            t->arp_note = 0;
+        } else
+            arp_off(t);
     }
     if (!t->p[P_AMODE] || !t->nheld) {
-        if (!t->nheld && t->arp_note)
+        if (!t->nheld && (t->arp_note || t->arp_ch[0]))
             arp_off(t);
         return;
     }
@@ -922,6 +996,78 @@ static void seq_start(void)
     perf_start();                                  /* perform.c: its 1/16 grid too */
 }
 
+/* CANON (GHOULBOX desert, P_CANON): a second playhead plays the pattern half its length behind the first (one step
+ * behind at least), transposed by a scale interval (CANON_STEP: scale degrees, +-100 an octave in semitones), the
+ * R modes play it backwards from the pattern's end (a crab canon). It plays the step's notes (QNT SEQ's snapping and
+ * SEQ+T's TRN as the first playhead), at 3/4 of their velocity, for GATE; TIE holds them, REST and an empty step
+ * let go. Hits, ratchets, nudges, chance and slides are the first playhead's alone. Not on a kit (an engine that
+ * maps the keys itself). Set OFF, what sounds lets go at the next step */
+static const int8_t CANON_STEP[] = {0, 2, 4, 6, 100, -2, -4, -6, -100, 2, 4, 100, -4, -100};
+#define CANON_REV_FROM 9u
+#define CANON_OCT 100
+
+static void canon_release(track_t *t)
+{
+    uint32_t i;
+    for (i = 0; i < t->cn_n; i++)
+        trk_note_off(t, t->cn_notes[i]);
+    t->cn_n = 0;
+    t->cn_off = 0;
+}
+
+static int32_t canon_note(const track_t *t, int32_t n, int32_t steps)
+{
+    if (steps == CANON_OCT || steps == -CANON_OCT) {
+        return clamp(n + (steps > 0 ? 12 : -12), 0, 127);
+    }
+    for (; steps > 0; steps--)
+        n = scale_up(t, n);
+    for (; steps < 0; steps++)
+        n = scale_down(t, n);
+    return n;
+}
+
+static __attribute__((noinline)) void canon_enter(track_t *t, uint32_t period, uint32_t len)
+{
+    uint32_t mode = (uint32_t)t->p[P_CANON], back = len / 2u ? len / 2u : 1u, idx, nx, hold, i, n = 0;
+    const engine_t *e = ENGINES[eng_idx(t->eng_req)];
+    const step_t *s;
+    uint32_t qseq = (t->p[P_QUANT] == QN_SEQ || t->p[P_QUANT] == QN_SEQT);
+    int32_t qtrn = qseq && t->p[P_QUANT] == QN_SEQT ? t->p[P_TRANS] : 0, steps;
+    uint8_t nn[4];
+    if (!mode || mode >= NELEM(CANON_STEP) || (e->keys && e->keys(t, 0) >= 0)) {
+        if (t->cn_n)
+            canon_release(t);
+        return;
+    }
+    steps = CANON_STEP[mode];
+    idx = mode >= CANON_REV_FROM ? len - 1u - t->seq_idx : t->seq_idx;
+    idx = (idx + len - back) % len;
+    s = &seq_steps(t)[idx];
+    nx = mode >= CANON_REV_FROM ? (idx + len - 1u) % len : (idx + 1u) % len;
+    hold = seq_steps(t)[nx].time == ST_TIE ? period : 0u;    /* (the next one a TIE: held into it, as seq_step) */
+    if (s->time == ST_TIE) {
+        if (t->cn_n)
+            t->cn_off = period * (uint32_t)t->p[P_SGATE] / 128u + period / 2u + hold;
+        return;
+    }
+    canon_release(t);
+    if (s->time == ST_REST || !s->n)
+        return;
+    for (i = 0; i < s->n && i < 4u; i++) {
+        int32_t x = s->note[i];
+        if (qseq)
+            x = clamp(scale_snap(t, x + qtrn), 0, 127);
+        nn[n++] = (uint8_t)canon_note(t, qseq ? x : scale_snap(t, x), steps);
+    }
+    t->cn_off = period * (uint32_t)t->p[P_SGATE] / 128u + hold;
+    for (i = 0; i < n; i++) {
+        uint32_t vel = (s->flags & SF_ACCENT) ? 127u : (s->vel ? s->vel : 96u);
+        trk_note_on(t, nn[i], vel * 3u / 4u);
+        t->cn_notes[t->cn_n++] = nn[i];
+    }
+}
+
 static void seq_release(track_t *t)
 {
     uint32_t i;
@@ -945,6 +1091,7 @@ static void seq_stop(void)
                 arp_off(&trk[i]);
     for (i = 0; i < NTRK; i++) {
         seq_release(&trk[i]);
+        canon_release(&trk[i]);
         trk[i].rh_n = 0;                           /* a recorded note held over the stop: as far as it got */
         trk[i].rat_left = 0;
         trk[i].nd_late = trk[i].nd_early = ND_NONE;   /* (a nudged step not played yet: not after the stop) */
@@ -1242,6 +1389,12 @@ static void seq_tick(track_t *t, uint32_t n)
         else
             t->seq_off -= n;
     }
+    if (t->cn_n) {                                  /* CANON's notes end on their gate */
+        if (t->cn_off <= n)
+            canon_release(t);
+        else
+            t->cn_off -= n;
+    }
     if (!song.playing)
         return;
     period = div_samples((uint32_t)t->p[P_SDIV]);
@@ -1258,6 +1411,8 @@ static void seq_tick(track_t *t, uint32_t n)
         t->seq_pos = top ? (chain.running ? chain.carry : 0u) : t->seq_pos - cur_len;
         t->seq_idx = (uint16_t)((t->seq_idx + 1u) % len);
         seq_enter(t, top, len);
+        if (t->p[P_CANON] || t->cn_n)
+            canon_enter(t, period, len);
         if (t->p[P_SQNT] && !t->nd_fired)
             seq_play_on(t, period);                 /* QUANTIZE ON: every step on its start, as before 1.2 */
         else

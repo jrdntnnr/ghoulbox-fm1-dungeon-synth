@@ -4,7 +4,7 @@ This fork integrates selected **Ghoulbox 2.1** changes (`eaf04bd`) into our
 **Felucca 1.5.1 / SLOOP** base, retaining maqam tuning, Scala import, tuned chords
 and our instruments. [Controls and migration](GHOULBOX-2-INTEGRATION.md).
 The source and deployments belong to
-[jrdntnnr/ghoulbox-fm1-dungeon-synth](https://github.com/jrdntnnr/ghoulbox-fm1-dungeon-synth).
+[jrdntnnr/sardab](https://github.com/jrdntnnr/sardab).
 
 **Status: buildable development preview, not a hardware-validated release.**
 No FM-1 has been flashed or acoustically tested in this work.

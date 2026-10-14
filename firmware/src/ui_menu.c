@@ -24,8 +24,9 @@ static int32_t menu_document(int32_t y, int draw)
         cv_text(6, y + 118, &AF_S, "GPL-3.0-only, NO WARRANTY", T_TEXT);
         cv_text(6, y + 142, &AF_S, "Credits, licences, source:", T_TEXT);
         cv_text(6, y + 160, &AF_S, "github.com/hugelton/Felucca", T_MID);
+        cv_text(6, y + 178, &AF_S, mc_status(), T_TEXT);   /* (JIANT 0.6.71) the second core (fx.c) */
     }
-    return y + 182;
+    return y + 196;                                   /* (MENU_DOC_H: nothing to scroll) */
 }
 static int32_t menu_scroll_max(void)
 {

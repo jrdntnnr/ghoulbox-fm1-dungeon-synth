@@ -76,10 +76,13 @@ static up_rec_t *up_rec(uint32_t k) { return &up_bank[k / UP_PER_BANK].r[k % UP_
  * versions 1..3 (a 16-bit value in every pair) has none; giving it one (a rename) rewrites it as version 4 / 5 when its
  * values fit a byte (up_to_v4; not a version 1 PHYS sound, whose MODEL 2 means DUST) */
 #define UP_CAT_AT (UP_PMAX * 2u - 1u)
+/* GHOULBOX desert: bit 7 of that byte marks a record written since ANALOG's E7 became INT (KTR before): an ANALOG
+ * record without it loads E7 as 0 (up_params). Firmware before reads the byte as no category (its engine's) */
+#define UP_INT_MARK 0x80u
 #include "category.c"
 static uint32_t up_cat_of(const up_rec_t *r)
 {
-    uint32_t c = r->ver >= 4u && r->np <= UP_CAT_AT ? r->packed[UP_CAT_AT] : 0u;
+    uint32_t c = r->ver >= 4u && r->np <= UP_CAT_AT ? r->packed[UP_CAT_AT] & ~UP_INT_MARK : 0u;
     return c && c < CAT_N ? c : cat_of_engine(r->engine);
 }
 static int up_to_v4(up_rec_t *r)                 /* 1 = r is version 4 / 5 (now) */
@@ -102,7 +105,7 @@ static int up_to_v4(up_rec_t *r)                 /* 1 = r is version 4 / 5 (now)
 static void up_set_cat(up_rec_t *r, uint32_t c)  /* c CAT_BASS..CAT_OTHER; a record that cannot hold one keeps none */
 {
     if (c && c < CAT_N && up_to_v4(r))
-        r->packed[UP_CAT_AT] = (uint8_t)c;
+        r->packed[UP_CAT_AT] = (uint8_t)(c | (r->packed[UP_CAT_AT] & UP_INT_MARK));
 }
 
 static int up_valid(const up_rec_t *r)
@@ -123,15 +126,18 @@ static void up_set_value(up_rec_t *r, uint32_t k, int16_t v)
 {
     if (r->ver >= 4u) r->packed[k] = (uint8_t)(v + 64); else r->p[k] = v;
 }
+/* a record's P_E0: the last 8 values up to np 126; since (GHOULBOX desert: P_CANON after P_E7) at P_E0 */
+static uint32_t up_e0(const up_rec_t *r) { return r->np > P_E0 + 8u ? P_E0 : r->np - 8u; }
+
 /* Legacy PHYS drums map through decoded parameters, not their disk representation. */
 static void up_migrate(up_rec_t *r)
 {
-    int16_t e[8]; uint32_t k;
+    int16_t e[8]; uint32_t k, e0 = up_e0(r);
     if (!up_valid(r)) return;
-    for (k = 0; k < 8u; k++) e[k] = up_value(r, r->np - 8u + k);
+    for (k = 0; k < 8u; k++) e[k] = up_value(r, e0 + k);
     if (drum_from_phys(r->engine, e) || drum_from_perc(r->engine, e)) {   /* (SAMPLE PERC: see the top) */
         r->engine = ENGI_DRUM;
-        for (k = 0; k < 8u; k++) up_set_value(r, r->np - 8u + k, e[k]);
+        for (k = 0; k < 8u; k++) up_set_value(r, e0 + k, e[k]);
     }
 }
 
@@ -166,6 +172,9 @@ static void up_params(const up_rec_t *r, int16_t *out, const int16_t *def)
     if (r->ver == 6u || r->ver == 7u) params_gbm1(out, values, def);
     else if ((r->ver == 4u || r->ver == 5u) && r->np == 112u) params_ghoul2(out, values, def);
     else params_by_count(out, values, r->np, def);
+    if (r->engine == ENGI_ANALOG && !(r->ver >= 4u && r->np <= UP_CAT_AT && (r->packed[UP_CAT_AT] & UP_INT_MARK))) {
+        out[P_E7] = 0;                                  /* (a record before INT: KTR there) */
+    }
 }
 
 static int up_name_ok(const uint8_t *s, uint32_t n)   /* 1..12 printable ASCII */
@@ -413,6 +422,7 @@ static int up_store_cat(uint32_t k, const char *name, uint32_t cat)
     for (i = 0; i < P_COUNT; i++)
         up_set_value(&r, i, motion_base_value(TSEL, i));
     up_pat_from(&r, TSEL->step);
+    r.packed[UP_CAT_AT] = UP_INT_MARK;                 /* (desert: E7 is INT) */
     up_set_cat(&r, cat ? cat : track_cat(TSEL));
     if (drum_track(TSEL)) {                             /* a DRUM track that strikes a lane: its grid */
         uint32_t any = 0;

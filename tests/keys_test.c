@@ -167,6 +167,20 @@ int main(void)
             if (!str_eq(b, NN[i].name)) { printf("  %s: got %s\n", NN[i].name, b); ok = 0; }
         }
         bad += check("NOTE NAMES: D4, D5, C, Am, Bb, Bdim, Gsus4, A7, Dm7, C/E (a bass not the root), D Eb (no chord)", ok);
+        /* GHOULBOX desert: on a maqam (SCALE_ARABIC) a single note is named the Arabic way, Rast = C: Bayati on D's
+         * D is DUKAH, its half-flat E SIKAH, Bb AJAM, a B (out of the scale, natural) MAHUR; chords stay Western */
+        TSEL->p[P_SCALE] = 18; TSEL->p[P_ROOT] = 2;
+        ok = 1;
+        names_of(1u << 2, 62, b); ok &= str_eq(b, "DUKAH 4");
+        names_of(1u << 4, 64, b); ok &= str_eq(b, "SIKAH 4");
+        names_of(1u << 10, 70, b); ok &= str_eq(b, "AJAM 4");
+        names_of(1u << 11, 71, b); ok &= str_eq(b, "MAHUR 4");
+        names_of(1u << 9, 57, b); ok &= str_eq(b, "HUSAYNI 3");
+        names_of(1u << 2 | 1u << 5 | 1u << 9, 62, b); ok &= str_eq(b, "Dm");
+        TSEL->p[P_SCALE] = 1;
+        names_of(1u << 2, 62, b); ok &= str_eq(b, "D4");
+        TSEL->p[P_SCALE] = 0; TSEL->p[P_ROOT] = 0;
+        bad += check("  on a maqam: DUKAH 4, SIKAH 4, AJAM 4, MAHUR 4, HUSAYNI 3; Dm; MAJ: D4 again", ok);
     }
     k_reset();
     keys(1u << 7 | 1u << 11 | 1u << 14); names_notice();          /* C4 E4 G4 */
@@ -205,7 +219,7 @@ int main(void)
     t1->p[P_CHRD] = CH_OFF; t1->p[P_TEMP] = 3;
     keys(1u << 11); names_notice();
     bad += check("single Rast E + JUST: cent offset shown in the active label",
-                 strstr(ui.msg, "E4") && strstr(ui.msg, "-64ct"));
+                 strstr(ui.msg, "SIKAH 4") && strstr(ui.msg, "-64ct"));
     keys(0);
 
     k_reset(); host_preset(t1, 0, 0); t1->p[P_VOICE] = V_POLY; host_preset(&trk[1], 0, 0); trk[1].p[P_VOICE] = V_POLY;

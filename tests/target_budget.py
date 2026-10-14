@@ -102,7 +102,7 @@ def main():
         return 0
     fns = functions(dis)
     res = {n: cost(fns[n]) for n in FUNCS if fns.get(n)}
-    omitted = {"slice_render", "slc_rev"} if os.environ.get("FELUCCA_SLICE") == "0" else set()
+    omitted = {"slice_render", "slc_rev"} if os.environ.get("FELUCCA_SLICE", "0") == "0" else set()   # (build.py: off unless asked)
     missing = [n for n in FUNCS if n not in res and n not in OPTIONAL and n not in omitted]
     base = {}
     if os.path.exists(budget):

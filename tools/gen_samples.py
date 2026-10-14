@@ -25,7 +25,7 @@ SRC, a value sent live) plays the alias, PIANO.
 
 The SLICE engine's built-in BREAK (eng_slice.c) is rendered here: one bar of 16ths arranged
 from Felucca's generated drums (tools/gen_waves.py, the Hügelton Sample Pack; no third-party
-loop), stored after every set (their
+loop; GHOULBOX desert: a darbuka maqsum, BREAK_HITS), stored after every set (their
 offsets do not move) and NOT one of the SAMPLE sets (the SET list, its presets and the
 USR1-3 numbers stay as they were). Its slice table (decoder states on a 128-point grid,
 the hits as AUTO slices) is written with it: SLC_BREAK_INIT.
@@ -63,6 +63,7 @@ SRC = Path(__file__).resolve().parents[1]
 GENDIR = SRC / "build" / "genwav"
 CACHE = SRC / "build" / "gen_samples.cache"
 CC0 = SRC / "assets" / "samples-cc0"
+DESERT = SRC / "assets" / "desert"           # GHOULBOX desert: the oud and ney recordings (assets/desert/README.md)
 TR = 22050                                   # stored sample rate
 
 # CC0 library: set -> kind ("oneshot" decaying, "sus" looped sustain, "kit" one sample per key)
@@ -70,7 +71,9 @@ TR = 22050                                   # stored sample rate
 # from the web editor). TRANH was removed (66 KB of flash); its index 1 stays, an alias of PIANO
 # ("alias": the set named). PERC (the GM kit) was removed (66 KB); its index 4 stays, an alias of
 # PIANO too (PERC_SLOT; its sounds load as the DRUM engine)
-CC0_SETS = [("PIANO", "oneshot"), ("PIANO", "alias"), ("FLUTE", "sus"), ("SAX", "sus"), ("PIANO", "alias"),
+# GHOULBOX desert: sets 2 and 3 (once FLUTE and SAX, 63 KB) are the OUD (plucked, 3 zones G2 A2 C3) and the NEY (breathy,
+# looped, 3 zones B4 C5 E5) from assets/desert: SET_SRC names their files. The same values in a project play them
+CC0_SETS = [("PIANO", "oneshot"), ("PIANO", "alias"), ("NEY", "sus"), ("OUD", "oneshot"), ("PIANO", "alias"),
             # GHOULBOX 1.1: appended (data sets 5..8); their SET values follow USR1..3 (8..11: eng_sample.c smp_set_at)
             ("PSALTERY", "sus"), ("RENORGAN", "sus"), ("RECORDER", "sus"), ("FOLKHARP", "oneshot")]
 USR_V0 = 5                                   # eng_sample.c SMP_USR_V0: the SET value of USR1 (1.0's, fixed)
@@ -89,16 +92,16 @@ NOTE = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#":
 GM_ROLE_WORDS = [("bassdrum", "kick"), ("kick", "kick"), ("snare", "snare"), ("hihat", "chh"), ("chat", "chh"),
                  ("ohat", "ohh"), ("clap", "clap"), ("tom lo", "tomlo"), ("tom hi", "tomhi"), ("tom", "tom"),
                  ("rim", "rim"), ("cowbell", "cowbell"), ("tamb", "tamb"), ("shaker", "shaker"),
-                 ("conga", "conga"), ("claves", "claves"), ("wood", "wood"), ("crash", "crash"), ("ride", "ride")]
+                 ("conga", "conga"), ("claves", "claves"), ("wood", "wood"), ("crash", "crash"), ("ride", "ride"),
+                 ("dum", "dum"), ("tek", "tek"), ("ka", "ka")]
 GM_KEEP = {"crash": 0.5, "ride": 0.5, "ohh": 0.5}  # the cymbals cut to 0.5 s ...
 GM_FADE = {"crash": 0.2, "ride": 0.2}            # ... with a long raised-cosine fade (s); the others 30 ms linear
 
-# SLICE's BREAK: (step, GM role, gain) on a bar of 16ths; the open hat is choked by the next hat
+# SLICE's BREAK: (step, GM role, gain) on a bar of 16ths. GHOULBOX desert: a darbuka maqsum (D T k T D k T k, the
+# ka's filling) instead of Felucca's rock beat (kick, snare, hats; an open hat was choked by the next hat)
 BREAK_BPM, BREAK_STEPS = 120, 16
-BREAK_HITS = [(0, "kick", 1.0), (0, "chh", 0.55), (2, "kick", 0.7), (2, "chh", 0.4), (4, "snare", 1.0),
-              (4, "chh", 0.45), (6, "chh", 0.4), (7, "kick", 0.8), (8, "chh", 0.55), (9, "snare", 0.3),
-              (10, "kick", 0.9), (10, "ohh", 0.4), (12, "snare", 1.0), (12, "chh", 0.45), (14, "chh", 0.4),
-              (14, "snare", 0.35)]
+BREAK_HITS = [(0, "dum", 1.0), (2, "tek", 0.9), (4, "ka", 0.45), (6, "tek", 0.9), (8, "dum", 1.0), (10, "ka", 0.45),
+              (11, "ka", 0.4), (12, "tek", 0.9), (14, "ka", 0.5), (15, "ka", 0.4)]
 SLC_PIANO_NOTE = 60                          # SLICE's SRC PIANO: the PIANO zone of this root (middle C)
 SLC_GRID, SLC_AUTO = 128, 32                # eng_slice.c slc_src_t
 
@@ -110,6 +113,9 @@ SET_KEEP = {"PIANO": 0.75,
             "PSALTERY": 0.80, "RENORGAN": 0.70, "RECORDER": 0.60, "FOLKHARP": 1.10}   # GHOULBOX: <= 130 KB, the four
 SET_FADE = {"PIANO": 0.15, "FOLKHARP": 0.50}
 SET_SKIP = {"PIANO": ("_C1_",)}               # GHOULBOX: recordings left out (flash); the next zone covers their keys
+SET_SRC = {"OUD": (DESERT, "oud-*.wav"), "NEY": (DESERT, "ney-air-*.wav")}   # a set's files elsewhere than CC0/<set>
+SET_KEEP.update({"OUD": 0.90, "NEY": 0.60})  # the oud's pluck to 0.9 s (its ring faded), the ney's loop in its 0.6 s
+SET_FADE["OUD"] = 0.35
 
 _wavs = {}
 
@@ -129,8 +135,8 @@ def wav(path):
 
 
 def name_note(name):
-    """'_C#3' in a CC0 file name -> (octave, pitch class)"""
-    m = re.search(r"_([A-G]#?)(-?\d)", name)
+    """'_C#3' in a CC0 file name ('-G2' in a desert one) -> (octave, pitch class)"""
+    m = re.search(r"[_-]([A-G]#?)(-?\d)", name)
     return (int(m.group(2)), NOTE[m.group(1)]) if m else None
 
 
@@ -151,7 +157,8 @@ def octave_conv(files):
 
 def cc0_entries(setname, kind):
     """-> [(file name, int16 samples at TR, loop or None, root)]"""
-    files = sorted(p for p in (CC0 / setname).glob("*.wav") if not any(s in p.name for s in SET_SKIP.get(setname, ())))
+    src, pat = SET_SRC.get(setname, (CC0 / setname, "*.wav"))
+    files = sorted(p for p in src.glob(pat) if not any(s in p.name for s in SET_SKIP.get(setname, ())))
     out = []
     if kind != "kit":
         conv = octave_conv(files)
@@ -328,7 +335,7 @@ class Builder:
         entries = []
         found = cc0_entries(name, kind)
         if not found:                                # GHOULBOX: never skip one (the sets after it would move down a place
-            raise SystemExit(f"samples: CC0 set {name} has no recordings in {CC0 / name} "   # and stored SET values
+            raise SystemExit(f"samples: CC0 set {name} has no recordings in {SET_SRC.get(name, (CC0 / name,))[0]} "   # and stored SET values
                              "(tools/fetch_cc0.py fetches it)")                                # play another sound)
         for k, (_, s, loop, root) in enumerate(found):
             ls, le = loop if loop else (len(s), len(s))
@@ -455,6 +462,7 @@ def input_key(have_cc0):
     files = sorted(GENDIR.glob("*.wav"))
     if have_cc0:
         files += sorted(CC0.glob("*/*.wav"))
+        files += sorted(p for d, pat in SET_SRC.values() for p in d.glob(pat))
     for p in files:
         h.update(str(p.relative_to(SRC)).encode() + b"\0")
         h.update(hashlib.sha256(p.read_bytes()).digest())

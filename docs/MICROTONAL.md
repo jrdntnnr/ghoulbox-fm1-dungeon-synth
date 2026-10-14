@@ -113,6 +113,25 @@ Without a device, [SHUR_REVIEW.md](SHUR_REVIEW.md) renders the same comparisons 
 
 **Compatibility:** selecting SHUR1/2 needs no new project format; GBM2 stores the scale ID. Firmware without these rows clamps IDs 41–42 to CUSTOM when loading. With no custom mask saved, SNAP and WHITE then play only the tonic. Keep the project on this firmware or later.
 
+## More maqamat (GHOULBOX desert)
+
+Appended after SHUR2, IDs 43–49. Cents above ROOT; the rest of the row is the same 24-EDO
+starting-point convention as above.
+
+| Display | ID | Starting pitches, cents above ROOT | Note |
+| --- | --- | --- | --- |
+| SABA | 43 | 0, 150, 300, 400, 700, 800, 1000 | Gb as 400 (the E key) |
+| KURD | 44 | 0, 100, 300, 500, 700, 800, 1000 | = PHRY, by its maqam name |
+| NAHAWAND | 45 | 0, 200, 300, 500, 700, 800, 1000 | = MIN, by its maqam name |
+| SIKAH | 46 | -50, 100, 300, 500, 600, 800, 1000 | ROOT E: the tonic itself is the half-flat |
+| JIHARKAH | 47 | 0, 200, 400, 500, 700, 900, 1050 | |
+| ATH KURD | 48 | 0, 100, 300, 600, 700, 800, 1100 | Athar Kurd |
+| NAWATHAR | 49 | 0, 200, 300, 600, 700, 800, 1100 | Nawa Athar (= HUNG MIN) |
+
+On any maqam row (RAST … NIKRIZ, these seven) the header's NOTE NAMES names a single held note
+the Arabic way, Rast = C: DUKAH, SIKAH, JAHARKA, NAWA, HUSAYNI, AJAM, AWJ … Chords keep their
+Western names. The older rows are unchanged in pitch.
+
 ## Other added scales
 
 The other additions are HIJAZ, HIJAZKAR, NIKRIZ, HARM MAJ, DOR b2, LYD AUG, LYD DOM, MIX b6, LOC #2, ALTERED, HUNG MIN, UKR DOR, MAJ BLUS, HIRAJOS, INSEN, IWATO, YO and EGYPT. Their initial offsets are zero; any key can be adjusted on the tuning pages.

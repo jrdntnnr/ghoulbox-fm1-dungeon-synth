@@ -20,6 +20,8 @@
  * 7. cost: host instructions per sample of the reverb alone (rev_room, rev_spring, rev_hall): SPRING and HALL at
  *    most ROOM + 30 %; and of the whole bus stage (fx_buses), with the device estimate (1.7 % per 100,
  *    drum_test's ratio).
+ * STRINGS (GHOULBOX desert): the lines ring at the held note's scale degrees, glide to a new lowest note, keep the
+ *    last tuning with nothing held, decay against SIZE, the corners.
  * HALL (1.2): SPRING (and ROOM <-> SPRING) bit for bit as before HALL (a hash of the old firmware's renders);
  *    RT60 against SIZE; DAMP: the decay at 500 Hz and 3 kHz; the corners (as SPRING's) and 27 SIZE x DAMP x
  *    level runs end in exact silence (left and side); no offset after a loud burst; level against ROOM;
@@ -131,11 +133,13 @@ static void test_room_identical(void)
     host_tracks_init();
     bus_skip = 0;                                               /* (the buses' math: none skipped) */
     song.g[G_RTYPE] = 0;                                        /* (HALL is the default since 1.2) */
+    song.g[G_DTIME] = 3;
     for (b = 0; b < nb; b++) {
         if (b % 700u == 0u) {                                   /* the settings move now and then */
             song.g[G_RSIZE] = (int16_t)((uint32_t)noise(1 << 30) % 128u);
             song.g[G_RDAMP] = (int16_t)((uint32_t)noise(1 << 30) % 128u);
-            song.g[G_DTIME] = (int16_t)((uint32_t)noise(1 << 30) % 6u);
+            /* (G_DTIME stays: since the desert a change glides the read point (fx.c DLY_SLEW, desert2_test.c), which
+             * the reference below does not) */
             song.g[G_DFDBK] = (int16_t)((uint32_t)noise(1 << 30) % 121u);
             song.g[G_CDEPTH] = (int16_t)((uint32_t)noise(1 << 30) % 128u);
         }
@@ -717,6 +721,112 @@ static void test_hall(void)
 /* --------------------------------------------------------- model change --- */
 /* rev_clear: every sample of both buffers silent (rev_u's int16 view has an odd count, 556 + 441: clearing it
  * through its int32 view left the last sample, which ROOM then played back after a model change) */
+/* ------------------------------------------------------------- STRINGS (GHOULBOX desert) --- */
+static void strings_reset(int32_t size, int32_t damp)
+{
+    song.g[G_RTYPE] = 3;
+    song.g[G_RSIZE] = (int16_t)size;
+    song.g[G_RDAMP] = (int16_t)damp;
+    rev_clear();
+    fx.rtype = 3;
+}
+static void strings_run(const int32_t *x, uint32_t len, uint32_t n)
+{
+    static int32_t in[CTL];
+    uint32_t t, i;
+    for (t = 0; t < n; t += CTL) {
+        for (i = 0; i < CTL; i++) {
+            in[i] = t + i < len ? x[t + i] : 0;
+            ir[t + i] = 0;
+        }
+        rev_strings(in, ir + t, CTL);
+    }
+}
+static double goertzel(const int32_t *h, uint32_t n, double f)   /* power at f */
+{
+    double w = 2 * M_PI * f / FS, c = 2 * cos(w), s0 = 0, s1 = 0, s2 = 0;
+    uint32_t i;
+    for (i = 0; i < n; i++) {
+        s0 = h[i] + c * s1 - s2;
+        s2 = s1;
+        s1 = s0;
+    }
+    return s1 * s1 + s2 * s2 - c * s1 * s2;
+}
+/* the strings ring at f and not a quarter-tone either side of it */
+static int rings_at(const int32_t *h, uint32_t n, double f)
+{
+    double on = goertzel(h, n, f), lo = goertzel(h, n, f / 1.0293), hi = goertzel(h, n, f * 1.0293);
+    return on > 5 * lo && on > 5 * hi;
+}
+static void test_strings(void)
+{
+    static int32_t burst[FS / 10];
+    static const double DEG[4] = {130.81, 164.81, 196.00, 246.94};   /* C3 E3 G3 B3: C major's I III V VII */
+    char what[200];
+    uint32_t i, k;
+    double r[2];
+    int ok = 1;
+    host_tracks_init();
+    for (i = 0; i < FS / 10u; i++)
+        burst[i] = noise(1 << 17);
+    trk[0].p[P_ROOT] = 0;
+    trk[0].p[P_SCALE] = 1;                                          /* MAJ */
+    trk_note_on(&trk[0], 48, 100);                                  /* C3 held */
+    strings_reset(127, 40);                                         /* (long sustain: narrow peaks) */
+    strings_run(burst, FS / 10u, IRN);
+    for (k = 0; k < 4u; k++)
+        ok &= rings_at(ir + FS / 10u, 4u * FS, DEG[k]);
+    snprintf(what, sizeof what, "STRINGS: C3 held on a C major track: the lines ring at C3 E3 G3 B3 (line 1 %.1f samples)",
+             fx.st_tgt[0] / 256.0);
+    check(what, ok && abs(fx.st_tgt[0] - (int32_t)(FS / 130.81 * 256)) < 256);
+    trk_note_off(&trk[0], 48);
+    trk_note_on(&trk[0], 55, 100);                                  /* G3: the lines glide up */
+    strings_run(burst, FS / 10u, IRN);
+    check("STRINGS: the lowest note moved to G3: the lines ring at G3 (its third, fifth, seventh above)",
+          rings_at(ir + FS / 10u, 4u * FS, 196.0) && rings_at(ir + FS / 10u, 4u * FS, 246.94) && !rings_at(ir + FS / 10u, 4u * FS, 130.81));
+    trk_note_off(&trk[0], 55);
+    strings_run(burst, FS / 10u, IRN);
+    check("STRINGS: no note held: the last tuning stays", rings_at(ir + FS / 10u, 4u * FS, 196.0));
+    rev_clear();
+    strings_run(burst, FS / 10u, IRN);
+    check("STRINGS: cleared with nothing held: the selected track's ROOT, octave 3", rings_at(ir + FS / 10u, 4u * FS, 130.81));
+    for (k = 0; k < 2u; k++) {
+        trk_note_on(&trk[0], 48, 100);
+        strings_reset(k ? 127 : 0, 40);
+        burst[0] = 200000;
+        strings_run(burst, 1, IRN);
+        r[k] = rt60(ir, IRN);
+        trk_note_off(&trk[0], 48);
+    }
+    snprintf(what, sizeof what, "STRINGS decay rises with SIZE: RT60 %.2f s (SIZE 0), %.2f (127)", r[0], r[1]);
+    check(what, r[0] < r[1] && r[0] >= 0.1 && r[0] <= 1.5 && r[1] >= 2.0 && r[1] <= 12.0);
+    {   /* the corners: SIZE 127, DAMP 0 and 127, 2 s of full-scale noise then silence: bounded, the tail dies */
+        static int32_t loud[2u * FS];
+        for (k = 0; k < 2u; k++) {
+            int32_t pk = 0, tail = 0;
+            for (i = 0; i < 2u * FS; i++)
+                loud[i] = noise(1 << 19);
+            trk_note_on(&trk[0], 36, 100);                          /* (the longest lines) */
+            strings_reset(127, k ? 127 : 0);
+            strings_run(loud, 2u * FS, IRN);
+            for (i = 0; i < IRN; i++) {
+                int32_t v = abs(ir[i]);
+                pk = v > pk ? v : pk;
+                if (i >= IRN - FS / 2u)
+                    tail = v > tail ? v : tail;
+            }
+            snprintf(what, sizeof what, "STRINGS at SIZE 127 DAMP %d, C2 held: 2 s of full-scale noise: peak %d, the last half second %d",
+                     k ? 127 : 0, pk, tail);
+            check(what, pk <= 6 * 32768 && tail < pk / 8);
+            trk_note_off(&trk[0], 36);
+        }
+    }
+    song.g[G_RTYPE] = 0;
+    rev_clear();
+    fx.rtype = 0;
+}
+
 static void test_clear(void)
 {
     uint32_t i, left = 0;
@@ -977,6 +1087,7 @@ int main(int argc, char **argv)
     test_spring();
     test_spring_identical();
     test_hall();
+    test_strings();
     test_clear();
     test_switch();
     test_cost();

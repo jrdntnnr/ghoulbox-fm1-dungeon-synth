@@ -169,7 +169,7 @@ static stats_t analog_note(uint32_t w, uint32_t ft, int32_t cut, int32_t res, in
     t->p[P_E4] = (int16_t)cut;
     t->p[P_E5] = (int16_t)res;
     t->p[P_E6] = (int16_t)drv;
-    t->p[P_E7] = 0;                                       /* KTR 0: the cutoff where CUT puts it */
+    t->p[P_E7] = 0;                                       /* INT 0 (the cutoff tracks the key: a CUT step per 4 semitones) */
     t->p[P_ED_FLT] = 0;
     t->p[P_LD_FLT] = 0;
     t->p[P_ATK] = 0;
@@ -197,17 +197,18 @@ static void test_filter(void)
     char msg[200];
     track_t *t = &trk[0];
 
-    check("TYPE: a track parameter LP BP HP, default LP (as before), not recordable (a setting)",
-          d->fmt == F_ENUM && d->min == 0 && d->max == 2 && d->def == 0 && str_eq(d->label, "TYPE") &&
-          str_eq(d->names[0], "LP") && str_eq(d->names[1], "BP") && str_eq(d->names[2], "HP") && !motion_param(P_FTYPE));
+    check("TYPE: a track parameter LP BP HP COMB, default LP (as before), not recordable (a setting)",
+          d->fmt == F_ENUM && d->min == 0 && d->max == 3 && d->def == 0 && str_eq(d->label, "TYPE") &&
+          str_eq(d->names[0], "LP") && str_eq(d->names[1], "BP") && str_eq(d->names[2], "HP") && str_eq(d->names[3], "COMB") &&
+          !motion_param(P_FTYPE));
     {
         uint32_t i, k = 0;
         for (i = 0; i < NPAGES; i++)
             if (str_eq(PAGES[i].title, "FILTER"))
                 k = i + 1u;
-        check("EDIT > FILTER: TYPE CUT RES KTR (ANALOG's), after EDIT 2",
+        check("EDIT > FILTER: TYPE CUT RES DRV (ANALOG's; E7 is INT since the desert), after EDIT 2",
               k && PAGES[k - 1u].fam == FAM_EDIT && PAGES[k - 1u].id[0] == P_FTYPE && PAGES[k - 1u].id[1] == P_E4 &&
-              PAGES[k - 1u].id[2] == P_E5 && PAGES[k - 1u].id[3] == P_E7 && str_eq(PAGES[k - 2u].title, "EDIT 2"));
+              PAGES[k - 1u].id[2] == P_E5 && PAGES[k - 1u].id[3] == P_E6 && str_eq(PAGES[k - 2u].title, "EDIT 2"));
     }
     /* every engine but ANALOG ignores TYPE; ANALOG's LP is the golden renders' (regress.c) */
     for (e = 1; e < NENGINES; e++) {
@@ -226,7 +227,7 @@ static void test_filter(void)
             cut = n;
     for (ft = 0; ft < 3u; ft++)
         for (n = 0; n < 5u; n++)
-            r[ft][n] = analog_note(3, ft, (int32_t)cut, 0, 0, NOTE[n]);
+            r[ft][n] = analog_note(3, ft, (int32_t)cut - ((int32_t)NOTE[n] - 60) / 4, 0, 0, NOTE[n]);   /* (the key tracking undone) */
     for (ft = 0; ft < 3u; ft++) {
         snprintf(msg, sizeof msg, "  %s (CUT %u = %u Hz): rms at 65 262 1047 4186 8372 Hz %.0f %.0f %.0f %.0f %.0f",
                  ft == 0 ? "LP" : ft == 1 ? "BP" : "HP", cut, CUTOFF_HZ[cut], r[ft][0].rms, r[ft][1].rms, r[ft][2].rms,
@@ -243,7 +244,7 @@ static void test_filter(void)
     check("at the cutoff the three alike (within 25 %): TYPE keeps the level",
           fabs(r[1][2].rms / r[0][2].rms - 1) < 0.25 && fabs(r[2][2].rms / r[0][2].rms - 1) < 0.25);
     {
-        stats_t q = analog_note(3, 1, (int32_t)cut, 100, 0, 84);
+        stats_t q = analog_note(3, 1, (int32_t)cut - 6, 100, 0, 84);
         snprintf(msg, sizeof msg, "BP: RES raises the peak (RES 100 %.0f vs RES 0 %.0f at the cutoff), bounded", q.rms,
                  r[1][2].rms);
         check(msg, q.rms > r[1][2].rms * 1.3 && q.peak < 32000);

@@ -28,11 +28,11 @@ ENGINES = {
 # name, EDIT 1..8, {A D S R}, filter env, mono, FX(dist, chorus, delay, reverb), suggested pattern
 # (the reverb sends are high: GHOULBOX's HALL; TAPE / CRSH on the master do the rest of the age)
 PRESETS = {
-    "ANALOG": [  # WAVE (SAW SQR TRI SIN PWM) DTN MIX NOIS | CUT RES DRV KTR
-        ("CRYPT PAD", [0, 14, 64, 6, 42, 8, 6, 40], [95, 90, 120, 105], 6, 0, (0, 60, 10, 100), 5),
-        ("FROST STR", [4, 9, 50, 0, 58, 5, 0, 48], [70, 90, 115, 95], 4, 0, (0, 90, 10, 95), 5),
-        ("WAR HORN", [0, 6, 64, 0, 30, 18, 12, 64], [45, 80, 105, 70], 40, 0, (5, 20, 15, 85), 4),
-        ("DIRGE BASS", [1, 0, 0, 0, 34, 10, 20, 32], [10, 80, 110, 60], 15, 1, (10, 0, 0, 40), 8),
+    "ANALOG": [  # WAVE (SAW SQR TRI SIN PWM) DTN MIX NOIS | CUT RES DRV INT (desert: osc 2's interval; was KTR)
+        ("CRYPT PAD", [0, 14, 64, 6, 42, 8, 6, 0], [95, 90, 120, 105], 6, 0, (0, 60, 10, 100), 5),
+        ("FROST STR", [4, 9, 50, 0, 58, 5, 0, 0], [70, 90, 115, 95], 4, 0, (0, 90, 10, 95), 5),
+        ("WAR HORN", [0, 6, 64, 0, 30, 18, 12, 0], [45, 80, 105, 70], 40, 0, (5, 20, 15, 85), 4),
+        ("DIRGE BASS", [1, 0, 0, 0, 34, 10, 20, 0], [10, 80, 110, 60], 15, 1, (10, 0, 0, 40), 8),
     ],
     "VOICE": [  # VOWL (A 0, E 32, I 64, O 95, U 127) VOWL2 TALK SHIFT | BUZZ BRTH Q RAND
         ("MONKS", [105, 120, 0, -5, 75, 18, 70, 6], [70, 90, 120, 100], 0, 0, (0, 60, 0, 110), 5),
@@ -53,7 +53,7 @@ PRESETS = {
         ("HARPSICHORD", [1, 80, 110, 78, 12, 127, 0, 0], [0, 100, 127, 50], 0, 0, (0, 10, 10, 75), 3),
         ("DUNGEON HARP", [3, 4, 50, 80, 70, 127, 0, 0], [0, 100, 127, 90], 0, 0, (0, 20, 20, 95), 3),
         ("GURDY DRONE", [3, 1, 70, 95, 80, 127, 110, 0], [30, 100, 127, 90], 0, 0, (5, 10, 0, 90), 5),
-        ("DESERT OUD", [1, 35, 62, 65, 23, 127, 0, 0], [0, 100, 127, 45], 0, 0, (0, 5, 18, 75), 23),
+        ("DESERT OUD", [1, 35, 62, 65, 23, 127, 0, 0], [0, 100, 127, 45], 0, 0, (0, 5, 18, 75), 26),
         ("BRASS QANUN", [1, 72, 105, 82, 10, 127, 0, 0], [0, 100, 127, 65], 0, 0, (0, 12, 28, 85), 23),
         # Reduced adaptations of Quilcom's published designs; see docs/SOURCED-SYNTHS.md.
         # SANT model: a directly struck three-string course. DTN 32 = +/-3 cents.
@@ -122,19 +122,20 @@ def check(eng, p):
     assert all(0 <= v <= 127 for v in env + list(fx)) and mono in (0, 1) and 1 <= pat <= NPATTERNS, (eng, name)
 
 
-def strip_block(s, open_c, close_c):
-    return re.sub(rf"\s*{re.escape(open_c)} {re.escape(BEGIN)} {re.escape(close_c)}.*?{re.escape(open_c)} "
-                  rf"{re.escape(END)} {re.escape(close_c)}", "", s, flags=re.S)
-
-
 def write_c(eng, presets):
     fname, arr = ENGINES[eng]
     path = ROOT / "firmware/src" / fname
-    s = strip_block(path.read_text(), "/*", "*/")
-    i = s.index(f"static const preset_t {arr}[] = {{")
-    j = s.index("\n};", i)                              # the array's end
-    block = f"\n    /* {BEGIN} */\n" + "\n".join(c_line(p) for p in presets) + f"\n    /* {END} */"
-    path.write_text(s[:j] + block + s[j:])
+    s = path.read_text()
+    lines = "\n".join(c_line(p) for p in presets)
+    head, tail = f"    /* {BEGIN} */\n", f"\n    /* {END} */"
+    if head in s:                                       # a block there already: replaced where it is (a later
+        a = s.index(head) + len(head)                   # Felucca appended presets after it: the indices stay)
+        s = s[:a] + lines + s[s.index(tail, a):]
+    else:
+        i = s.index(f"static const preset_t {arr}[] = {{")
+        j = s.index("\n};", i)                          # the array's end
+        s = s[:j] + "\n" + head + lines + tail + s[j:]
+    path.write_text(s)
 
 
 def write_js(s, eng, presets):
@@ -146,10 +147,14 @@ def write_js(s, eng, presets):
         depth += {"[": 1, "]": -1}.get(s[j], 0)
         j += 1
     j -= 1
-    inner = strip_block(s[k:j], "/*", "*/").rstrip().rstrip(",")   # (the separator before an old block too)
+    items = ", ".join(js_item(p) for p in presets)
+    head, tail = f"/* {BEGIN} */ ", f" /* {END} */"
+    if head in s[k:j]:                                  # (as write_c: in place)
+        a = s.index(head, k, j) + len(head)
+        return s[:a] + items + s[s.index(tail, a, j):]
+    inner = s[k:j].rstrip().rstrip(",")
     sep = "," if inner.strip() else ""
-    block = f"{sep}\n        /* {BEGIN} */ " + ", ".join(js_item(p) for p in presets) + f" /* {END} */"
-    return s[:k] + inner + block + s[j:]
+    return s[:k] + inner + f"{sep}\n        {head}{items}{tail}" + s[j:]
 
 
 def main():

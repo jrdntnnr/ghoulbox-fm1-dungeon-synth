@@ -142,9 +142,11 @@ static int select_page(void)
     turn(EN_SELECT, 1);
     ok = title_is("ENV DEST");
     turn(EN_SELECT, 1);
+    ok &= title_is("ENV 2");
+    turn(EN_SELECT, 1);
     ok &= title_is("ENV");                              /* (round) */
     turn(EN_SELECT, -1);
-    ok &= title_is("ENV DEST");
+    ok &= title_is("ENV 2");
     go_title("LFO"); frame();
     turn(EN_SELECT, 2);
     ok &= title_is("LFO DEST");

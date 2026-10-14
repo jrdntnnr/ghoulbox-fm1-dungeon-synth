@@ -219,21 +219,24 @@ def build_app():
     elf = OUT / "felucca.elf"
     tc("pi32v2/bin/ld", "-T", FW / "app.ld", OUT / "crt0.o", OUT / "fm1_vec.o", OUT / "fm1_isr.o",
        OUT / "felucca.o", "-o", elf)
-    for sect in ("text.bin", "data.bin", "ramtext.bin"):
+    for sect in ("text.bin", "data.bin", "ramtext.bin", "c1text.bin"):
         (OUT / sect).unlink(missing_ok=True)
-    *_, syms, dis, rt = tc_all(("common/bin/objcopy", "-O", "binary", "-j", ".text", elf, OUT / "text.bin"),
+    *_, syms, dis, rt, c1t = tc_all(("common/bin/objcopy", "-O", "binary", "-j", ".text", elf, OUT / "text.bin"),
                                ("common/bin/objcopy", "-O", "binary", "-j", ".data", elf, OUT / "data.bin"),
                                ("common/bin/objcopy", "-O", "binary", "-j", ".ram_text", elf, OUT / "ramtext.bin"),
+                               ("common/bin/objcopy", "-O", "binary", "-j", ".c1_text", elf, OUT / "c1text.bin"),
                                ("common/bin/objdump", "-t", elf),
                                ("common/bin/objdump", "-d", elf),
-                               ("common/bin/objdump", "-d", "-j", ".ram_text", elf))
+                               ("common/bin/objdump", "-d", "-j", ".ram_text", elf),
+                               ("common/bin/objdump", "-d", "-j", ".c1_text", elf))
     (OUT / "felucca.dis").write_text(dis)
 
     def symv(name):
         return int(re.search(r"^([0-9a-f]+) .*\s" + name + r"$", syms, re.M).group(1), 16)
     img = bytearray((OUT / "text.bin").read_bytes())
-    # .ram_text and .data follow .text at their load addresses; crt0 copies them by words
-    for sect, lname in (("ramtext.bin", "_rt_load"), ("data.bin", "_data_load")):
+    # .ram_text, .c1_text (the second core's loop) and .data follow .text at their load addresses; crt0 copies them by
+    # words
+    for sect, lname in (("ramtext.bin", "_rt_load"), ("c1text.bin", "_c1t_load"), ("data.bin", "_data_load")):
         load = symv(lname)
         if load % 4:
             raise SystemExit(f"{lname} {load:#x} is not word aligned")
@@ -245,10 +248,10 @@ def build_app():
             img += blob
     img += b"\xff" * (-len(img) % 4)
     (OUT / "felucca.bin").write_bytes(img)
-    return bytes(img), syms, dis, rt
+    return bytes(img), syms, dis, rt, c1t
 
 
-def check(img, syms, dis, rt):
+def check(img, syms, dis, rt, c1t):
     errors, notes = [], []
     m = re.search(r"^([0-9a-f]+) .*\s_start$", syms, re.M)
     if not m or int(m.group(1), 16) != APP_XIP:
@@ -260,6 +263,11 @@ def check(img, syms, dis, rt):
         errors.append(f".ram_text contains calls: {rt_calls[:3]}")
     else:
         notes.append(f".ram_text: {len([ln for ln in rt.splitlines() if LINE.match(ln)])} insns, no calls")
+    c1_calls = [ln for ln in c1t.splitlines() if re.search(r"\bcall -?\d+ <", ln)]
+    if c1_calls:                    # the second core's loop (RAM, 0x01C0....) is out of a direct call's reach of XIP:
+        errors.append(f".c1_text calls directly: {c1_calls[:3]}")   # its jobs go through a register
+    elif c1t.strip():
+        notes.append(f".c1_text: {len([ln for ln in c1t.splitlines() if LINE.match(ln)])} insns, no direct call")
     for ln in dis.splitlines():     # nothing may call or load an address in the chip ROM
         mm = LINE.match(ln)
         if not mm:
@@ -278,7 +286,7 @@ def check(img, syms, dis, rt):
     ram_org, ram_len = region["RAM"]
     pool_len = region["POOL"][1]
     bss = sym("_bss_end") - ram_org
-    pool = sym("_pool_end") - sym("_pool_start")
+    pool = max(sym("_pool_end"), sym("_c1_stack_hi")) - sym("_pool_start")   # (the second core's stacks after it)
     notes.append(f"image {len(img)} B; RAM .data+.bss {bss} B of {ram_len}; pool {pool} B of {pool_len}")
     if region["RAM"][0] + ram_len != region["POOL"][0]:
         errors.append("app.ld: POOL does not start where RAM ends")
@@ -360,8 +368,8 @@ def main():
         gen, ldr = ex.submit(generate), ex.submit(build_loader)
         gen.result()
         ota = ldr.result()
-    img, syms, dis, rt = build_app()
-    errors, notes = check(img, syms, dis, rt)
+    img, syms, dis, rt, c1t = build_app()
+    errors, notes = check(img, syms, dis, rt, c1t)
     hal_err = mmio_check()
     errors += hal_err
     if not hal_err:

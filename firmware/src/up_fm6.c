@@ -168,8 +168,8 @@ static uint32_t upf_migrate(const fm6_bank_t *b)
         int32_t s;
         if (!upf_fm6(k) || !upf_get(k, pk))
             continue;
-        s = up_value(r, r->np - 1u) - (int32_t)FM6_NFACTORY_V1;   /* SLOT (P_E7): the record's last value, B n as
-                                                                   * 1.0.2 stored it (8 + n) */
+        s = up_value(r, up_e0(r) + 7u) - (int32_t)FM6_NFACTORY_V1;   /* SLOT (P_E7): the record's E7 (its last value up
+                                                                      * to np 126), B n as 1.0.2 stored it (8 + n) */
         if (s >= 0 && s < (int32_t)FM6_BANK_N && ((b->used >> s) & 1u)) {
             upf_set(k, b->v[s]);
             moved++;

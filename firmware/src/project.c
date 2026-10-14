@@ -110,7 +110,8 @@
 #define PROJ_NG_V2 27u                         /* G_COUNT of formats 1 and 2 */
 #define PROJ_NG 27u                            /* the globals a project holds (FUN7 on); TEXTURE's past them
                                                 * ride in inert slots (proj_tx_put) */
-_Static_assert(G_TXSRC == PROJ_NG && G_KMODE == G_TXWHEN + 1u && G_COUNT == G_KOCT + 1u, "a project's globals, then TEXTURE's");
+_Static_assert(G_TXSRC == PROJ_NG && G_KMODE == G_TXWHEN + 1u && G_DPIT == G_KOCT + 1u && G_COUNT == G_DSPRY + 1u,
+               "a project's globals, then TEXTURE's, KEYS', the GRAIN delay's");
 #define PROJ_NP_V3 57u                         /* P_COUNT of format 3 (P_E0 was 49) */
 #define PROJ_NP_V4 69u                         /* P_COUNT of format 4 (P_E0 61) */
 #define PROJ_PHYS 2u                           /* project_t.phys: PHYS without DUST and DRUM (see the top) */
@@ -135,6 +136,8 @@ typedef struct {
     uint8_t mch[NTRK];                         /* 1.5.5: MIDI IN TRACK's channels, as song.mch (PROJ_MIDI_OFF) */
     char name[PROJ_NAME_LEN];                  /* the project's name: upper-case ASCII 32..126, 0-padded; "" = none */
     uint16_t keys;                             /* optional packed keyboard configuration */
+    int8_t dpit;                               /* GHOULBOX desert (PROJ_DESERT_OFF): the GRAIN delay's PITCH, SPRAY */
+    uint8_t dspry, desert;                     /* .. desert 1: written since INT (an ANALOG track's E7 is INT, not KTR) */
     uint32_t sum;
 } project_t;
 /* Historical FUN5/6 types are frozen, independent of today's P_COUNT/step_t. */
@@ -643,11 +646,17 @@ static uint32_t proj_name_get(char *d, const uint8_t *s)   /* its length */
  * parameters use seven bits (signed ones biased by 64); the eight engine values
  * use eight (biased by 64). LSB first, each track padded to 111 bytes. This is
  * a frozen disk schema, independent of descriptor ranges and engine choice. */
-#define PROJ_PARAM_BYTES 111u
+#define PROJ_PARAM_BYTES 112u                 /* GHOULBOX desert: 111 (np 125 / 126) + P_CANON's byte (np 127) */
+#define PROJ_PARAM_BYTES_V126 111u
+#define PROJ_TEMP_BYTE 110u
 #define PROJ_KEYS_OFF (PROJ_FM6_OFF - 5u)   /* (1.5.5's MIDI IN TRACK takes the 3 before the patches) */
-_Static_assert(P_TC0 == 103u && P_TEMP == 117u && P_E0 == 118u && P_COUNT == 126u, "GBM2 schema: version before changing IDs");
+/* GHOULBOX desert: the three bytes before KEYS': [0] PROJ_DESERT_V (0 in every project before: an ANALOG track's E7 was
+ * KTR then, loaded as INT 0), [1] the GRAIN delay's PITCH (int8), [2] its SPRAY. Firmware before never reads them */
+#define PROJ_DESERT_OFF (PROJ_KEYS_OFF - 3u)
+#define PROJ_DESERT_V 1u
+_Static_assert(P_TC0 == 103u && P_TEMP == 117u && P_E0 == 118u && P_CANON == 126u && P_COUNT == 127u, "GBM2 schema: version before changing IDs");
 _Static_assert(68u + NTRK * (PROJ_PARAM_BYTES + 2u + NSTEP * 9u) +
-               sizeof(chain_config_t) + sizeof(motion_store_t) <= PROJ_KEYS_OFF, "GBM2 fits before patches");
+               sizeof(chain_config_t) + sizeof(motion_store_t) <= PROJ_DESERT_OFF, "GBM2 fits before patches");
 static uint32_t proj_param_bias(uint32_t id)
 {
     /* Frozen numeric IDs: do not derive the disk representation from TP. */
@@ -667,7 +676,9 @@ static int proj_params_pack(uint8_t *b, const int16_t *p)
         for (j = 0; j < width; j++, bit++) b[bit >> 3] |= ((v >> j) & 1u) << (bit & 7u);
     }
     if (p[P_TEMP] < 0 || p[P_TEMP] > 3) return 0;
-    b[PROJ_PARAM_BYTES - 1u] |= (uint8_t)p[P_TEMP] << 3;
+    b[PROJ_TEMP_BYTE] |= (uint8_t)p[P_TEMP] << 3;
+    if (p[P_CANON] < 0 || p[P_CANON] > TP[P_CANON].max) return 0;
+    b[PROJ_PARAM_BYTES - 1u] = (uint8_t)p[P_CANON];     /* np 127: its own byte */
     return 1;
 }
 static int proj_params_unpack(int16_t *p, const uint8_t *b, uint32_t np)
@@ -679,8 +690,10 @@ static int proj_params_unpack(int16_t *p, const uint8_t *b, uint32_t np)
         if (i >= 117u && v > 191u) return 0;
         p[id] = (int16_t)v - (int16_t)proj_param_bias(i);
     }
-    p[P_TEMP] = np == 125u ? 0 : (b[PROJ_PARAM_BYTES - 1u] >> 3) & 3u;
-    return (b[PROJ_PARAM_BYTES - 1u] & (np == 125u ? 0xF8u : 0xE0u)) == 0;
+    p[P_TEMP] = np == 125u ? 0 : (b[PROJ_TEMP_BYTE] >> 3) & 3u;
+    if (np >= 127u && b[PROJ_PARAM_BYTES - 1u] > (uint32_t)TP[P_CANON].max) return 0;   /* (checked as TEMP's bits) */
+    p[P_CANON] = np >= 127u ? (int16_t)b[PROJ_PARAM_BYTES - 1u] : 0;
+    return (b[PROJ_TEMP_BYTE] & (np == 125u ? 0xF8u : 0xE0u)) == 0;
 }
 
 /* MIDI IN TRACK (PROJ_MIDI_OFF): G_ROUTE TRACK is stored as the block its channels make (0 1 2 3 + 4n: CH1-4 .. CH13-16),
@@ -750,6 +763,9 @@ static int proj_pack(project_store_t *out, const project_t *q)
     memcpy(b + pos, &q->chain, sizeof q->chain); pos += sizeof q->chain;
     memcpy(b + pos, &q->motion, sizeof q->motion);
     memcpy(b + PROJ_KEYS_OFF, &q->keys, sizeof q->keys);
+    b[PROJ_DESERT_OFF] = PROJ_DESERT_V;
+    b[PROJ_DESERT_OFF + 1u] = (uint8_t)q->dpit;
+    b[PROJ_DESERT_OFF + 2u] = q->dspry;
     proj_midi_pack(b, q);
     memcpy(b + PROJ_FM6_OFF, q->fm6, sizeof q->fm6);
     {   /* the name (0-padded; stops at the first 0) */
@@ -772,8 +788,8 @@ static int proj_motion_ids(motion_store_t *m, uint32_t np)
         if (id >= np) return 0;
         if (np == 112u && id == 103u)
             m->event[i].param = (m->event[i].param & MOTION_LOCK) | P_TEMP;
-        else if (np < P_COUNT && id >= np - 8u)
-            m->event[i].param = (uint8_t)((m->event[i].param & MOTION_LOCK) | (id + P_COUNT - np));
+        else if (np <= P_E0 + 8u && id >= np - 8u)      /* (np 127: P_E0 where it is, P_CANON after it) */
+            m->event[i].param = (uint8_t)((m->event[i].param & MOTION_LOCK) | (id + P_E0 - (np - 8u)));
     }
     return 1;
 }
@@ -809,8 +825,8 @@ static int proj_unpack(project_t *q, const uint8_t *b, uint32_t st)
     memcpy(&magic, b, 4); memcpy(&size, b + 4, 4); memcpy(&sum, b + st - 4u, 4);
     gbm1 = magic == PROJ_MAGIC_GBM1;
     gbm2 = magic == PROJ_MAGIC;
-    pb = gbm2 ? PROJ_PARAM_BYTES : np;
-    if ((gbm2 && (!v10 || (np != 125u && np != P_COUNT))) || (gbm1 && (st != PROJ_STORE_V9 || np != 103u)) ||
+    pb = gbm2 ? (np >= 127u ? PROJ_PARAM_BYTES : PROJ_PARAM_BYTES_V126) : np;
+    if ((gbm2 && (!v10 || (np != 125u && np != 126u && np != P_COUNT))) || (gbm1 && (st != PROJ_STORE_V9 || np != 103u)) ||
         (!gbm1 && !gbm2 && magic != (v7 ? PROJ_MAGIC_V7 : st == PROJ_STORE_V8 ? PROJ_MAGIC_V8 :
             st == PROJ_STORE_V9 ? PROJ_MAGIC_V9 : PROJ_MAGIC_FUNA)) ||
         size != st || sum != proj_hash(b, st - 4u) || np < 8u || np > P_COUNT ||
@@ -820,7 +836,12 @@ static int proj_unpack(project_t *q, const uint8_t *b, uint32_t st)
     memset(q, 0, sizeof *q); q->magic = PROJ_MAGIC; q->size = sizeof *q;
     memcpy(q->g, b + 8, sizeof q->g); q->sel = b[62]; q->parts = b[63]; q->phys = b[64];
     if ((magic == PROJ_MAGIC_FUNA && np != 112u) || magic == PROJ_MAGIC_V9) q->g[G_TAPE] = q->g[G_CRSH] = 0;
-    if (gbm2 && np == 126u) memcpy(&q->keys, b + PROJ_KEYS_OFF, 2);
+    if (gbm2 && np >= 126u) {
+        memcpy(&q->keys, b + PROJ_KEYS_OFF, 2);
+        if (b[PROJ_DESERT_OFF] == PROJ_DESERT_V) {
+            q->desert = 1; q->dpit = (int8_t)b[PROJ_DESERT_OFF + 1u]; q->dspry = b[PROJ_DESERT_OFF + 2u];
+        }
+    }
     else if (magic == PROJ_MAGIC_FUNA && np == 112u) {
         memcpy(&q->keys, b + PROJ_FM6_OFF - 4u, 2);
         /* Original ambience becomes an always-on cave TEXTURE. The upstream
@@ -837,7 +858,7 @@ static int proj_unpack(project_t *q, const uint8_t *b, uint32_t st)
         int16_t values[P_COUNT], def[P_COUNT];
         if (gbm2) {
             if (!proj_params_unpack(values, b + pos, np)) return 0;
-            pos += PROJ_PARAM_BYTES;
+            pos += pb;
         } else for (i = 0; i < np; i++) { if (b[pos] > 191u) return 0; values[i] = (int16_t)b[pos++] - 64; }
         q->t[t].engine = b[pos++]; q->t[t].preset = b[pos++];
         if (q->t[t].engine >= NENGINES) return 0;
@@ -846,6 +867,8 @@ static int proj_unpack(project_t *q, const uint8_t *b, uint32_t st)
         else if (gbm1) params_gbm1(q->t[t].p, values, def);
         else if (np == 112u) params_ghoul2(q->t[t].p, values, def);
         else params_by_count(q->t[t].p, values, np, def);
+        if (!q->desert && q->t[t].engine == ENGI_ANALOG) q->t[t].p[P_E7] = 0;   /* (before INT: KTR there) */
+        if (t + 1u == NTRK) q->desert = PROJ_DESERT_V;                            /* (migrated: as written now) */
         for (i = 0; i < NSTEP; i++) {
             step_t *s = &q->t[t].step[i]; uint32_t meta, nd = 0;
             for (uint32_t j = 0; j < 4u; j++) {         /* (FUN10: bit 7 of note j is bit j of the nudge) */
@@ -1001,6 +1024,9 @@ static void project_capture(project_t *p)
         p->g[i] = song.g[i];
     proj_tx_put(p);
     p->keys = (uint16_t)(1 + song.g[G_KMODE] + 3 * (song.g[G_KTRK] + 4 * (song.g[G_KOCT] + 5 * song.g[G_KSPLIT])));
+    p->desert = PROJ_DESERT_V;
+    p->dpit = (int8_t)clamp(song.g[G_DPIT], -12, 12);
+    p->dspry = (uint8_t)clamp(song.g[G_DSPRY], 0, 127);
     p->sel = song.sel;
     p->parts = NPART;
     p->phys = PROJ_PHYS;
@@ -1214,6 +1240,8 @@ static int project_restore_runtime(const project_t *input)
             song.g[i] = (int16_t)clamp(p->g[i], GP[i].min, GP[i].max);
     proj_tx_get(p);
     proj_keys_get(p);
+    song.g[G_DPIT] = p->desert ? (int16_t)clamp(p->dpit, -12, 12) : 0;   /* (a project before: the plain delay) */
+    song.g[G_DSPRY] = p->desert ? (int16_t)clamp(p->dspry, 0, 127) : 0;
     for (k = 0; k < NTRK; k++)                          /* MIDI IN TRACK's channels (1.5.5; 0, channels 1..4, before) */
         song.mch[k] = (uint8_t)(p->mch[k] < MCH_N ? p->mch[k] : 0u);
     midi_route = MIDI_ROUTE_AGAIN;                      /* (events_block: what the channels no longer hear let go) */

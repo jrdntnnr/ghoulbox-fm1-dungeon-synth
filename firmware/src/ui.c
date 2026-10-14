@@ -758,6 +758,25 @@ static void open_family(uint32_t fam)
     page_entered();
 }
 
+/* a page button held and PRESETS turned (GHOULBOX desert, ui_input.c): the family's pages one way or the other */
+static void fam_turn(uint32_t fam, int32_t d)
+{
+    uint32_t n, i;
+    if (ui.home || cur_page()->fam != fam) {
+        open_family(fam);
+        return;
+    }
+    i = ui.page;
+    for (n = 0; n < NPAGES; n++) {
+        i = (i + (d > 0 ? 1u : (uint32_t)NPAGES - 1u)) % NPAGES;
+        if (PAGES[i].fam == fam && page_visible(i))
+            break;
+    }
+    ui.page = (uint8_t)i;
+    ui.fam_last[fam] = ui.page;
+    page_entered();
+}
+
 static void go_home(void)
 {
     ui.home = 1;

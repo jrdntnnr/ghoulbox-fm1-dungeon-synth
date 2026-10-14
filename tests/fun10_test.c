@@ -157,8 +157,8 @@ static int lfo(void)
     }
     bad += check("LFO 2 is no automation (motion_param), its page SYNC TRIG POL after LFO (LFO's family)",
                  !motion_param(P_LSYNC) && !motion_param(P_LTRIG) && !motion_param(P_LPOL) && !motion_param(P_SQNT) &&
-                 motion_param(P_LN7) && motion_param(P_E0) && PAGES[3].id[0] == P_LSYNC && !strcmp(PAGES[3].title, "LFO 2") &&
-                 PAGES[3].fam == FAM_LFO && PAGES[2].graph == GR_LFO && !strcmp(PAGES[4].title, "LFO DEST"));
+                 motion_param(P_LN7) && motion_param(P_E0) && PAGES[4].id[0] == P_LSYNC && !strcmp(PAGES[4].title, "LFO 2") &&
+                 PAGES[4].fam == FAM_LFO && PAGES[3].graph == GR_LFO && !strcmp(PAGES[5].title, "LFO DEST"));
     go_page(GR_LFO);
     ui.page++;                                       /* LFO 2 */
     page_entered();
@@ -507,10 +507,10 @@ static int formats(void)
         ok = proj_pack(&st, &a) && !a.t[0].p[P_SPRD] && !a.t[0].p[P_ITYPE] && !a.t[0].p[P_FTYPE] && !a.t[0].p[P_ESYNC];
         memcpy(so.raw, st.raw, 68u);
         uint32_t old_magic = PROJ_MAGIC_FUNA; memcpy(so.raw, &old_magic, 4);
-        so.raw[66] = (uint8_t)(P_COUNT - drop);
+        so.raw[66] = (uint8_t)(P_COUNT - 1u - drop);     /* (no P_CANON after P_E7 then either) */
         for (tr = 0; tr < NTRK; tr++) {
             for (i = 0; i < P_COUNT; i++)
-                if (i < from || i >= P_E0)
+                if (i < from || (i >= P_E0 && i <= P_E7))
                     so.raw[po++] = (uint8_t)(a.t[tr].p[i] + 64);
             pi += PROJ_PARAM_BYTES;
             memcpy(so.raw + po, st.raw + pi, 2u + NSTEP * 9u);
@@ -571,9 +571,13 @@ static int formats(void)
         a.t[k].p[P_SQNT] = 1;
         for (i = 0; i < NSTEP; i++)
             step_set_nudge(&a.t[k].step[i], 0);
+        if (a.t[k].engine == ENGI_ANALOG) {
+            a.t[k].p[P_E7] = 0;                       /* (ANALOG's E7 was KTR then: INT loads as 0) */
+        }
     }
     memcpy(a.name, "OLD SONG", 9);
     a.keys = 0; /* legacy formats had no keyboard configuration word */
+    a.dpit = 0; a.dspry = 0;                          /* (nor the GRAIN delay's PITCH and SPRAY) */
     chain_defaults(&a.chain);                         /* a song of rows {slot, repeat} (36 bytes then) */
     a.chain.count = 3;
     a.chain.row[0] = chain_row_of(0, 4); a.chain.row[1] = chain_row_of(3, 16); a.chain.row[2] = chain_row_of(1, 1);
@@ -643,7 +647,7 @@ static int formats(void)
         note_step(t, 0, 60, -8);                     /* (bit 4 of the flags set) */
         note_step(t, 1, 62, 3);
         memset(&r, 0, sizeof r);
-        r.used = UP_USED; r.ver = UP_VER; r.engine = 0; r.np = P_COUNT;
+        r.used = UP_USED; r.ver = UP_VER; r.engine = 2; r.np = P_COUNT;   /* (not ANALOG: its E7 is INT since the desert, 0 for records without the mark) */
         for (i = 0; i < P_COUNT; i++) { up_set_value(&r, i, t->p[i]); def[i] = TP[i].def; }
         up_pat_from(&r, t->step);
         up_params(&r, v, def);
@@ -684,11 +688,12 @@ static int midi_track_fmt(void)
     memset(song.mch, 0, sizeof song.mch);
     song.g[G_ROUTE] = 0;
     project_capture(&a);
-    ok = proj_pack(&st, &a) && PROJ_MIDI_OFF == PROJ_FM6_OFF - 3u && end <= PROJ_MIDI_OFF && PROJ_FM6_OFF - end == 16u;
+    ok = proj_pack(&st, &a) && PROJ_MIDI_OFF == PROJ_FM6_OFF - 3u && end <= PROJ_MIDI_OFF && PROJ_FM6_OFF - end == 12u;   /* (desert: CANON's byte a track) */
     for (i = end; i < PROJ_FM6_OFF; i++)
-        ok &= i - PROJ_KEYS_OFF < 2u || st.raw[i] == 0u;   /* (GHOULBOX 2.1: KEYS in two of them) */
+        ok &= i - PROJ_KEYS_OFF < 2u || i - PROJ_DESERT_OFF < 3u || st.raw[i] == 0u;   /* (GHOULBOX 2.1: KEYS in two of
+                                                         * them; desert: the marker, PITCH, SPRAY in three) */
     ok &= proj_import(&b, &st, sizeof st) && !memcmp(&a, &b, sizeof a) && !b.mch[0] && !b.mch[3] && !b.g[G_ROUTE];
-    bad += check("MIDI IN TRACK (1.5.5): CH1-4 and the default channels pack as before (the 16 spare bytes all 0)", ok);
+    bad += check("MIDI IN TRACK (1.5.5): CH1-4 and the default channels pack as before (the 12 spare bytes all 0)", ok);
 
     song.g[G_ROUTE] = ROUTE_TRACK;
     mch_set(0, 9); mch_set(1, 1); mch_set(2, MCH_OMNI); mch_set(3, MCH_OFF);

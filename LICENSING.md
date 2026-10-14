@@ -55,6 +55,7 @@ All by Hügelton Instruments (Leo Kuroshita), in this tree:
 | Rings by Emilie Gillet (<https://github.com/pichenettes/eurorack>): the PHYS engine's sympathetic strings, ported to fixed point | MIT | `firmware/src/phys_symp.c`, `LICENSES/MIT-Rings.txt` |
 | msfa by Google Inc. and Pascal Gauthier, from Dexed (<https://github.com/asb2m10/dexed>): the FM6 engine's synthesis, ported to integer C (Dexed itself is GPL-3.0; only msfa is used; the FM6 factory patches are Felucca's own) | Apache-2.0 | `firmware/src/fm6_core.c`, `LICENSES/Apache-2.0-msfa.txt` |
 | klattsch by Tony Gies (<https://github.com/tgies/klattsch>): design reference for the VOICE engine; no code copied. Formant data from Klatt (1980) / Hillenbrand et al. (1995) | MIT (klattsch) | credit only |
+| JIANT (<https://github.com/juanjiant-bit/JIANT>), a Felucca fork: the second core (its start, guards and faults, after Melodee by keremimo <https://github.com/keremimo/melodee> and X0X), the COMB filter, ENV LOOP, ANALOG INT and the GRAIN delay, ported to this tree | GPL-3.0 | `firmware/hal/fm1_multicore.h`, `firmware/src/fx.c`, `voice.c`, `eng_analog.c` |
 | X0X by charlesvestal (<https://github.com/charlesvestal/fm1-x0x>), a Felucca fork: the design of the browser emulator (the worklet, the device clock driven by its audio, the exports); its files credit it in their headers | GPL-3.0 | `web/emu/` |
 | DotGothic16 font by The DotGothic16 Project Authors (<https://github.com/fontworks-fonts/DotGothic16>): the browser emulator's knob labels, served with its page (cut to printable ASCII; the font declares no Reserved Font Name) | SIL OFL 1.1 | `web/emu/fonts/DotGothic16-subset.woff`, `LICENSES/OFL-DotGothic16.txt` (also `web/emu/fonts/OFL.txt`) |
 | Vazirmatn font by The Vazirmatn Project Authors (<https://github.com/rastikerdar/vazirmatn>) (SARDAB): the web editor's text and numbers, Latin and Persian, served with its page (cut to Latin and Arabic script; the font declares no Reserved Font Name) | SIL OFL 1.1 | `web/fonts/vazirmatn.woff2`, `LICENSES/OFL-Vazirmatn.txt` (also `web/fonts/OFL-Vazirmatn.txt`) |
@@ -109,10 +110,11 @@ by those owners.
 
 Felucca never enables the Bluetooth / Wi-Fi radio of the hardware.
 
-## Optional desert recordings
+## Desert recordings
 
 `assets/desert/oud*`, `qanun*` and `ney-air*` audio/data are CC0-1.0, separate from
-the GPL firmware. Oud: hammondman; Turkish kanun: barisbozkurt; ney: aliaref.
+the GPL firmware. The oud and ney-air recordings are also built in as the SAMPLE sets OUD
+and NEY (tools/gen_samples.py SET_SRC), in place of Felucca's FLUTE and SAX. Oud: hammondman; Turkish kanun: barisbozkurt; ney: aliaref.
 [Source URLs, license links and hashes](assets/desert/sources.json) and
 [processing/usage notes](assets/desert/README.md) travel with the sample pack.
 The source MP3 previews were converted and pitch-calibrated; original masters

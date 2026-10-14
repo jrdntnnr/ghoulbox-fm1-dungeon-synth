@@ -575,11 +575,62 @@ static void seq_trn_test(void)
     puts("scales: QNT SEQ+T moves the sequence by TRN then snaps (steps unchanged, nothing held); other QNT values ignore TRN");
 }
 
+/* GHOULBOX desert: the maqamat after SHUR2 (SABA, KURD, NAHAWAND, SIKAH, JIHARKAH, ATH KURD, NAWATHAR) and
+ * SCALE_ARABIC (gen_scales.py "names": the header names notes the Arabic way, ui_input.c names_of) */
+static uint32_t scale_id(const char *name)
+{
+    uint32_t s;
+    for (s = 0; s < NELEM(N_SCALE); s++)
+        if (!strcmp(N_SCALE[s], name))
+            return s;
+    assert(0);
+    return 0;
+}
+static void white_keys_play(track_t *t, const uint8_t *want, uint32_t n)
+{
+    uint32_t k, w;
+    t->p[P_QUANT] = QN_WHITE;
+    for (k = 7u, w = 0; w < n; k++) {
+        if (k != WHITE_KEYS[w + 4u])
+            continue;
+        assert(kb_map(t, k) == want[w]);
+        w++;
+    }
+}
+static void maqam_test(void)
+{
+    static const uint8_t SABA_D[7] = {62, 64, 65, 66, 69, 70, 72};      /* D Ed F Gb A Bb C */
+    static const uint8_t SIKAH_E[7] = {64, 65, 67, 69, 70, 72, 74};     /* Ed F G A Bb C D */
+    static const uint8_t ATHKURD_C[7] = {60, 61, 63, 66, 67, 68, 71};   /* C Db Eb F# G Ab B */
+    track_t *t = &trk[0];
+    t->p[P_TRANS] = 0;
+    song.octave = 0;
+    t->p[P_ROOT] = 2;
+    t->p[P_SCALE] = (int16_t)scale_id("SABA");
+    white_keys_play(t, SABA_D, 7);
+    assert(tuning_cents(t, 64) == -50 && tuning_cents(t, 66) == 0);
+    t->p[P_ROOT] = 4;
+    t->p[P_SCALE] = (int16_t)scale_id("SIKAH");
+    white_keys_play(t, SIKAH_E, 7);
+    assert(tuning_cents(t, 64) == -50 && tuning_cents(t, 65) == 0);     /* the tonic itself is the half-flat */
+    t->p[P_ROOT] = 0;
+    t->p[P_SCALE] = (int16_t)scale_id("ATH KURD");
+    white_keys_play(t, ATHKURD_C, 7);
+    t->p[P_SCALE] = (int16_t)scale_id("JIHARKAH");
+    assert(tuning_cents(t, 71) == -50);
+    assert(scale_arabic(scale_id("BAYATI")) && scale_arabic(scale_id("SABA")) && scale_arabic(scale_id("NAWATHAR")));
+    assert(!scale_arabic(scale_id("MAJ")) && !scale_arabic(scale_id("HUNG MIN")) && !scale_arabic(scale_id("SHUR1")));
+    t->p[P_QUANT] = 0;
+    t->p[P_SCALE] = 0;
+    puts("scales: SABA, SIKAH, ATH KURD, JIHARKAH map and tune; SCALE_ARABIC marks the maqamat");
+}
+
 int main(void)
 {
     host_tracks_init();
     mapping_test();
     appended_test();
+    maqam_test();
     all_keys_test();
     key_events_test();
     seq_quant_test();

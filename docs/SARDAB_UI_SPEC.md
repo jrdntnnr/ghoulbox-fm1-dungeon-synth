@@ -2,7 +2,7 @@
 
 **Status:** Proposed — design and implementation handoff, not implemented  
 **Date:** 11 October 2026  
-**Repository:** https://github.com/jrdntnnr/ghoulbox-fm1-dungeon-synth  
+**Repository:** https://github.com/jrdntnnr/sardab  
 **Reference branch / commit:** `microtonal` / `5c16a252e959b5a19261c580f08cf20ee2a9755e`  
 **Platform:** M-VAVE FM-1 hardware UI, browser editor, browser emulator, and public-facing assets  
 **Companion document:** `SARDAB_DASTGAH_IMPLEMENTATION_PLAN.md` — music engine, storage and sequencing decisions; **not repeated here**.
@@ -590,6 +590,6 @@ Any pre-existing red result should be captured in the PR description with **base
 
 ## 14. Codex handoff / implementation instruction
 
-> Work on `jrdntnnr/ghoulbox-fm1-dungeon-synth`, branch `microtonal`, starting by confirming the current HEAD and reading `SARDAB_UI_SPEC.md` and `SARDAB_DASTGAH_IMPLEMENTATION_PLAN.md`. Implement **UI-0 and UI-1 only** first. Do not alter DSP, tuning data, scale IDs, project serialization, MIDI/SysEx, sound presets or user samples. Preserve stored palette identities, existing menu/page navigation, credits and licensing. Reuse `tools/gen_ui_palettes.py`, firmware token names and the real 240×240 emulator. Generate screenshots, verify RGB565 contrast and old palette parity, record flash/draw-cost changes, run UI/web regression tests, and stop with a PR for visual sign-off before redesigning SCL/TUNE screens. Never enable MODE/STATE device controls without their real supporting capabilities. The definitive spelling is `SARDAB / سرداب`.
+> Work on `jrdntnnr/sardab`, branch `microtonal`, starting by confirming the current HEAD and reading `SARDAB_UI_SPEC.md` and `SARDAB_DASTGAH_IMPLEMENTATION_PLAN.md`. Implement **UI-0 and UI-1 only** first. Do not alter DSP, tuning data, scale IDs, project serialization, MIDI/SysEx, sound presets or user samples. Preserve stored palette identities, existing menu/page navigation, credits and licensing. Reuse `tools/gen_ui_palettes.py`, firmware token names and the real 240×240 emulator. Generate screenshots, verify RGB565 contrast and old palette parity, record flash/draw-cost changes, run UI/web regression tests, and stop with a PR for visual sign-off before redesigning SCL/TUNE screens. Never enable MODE/STATE device controls without their real supporting capabilities. The definitive spelling is `SARDAB / سرداب`.
 
 **Implementation order:** palette/brand → existing SCL/TUNE/CHORD/HOME → web tuning workspace → reference UI → future real modal-state integration.

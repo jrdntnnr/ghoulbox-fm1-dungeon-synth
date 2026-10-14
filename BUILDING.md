@@ -61,6 +61,7 @@ Build options (environment, `0` or `1`; defaults in `firmware/src/felucca.c`, `c
 | `FELUCCA_UAC_48K` | 1 | `0`: the USB audio input at 44.1 kHz only, as up to 1.0.5.2 (`firmware/src/usb.c`) |
 | `FELUCCA_UAC_AS_FIRST` | 1 | the audio control header lists the audio streaming interface before the MIDI one, so the USB audio driver of older macOS (up to 15) finds it; `0`: 1.0 to 1.5's order, byte for byte (`firmware/src/usb.c`) |
 | `FELUCCA_UART` | 1 | TRS MIDI IN |
+| `FELUCCA_DUAL_CORE` | 1 | the second core renders some synth parts (JIANT; `hal/fm1_multicore.h`). REC held at power-on: one core for the session; MENU > ABOUT shows CORES 1 / 2 and why |
 | `FELUCCA_SLICE` | 0 | target dungeon profile omits the already-hidden SLICE engine to fit flash; `1` exceeds the current slot |
 | `FELUCCA_ICONS` | 1 | parameter icons on the knob cards |
 | `FELUCCA_FM4` | 0 | the retired DIGITAL engine (4-operator FM) instead of its FM6 conversion |
@@ -119,7 +120,7 @@ They identify the exact build and its local installer; the public installer belo
 may still serve an older published preview.
 
 Use the web installer in Chrome or Edge:
-<https://jrdntnnr.github.io/ghoulbox-fm1-dungeon-synth/webapp/installer/>. It installs this fork’s development preview; see [validation status](docs/INTEGRATION-STATUS.md).
+<https://jrdntnnr.github.io/sardab/webapp/installer/>. It installs this fork’s development preview; see [validation status](docs/INTEGRATION-STATUS.md).
 
 From the command line (needs `pip3 install mido python-rtmidi`):
 

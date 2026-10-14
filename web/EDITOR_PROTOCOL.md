@@ -1,7 +1,7 @@
 # Felucca editor protocol (SysEx over USB-MIDI)
 
 SARDAB 2.1 retains the command protocol below. Current INFO reports
-P_COUNT=126, P_E0=118, G_COUNT=37. TC0–TC11 remain 103–114, custom masks
+P_COUNT=126, P_E0=118, G_COUNT=39 (37, 38: the GRAIN delay's PITCH and SPRAY, GHOULBOX desert). TC0–TC11 remain 103–114, custom masks
 115–116, TEMP is 117, TEXTURE globals remain 27–32, and KEYS uses 33–36.
 NOTE NAMES is appended at menu ID 31; DESERT is sound category 9. Read INFO
 and descriptors rather than assuming the historical counts in examples.
@@ -168,8 +168,8 @@ editor shows them on a DRUM track only (the device's pages). They are the sound'
 sets them back to 127, user presets and projects store them (older ones load at 127), motion records them.
 
 Other enums that grew: `P_SDIV` (DIV, id 30) has 10 names (1/4, 1/8, 1/16, 1/32, 8T, 16T, 1/2, 1/1, 2BAR,
-4BAR; the first six keep their numbers), `P_AMODE` (id 17) 15 (OFF, UP, DN, UPDN, RND, ORD, REPEAT, and since 1.2 DNUP, UP+8, CONV, DIVG, PINKY, THUMB, WALK,
-CHORD: values 7..14, appended; an editor that knows only 7 names shows the value by `DESC`'s name) and the
+4BAR; the first six keep their numbers), `P_AMODE` (id 17) 16 (OFF, UP, DN, UPDN, RND, ORD, REPEAT, and since 1.2 DNUP, UP+8, CONV, DIVG, PINKY, THUMB, WALK,
+CHORD: values 7..14, appended; GHOULBOX desert TRILL 15; an editor that knows only 7 names shows the value by `DESC`'s name) and the
 global `G_CLOCK` (id 2, label "CLK") 3 (INT, USB, TRS). `G_MIDI` (id 12) is an enum of USB / TRS that nothing reads.
 Since 1.5.1 the delay's `G_DTIME` (global id 4, label "TIME") has 13 names: P_SDIV's ten at the same values, then
 1/8D, 1/16D, 1/4D (values 10..12, dotted: 3/4, 3/8, 3/2 of a quarter); `DESC` sends all 13, max 12. P_SDIV, P_ARATE
@@ -789,7 +789,7 @@ No new command or INFO tag: P_COUNT 111 and P_E0 103 (from `INFO`, with the INSE
 
 | id | label | values |
 | --- | --- | --- |
-| 101 | `TYPE` | enum LP BP HP, default LP. ANALOG's filter (Discussion #104): the state-variable filter's low-pass (as before, bit for bit), band-pass or high-pass output, CUT / RES / KTR and every cutoff routing as they are. Other engines ignore it. On the device: EDIT > FILTER (TYPE CUT RES KTR), an ANALOG track's page after EDIT 2 |
+| 101 | `TYPE` | enum LP BP HP COMB, default LP. ANALOG's filter (Discussion #104): the state-variable filter's low-pass (as before, bit for bit), band-pass or high-pass output, CUT / RES and every cutoff routing as they are; COMB (GHOULBOX desert, below) a tuned comb instead. Other engines ignore it. On the device: EDIT > FILTER (TYPE CUT RES DRV), an ANALOG track's page after EDIT 2 |
 | 102 | `ESYNC` | enum OFF ON, default OFF. ENV SYNC (Discussion #175): ON, the amp envelope's ATK DEC REL (ids 1, 2, 4) are note values of the tempo (BPM, or the external clock's measured tempo) instead of 1 ms .. 10 s. On the device: ENV DEST's KNOB 4 |
 
 Both are the sound's (a factory preset or TOOLS INIT sets LP / OFF; user presets and library files store them). Neither can
@@ -813,6 +813,46 @@ more). A FUN10 of 104 (1.2 .. 1.4) loads by count (the INSERT OFF, TYPE LP, ESYN
 moved up by seven). Firmware 1.2 .. 1.4 refuses a FUN10 of 111 (more parameters than it has: its slot shows EMPTY, a
 backup PUT of one answers rc 1); user presets of 111 load there by count (the seven left out). Library files of 104 map
 by label: the INSERT, TYPE and ESYNC unset.
+
+## GHOULBOX desert: COMB, ENV LOOP, ANALOG INT, GRAIN delay
+
+Four sound items ported from JIANT (a Felucca fork). No new command; `INFO` says G_COUNT 39 and `DESC` describes each.
+
+| id | label | values |
+| --- | --- | --- |
+| 101 | `TYPE` | a fourth value, COMB: a tuned comb (Karplus-Strong style) on the ANALOG part's sum instead of the SVF. Its pitch is the newest note's, CUT (E4) detunes it (64 = the note), RES (E5) the feedback (0 a dull pluck, 127 a long metallic ring); the ring keeps sounding after the last voice. Other engines ignore COMB as they ignore BP / HP |
+| 8 | `LOOP` | enum OFF ON, default OFF (was `ED_FX`, ENV > FX, inert since 1.0). ON: a held note's amp envelope restarts from its sustain each time it reaches it (attack, decay, again): an ADSR-shaped LFO. OFF: as before. On the device: ENV 2 |
+| 125 | ANALOG `INT` | ANALOG's E7, semitones −24..24, default 0: oscillator 2's interval, added to its pitch (SUB and SYNC too). Was KTR, the cutoff's key tracking, which is fixed now at what KTR 64 gave (one CUT step per four semitones) |
+| G 37 | `PITCH` | semitones −12..12, default 0 |
+| G 38 | `SPRAY` | 0..127, default 0. PITCH or SPRAY above 0 turns the global delay into a GRAIN delay: each repeat read as 2048-sample grains, transposed by PITCH, SPRAY scattering each grain's start (0 = the plain delay, bit for bit). On the device: FX > DLY 2 |
+
+Projects (FUN10, no format change): 3 of the 16 spare bytes before the FM6 patches, `PROJ_DESERT_OFF` = 3304 (just below
+KEYS at 3307): [0] 1 (the marker), [1] PITCH as a signed byte, [2] SPRAY. A project without the marker (every older one)
+loads with the plain delay and every ANALOG track's E7 as 0 (its KTR value would be an interval), and is a marked one
+once written again. Covered by the hash as the rest.
+
+User presets (UP_GET / UP_PUT records, v4 and later): bit 7 of the category byte (`packed[UP_CAT_AT]`) marks a record
+written since INT; `UP_LIST` and the device's category filter never show it. An ANALOG record without it loads E7 as 0.
+Library files map by label as always (`INT` unset = 0).
+
+### Round two: CANON, ARP DRONE, STRINGS, the tape motor, OUD / NEY
+
+`INFO` says P_COUNT **127** (P_E0 stays 118). The one new parameter sits after the engine's eight:
+
+| id | label | values |
+| --- | --- | --- |
+| 126 | `CANON` | enum OFF 3RD 5TH 7TH OCT -3RD -5TH -7TH -OCT R 3RD R 5TH R OCT R -5TH R -OCT, default OFF: a second playhead half the pattern's LEN behind (one step at least), each step's notes transposed by that many scale degrees (OCT: twelve semitones), the R values playing the pattern backwards. Page CANON (the ARP family). No MIDI LEARN code (ids after P_E7 have none: `ml_code` stops at 127) |
+| 23 `MODE` | a 17th value, DRONE: the lowest held key sounds on (as the CHORD modes' first extra note), the others arpeggiate UP over it |
+| 24 `TYPE` (global) | a fourth value, STRINGS: four comb lines tuned to the lowest held note's scale degrees (I III V VII), SIZE the sustain, DAMP the brightness |
+
+The delay's read point glides to `DTIME`'s value (two poles of ~93 ms each: fx.c `DLY_SLEW`); a project's delay settles
+within a quarter second of loading. The SAMPLE sets 2 and 3 are **NEY** and **OUD** (`DESC` of SET / SRC names them; the
+values are FLUTE's and SAX's).
+
+Projects: `PROJ_PARAM_BYTES` is 112 per track for np 127 (111 for np 125 / 126, which still load): byte 111 holds CANON,
+unsigned, after the 110 packed bytes and TEMP's bits in byte 110. The fit before `PROJ_DESERT_OFF` holds (3300 of 3304).
+Stores with np 127 put CANON after P_E7 (`params_by_count` reads such extras; older stores read it as OFF). `UP_PMAX`'s
+144 values hold it. Motion (automation) records may carry id 126.
 
 ## v7: full backup (65-67)
 
