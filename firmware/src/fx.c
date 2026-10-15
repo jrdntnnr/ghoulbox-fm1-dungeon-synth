@@ -1672,6 +1672,8 @@ static const char *mc_status(void)                      /* MENU > ABOUT's line, 
         return "CORES 2";
     if (mc_off)
         return "CORES 1 (REC AT POWER-ON)";
+    if (!fm1_power_ready)
+        return "CORES 1 (POWER)";                        /* the supplies did not take the stock setup (hal/fm1_power.h) */
     if (fm1_mc_lost)
         return LOST[fm1_mc_lost & 3u];
     return fm1_mc_barred() ? LOST[0] : "CORES 1 (NO START)";

@@ -213,11 +213,12 @@ static void fm1_main(void)
         settings_save();
     }
 #if FELUCCA_DUAL_CORE
-    /* (JIANT 0.6.71) the second core, unless REC is held at power-on (one core this session: mc_off), a boot failed (a
+    /* (JIANT 0.6.71) the second core, unless REC is held at power-on (one core this session: mc_off), the supplies
+     * did not take the stock setup (hal/fm1_power.h: one core, the rails as the SPL left them), a boot failed (a
      * second would enter the rescue), or it was given up / beside a crash since power-on (hal/fm1_multicore.h
      * fm1_mc_bar). Its entry word is in the protected top of RAM: opened for it, interrupts off (up to 20 ms) */
     mc_off = (uint8_t)((fm1_in.buttons >> panel.btn[B_REC]) & 1u);
-    if (!mc_off && !bootguard.failed && !fm1_mc_barred()) {
+    if (!mc_off && fm1_power_ready && !bootguard.failed && !fm1_mc_barred()) {   /* (power: fm1_cstart) */
         fm1_irq_off();
         fm1_guard_unlock_top();
         fm1_mc_start();
@@ -366,6 +367,8 @@ void fm1_cstart(void)
         stack_paint(_sstack_lo, _sstack_top);
     }
     fm1_mailbox_clear();
+    fm1_power_ready = (uint8_t)fm1_power_init();   /* (Melodee 1.3.6) the stock V15 supplies: SYSVDD 1.38 V, VDC14
+                                                 * 1.60 V, DCDC; the SPL left them lower. Before the second core */
     fm1_guard_enable(FM1_GUARD_STACK | FM1_GUARD_WRITE | FM1_GUARD_BUS | FM1_GUARD_PC);
     fm1_boot.p3_rst = (uint8_t)p3;
     fm1_boot.rst_src = src;

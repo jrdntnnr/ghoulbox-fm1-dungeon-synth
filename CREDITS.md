@@ -16,6 +16,8 @@ thanks the work below; each keeps its own licence (see [LICENSE](LICENSE), [LICE
 - FM6 engine: msfa from [Dexed](https://github.com/asb2m10/dexed) by Google Inc. and Pascal Gauthier ([Apache-2.0](LICENSES/Apache-2.0-msfa.txt))
 - Browser emulator: after [X0X](https://github.com/charlesvestal/fm1-x0x) by [charlesvestal](https://github.com/charlesvestal) (GPL-3.0), a Felucca fork whose browser build showed the way
 - Second core, COMB filter, ENV LOOP, ANALOG INT, GRAIN delay: ported from [JIANT](https://github.com/juanjiant-bit/JIANT) (GPL-3.0), a Felucca fork; its second-core start and guards after [Melodee](https://github.com/keremimo/melodee) by keremimo and X0X (GPL-3.0)
+- Supply startup (the stock V15 rails before the second core, `hal/fm1_power.h`, its test): from [Melodee](https://github.com/keremimo/melodee) 1.3.6 by Kerem Kilic (GPL-3.0), as it came
+- From Felucca 1.6.1: the second core held with the bus traps off before a reset or update, a package for another board refused before any erase, MENU > LARGE's one face per knob (#251); from JIANT 0.6.74: a voice given up fades over 4 ms
 - Package format and boot files: [JieLi AC79 SDK](https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK) ([Apache-2.0](LICENSES/Apache-2.0.txt); three of its files are in every package, none in this tree)
 - Contributions: [keremimo](https://github.com/keremimo) (white-key scales, #2), [ChanceTheMaker](https://github.com/ChanceTheMaker)
   (TRS MIDI, bend, sustain and clock, palettes, favourites, editor display settings: #8, #10, #11, #12),

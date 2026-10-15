@@ -250,9 +250,10 @@ static void drum_note_on(track_t *t, voice_t *v)
 static int32_t drum_amp(track_t *t, voice_t *v, int32_t adsr)
 {
     const drum_lane_t *L = drum_lane_of(t, v);
-    (void)adsr;
     if (!v->active)                                      /* (taken for another part: env_tick ended it) */
         return 0;
+    if (v->stage == 4u)                                  /* (JIANT 0.6.74) given up: env_tick's fade, not held at full */
+        return adsr;
     if (!L || (!L->v.live && !L->v.trig)) {
         v->active = v->gate = 0;
         v->stage = 0;

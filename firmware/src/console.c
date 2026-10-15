@@ -207,6 +207,7 @@ static void con_status(void)
     con_kv("cpu2_tracks", (int32_t)mc_mask_last);       /* the last block's, a bit a track */
 #if FELUCCA_DUAL_CORE
     con_kv("cpu2_wait_max_us", (int32_t)(fm1_mc_max_ticks / 24u));   /* the longest core 0 waited for it */
+    con_kv("power_ready", fm1_power_ready);             /* the stock supply setup took (hal/fm1_power.h) */
 #endif
     con_kv("track", (int32_t)song.sel + 1);
     con_kv("batt_raw", song.batt_raw);

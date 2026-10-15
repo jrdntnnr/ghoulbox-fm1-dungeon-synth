@@ -73,8 +73,9 @@ static void overload(void)
     shed_voice();
     check("overload keeps each part's MONO lead and lowest POLY note",
           lead && bass && extra && lead->gate && bass->gate && extra->stage == 4u && shed_count == 1u);
-    mix_block(out, CTL);
-    check("overload frees its victim within one control block", extra && !extra->active && voices_busy() == 2u);
+    check("overload: its victim leaves the budget at once (it fades, JIANT 0.6.74)", voices_busy() == 2u);
+    for (i = 0; i < 6u; i++) mix_block(out, CTL);
+    check("overload frees its victim within 6 control blocks (~4 ms, faded: 0.6.74, was one)", extra && !extra->active && voices_busy() == 2u);
     shed_voice();
     check("a lead alone on each part stays protected", lead->gate && bass->gate && shed_count == 1u);
 
@@ -82,8 +83,9 @@ static void overload(void)
     host_preset(&trk[0], ENGI_DRUM, 0);
     trk_note_on(&trk[0], 36, 100); trk_note_on(&trk[0], 38, 100);
     lead = held(&trk[0], 36); extra = held(&trk[0], 38);
-    shed_voice(); mix_block(out, CTL);
-    check("overload frees a held one-shot drum without waiting for its decay",
+    shed_voice();
+    for (i = 0; i < 6u; i++) mix_block(out, CTL);
+    check("overload frees a held one-shot drum without waiting for its decay (faded over ~4 ms)",
           lead && extra && lead->active && !extra->active && voices_busy() == 1u);
 
     fresh();

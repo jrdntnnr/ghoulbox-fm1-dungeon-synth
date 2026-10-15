@@ -109,11 +109,36 @@ static void fm1_reset_reason(void)
 
 /* (JIANT 0.6.71) hold the second core (C1_CON 0x1EEE004: bit 1 holds it, bit 3 lets it run; the SDK's, as Melodee and
  * fm1-x0x have it): before every reset and update, and first thing at boot, so it never runs over RAM being cleared
- * or handed back to the boot loader. Harmless when it is not running */
+ * or handed back to the boot loader. Harmless when it is not running.
+ * (Felucca 1.6.1 fm1_cpu1_halt) The bus-invalid traps are off around the hold: holding core 1 cuts the read it has on
+ * the bus (its waiting loop reads the mailbox all the time) and the chip flags that a few instructions later as an
+ * AXI read invalid (DBG_MSG bit 4). With the traps on core 0 took the exception, so 1 in 6 updates with the core
+ * running ended in a crash report and a plain reboot before the update record was written. So: traps off, hold,
+ * wait for the flag, clear it, traps back as they were */
+#define FM1__DBG_WR_EN (*(volatile uint32_t *)0x1EEE240u)
+#define FM1__DBG_MSG_CLR (*(volatile uint32_t *)0x1EEE248u)
+#define FM1__DBG_EN (*(volatile uint32_t *)0x1EEE340u)
+#define FM1__DBG_BUS 0x003F0030u                 /* bus-invalid traps: AXI rd/wr (4, 5), C0/C1 fetch/rd/wr (16..21) */
 static inline void fm1_core1_stop(void)
 {
+    uint32_t locked = !(FM1__DBG_WR_EN & 1u), en, bus = FM1__DBG_BUS;
+    volatile uint32_t n;
+    __asm__("" : "+r"(bus));                     /* (~bus as a constant is 0xFFC0FFCF: build.py's stock-helper check) */
+    if (locked)
+        FM1__DBG_WR_EN = 0xE7u;                  /* unlock (as fm1_guard.h) */
+    en = FM1__DBG_EN;
+    FM1__DBG_EN = en & ~bus;
+    __asm__ volatile("csync" ::: "memory");
     *(volatile uint32_t *)0x1EEE004u |= 2u;
     *(volatile uint32_t *)0x1EEE004u &= ~8u;
+    __asm__ volatile("csync" ::: "memory");
+    for (n = 0; n < 256u; n++)                   /* the flag comes some instructions after the hold */
+        ;
+    FM1__DBG_MSG_CLR = FM1__DBG_BUS;
+    __asm__ volatile("csync" ::: "memory");
+    FM1__DBG_EN = en;
+    if (locked && (FM1__DBG_WR_EN & 1u))
+        FM1__DBG_WR_EN = 0xE7u;                  /* lock again */
     __asm__ volatile("csync" ::: "memory");
 }
 

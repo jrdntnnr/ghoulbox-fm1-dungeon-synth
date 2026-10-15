@@ -434,8 +434,11 @@ static void param_format(const param_desc_t *d, int32_t v, char *val, const char
         if (h < 1000u) {
             fmt_int(val, (int32_t)h);
             *unit = "Hz";
-        } else {
+        } else if (h < 10000u) {
             fmt_fix(val, (int32_t)(h / 100u), 1);
+            *unit = "kHz";
+        } else {                                        /* 10 kHz up: whole kHz ("10.5 kHz" did not fit a card: "11..") */
+            fmt_int(val, (int32_t)((h + 500u) / 1000u));
             *unit = "kHz";
         }
         break;

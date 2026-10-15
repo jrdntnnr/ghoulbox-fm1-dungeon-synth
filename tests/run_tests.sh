@@ -312,6 +312,8 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "the JIANT ports (GHOULBOX desert): FILTER COMB, ENV LOOP, ANALOG INT (KTR retired, the formats), the GRAIN delay" "$OUT/jiant_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -Itests -o "$OUT/cores_test" tests/cores_test.c -lm
     run "the second core (JIANT 0.6.71): the split's render the same as one core's, a job given up, ABOUT's line" "$OUT/cores_test"
+    $CC -O1 -w -o "$OUT/power_test" tests/power_test.c
+    run "stock V15 supply startup (Melodee 1.3.6): the trace, every timeout, read-back faults" "$OUT/power_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/desert2_test" tests/desert2_test.c -lm
     run "GHOULBOX desert 2: CANON, ARP DRONE, the delay's tape motor, P_CANON in projects, the header's CPU bar, page turns" "$OUT/desert2_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/keys_test" tests/keys_test.c -lm

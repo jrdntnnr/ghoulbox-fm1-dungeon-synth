@@ -164,9 +164,11 @@ static uint32_t voice_victim(const track_t *self, int soft, track_t **pp)
 }
 
 static uint32_t voice_kills;                            /* voices given up (budget, overload): console, hostsim */
-static void voice_kill(voice_t *v)                      /* fade out over the next block (env_tick stage 4) */
+static void voice_kill(voice_t *v)                      /* fade out over ~4 ms (env_tick stage 4; JIANT 0.6.74, was a block) */
 {
     v->gate = 0;
+    if (v->stage != 4u)
+        v->kfade = 0;                                   /* (the fade from its start) */
     v->stage = 4;
     voice_kills++;
 }
@@ -617,11 +619,23 @@ static int32_t env_tick(track_t *t, voice_t *v)
             v->active = 0;
         }
         break;
-    case 4:                                             /* given up for another part: this block fades it */
-        v->env = 0;
-        v->stage = 0;
-        v->active = 0;
+    case 4:                                             /* given up (another part, the load): it fades out. (JIANT
+                                                         * 0.6.74) A half cosine over 6 blocks (~4.4 ms), each block's
+                                                         * ramp between (KFADE: each block's gain over the last's):
+                                                         * gentle in and out. One block (0.7 ms, full to 0, as before)
+                                                         * clicked on every steal, a bass note most; longer would keep
+                                                         * more voices rendering under load */
+    {
+        static const uint8_t KFADE[6] = {239, 206, 171, 128, 69, 0};
+        v->env = (int32_t)(((int64_t)v->env * KFADE[v->kfade < 6u ? v->kfade : 5u]) >> 8);
+        v->kfade++;
+        if (v->kfade >= 6u || !v->env) {
+            v->env = 0;
+            v->stage = 0;
+            v->active = 0;
+        }
         break;
+    }
     default:
         v->env = 0;
         break;
@@ -743,8 +757,10 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
                     v->env = v->env_out = 0;
                     continue;
                 }
-                v->env = 1 << 24;                       /* (the ADSR's release never ends it) */
-                env = 32767;
+                if (v->stage != 4u) {                   /* (JIANT 0.6.74: given up, env_tick's fade) */
+                    v->env = 1 << 24;                   /* (the ADSR's release never ends it) */
+                    env = 32767;
+                }
             }
             if (e->amp)                                 /* the engine's own amplitude curve */
                 env = e->amp(t, v, env);

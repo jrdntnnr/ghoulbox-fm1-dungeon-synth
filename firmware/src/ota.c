@@ -25,6 +25,9 @@
 #define OTA_AREA 0x000E0000u                     /* staged loader, 5 x 4 KiB */
 #define OTA_AREA_LEN 0x5000u
 #define OTA_RES (OTA_AREA + OTA_AREA_LEN - 0x100u)  /* 0xE4F00 = 4K boundary - 256: SPL scan */
+#define OTA_FL_LEN 0x93000u                      /* (Felucca 1.6.1) flash.bin = [0, the PRCT end): the head and this
+                                                  * board's app area, the size the update loader writes (ldr_core.c
+                                                  * LDR_APP_HI); another board's package is refused before any erase */
 #define OTA_LDR_HCRC 0xEBAAu                     /* official update loader (usb_hid_ota.bin) */
 #define OTA_LDR_DCRC 0x5881u
 #define OTA_LDR_LEN 0x4DE1u
@@ -255,6 +258,8 @@ static int ota_ufw(uint8_t *hdr, uint32_t *fl_off, uint32_t *fl_len, uint32_t *o
     return 0;
 }
 
+/* ota_stage's failures from step 4's first erase on (-8 .. -13; the steps before: -1 .. -7 and -15, nothing written) */
+#define OTA_STAGED_RC(rc) ((rc) <= -8 && (rc) >= -13)
 static int ota_stage(void)                       /* steps 1..6; 0 = host said success */
 {
     static uint8_t hdr[0x400] __attribute__((section(".pool"))), b[512] __attribute__((section(".pool"))), mine[512] __attribute__((section(".pool")));
@@ -266,6 +271,8 @@ static int ota_stage(void)                       /* steps 1..6; 0 = host said su
         return rc;
     if (!fl_off || !ota_off)
         return -3;
+    if (fl_len != OTA_FL_LEN)
+        return -15;                                         /* another board's package: nothing staged, nothing erased */
     /* 2. which loader: the official one (known CRCs; it rewrites the whole flash.bin
      *    including the head) or Felucca's own (app area only, checks the chip key) */
     if (ota_read(ota_off, b, 512))
@@ -345,7 +352,8 @@ static int ota_session(void)
     ota_deadline = ota_now_ms() + 120000u;          /* step 1 normally takes ~5 s; a stalled host gives up after 2 min */
     rc = ota_stage();
     if (rc) {
-        ota_unstage();
+        if (OTA_STAGED_RC(rc))                          /* (refused before staging: nothing to erase) */
+            ota_unstage();
         ota_show(9, rc);
         return rc;
     }

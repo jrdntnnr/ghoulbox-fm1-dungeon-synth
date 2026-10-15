@@ -61,7 +61,7 @@ Build options (environment, `0` or `1`; defaults in `firmware/src/felucca.c`, `c
 | `FELUCCA_UAC_48K` | 1 | `0`: the USB audio input at 44.1 kHz only, as up to 1.0.5.2 (`firmware/src/usb.c`) |
 | `FELUCCA_UAC_AS_FIRST` | 1 | the audio control header lists the audio streaming interface before the MIDI one, so the USB audio driver of older macOS (up to 15) finds it; `0`: 1.0 to 1.5's order, byte for byte (`firmware/src/usb.c`) |
 | `FELUCCA_UART` | 1 | TRS MIDI IN |
-| `FELUCCA_DUAL_CORE` | 1 | the second core renders some synth parts (JIANT; `hal/fm1_multicore.h`). REC held at power-on: one core for the session; MENU > ABOUT shows CORES 1 / 2 and why |
+| `FELUCCA_DUAL_CORE` | 1 | the second core renders some synth parts (JIANT; `hal/fm1_multicore.h`). REC held at power-on: one core for the session; MENU > ABOUT shows CORES 1 / 2 and why. It starts only after the supplies took the stock setup (below) |
 | `FELUCCA_SLICE` | 0 | target dungeon profile omits the already-hidden SLICE engine to fit flash; `1` exceeds the current slot |
 | `FELUCCA_ICONS` | 1 | parameter icons on the knob cards |
 | `FELUCCA_FM4` | 0 | the retired DIGITAL engine (4-operator FM) instead of its FM6 conversion |
@@ -163,3 +163,15 @@ from the same build profile: the device build omits SLICE to fit flash, whereas
 full host/emulator tests may generate assets with SLICE enabled. Run a fresh
 target build after such tests before distributing firmware. The target-budget
 check for this profile is `FELUCCA_SLICE=0 python3 tests/target_budget.py`.
+
+## The stock supply setup
+
+The SPL leaves the core rail SYSVDD at 11 (1.26 V) and VDC14 at 3 (1.40 V) on its
+LDO. M-VAVE's own application raises them to 15 (1.38 V) and 7 (1.60 V) and turns
+the DCDC on before it runs; so does every build since this one, in `fm1_cstart`
+before the second core starts (`hal/fm1_power.h`, Melodee 1.3.6's sequence from
+the stock app at `0x02004F90..0x0200509A`, in its order, with its settling loops).
+A P33 transfer that times out stops the sequence; a read-back that is not the
+stock's keeps the second core off (MENU > ABOUT: CORES 1). `tests/power_test.c`
+checks the transaction trace, every timeout and the read-backs on the host; it
+measures no voltage.

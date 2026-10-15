@@ -21,6 +21,11 @@ Three source files are ports and keep the licence of their originals:
 `firmware/src/fm6_core.c` (msfa, Apache-2.0). The firmware built with them is GPL-3.0-only as
 a whole.
 
+Felucca 1.6.1 moved its ANALOG, LOFI, TRIO, WHEEL and NOISE engines to
+[Felucca-Engines](https://github.com/hugelton/Felucca-Engines) under MIT. This tree carries
+the 1.6 copies of those files, altered, under GPL-3.0-only as before; it does not take the
+submodule.
+
 The SANTUR / DUSK SANTUR and MIJWIZ / ARGHUL additions are our reduced
 implementations of Quilcom / Spogg's published instrument designs, built with
 the existing PHYS/TRIO DSP. No Quilcom source, waveforms or plugin binaries are

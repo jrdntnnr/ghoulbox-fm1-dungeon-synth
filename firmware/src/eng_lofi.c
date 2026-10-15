@@ -85,6 +85,8 @@ static int32_t lofi_amp(track_t *t, voice_t *v, int32_t adsr)
         return adsr;
     if (!v->active)                                     /* the ADSR ended it (or the voice was given up) */
         return 0;
+    if (v->stage == 4u)                                 /* (JIANT 0.6.74) given up: env_tick's fade, not held at full */
+        return adsr;
     if (v->stage == 3u) {
         if (v->env < (1 << 24) / 100 || (b >= 1 && b <= 16 && !vol)) {
             v->env = 0;

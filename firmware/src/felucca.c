@@ -45,6 +45,7 @@
 #include <stdint.h>
 #include "fm1_time.h"
 #include "fm1_sys.h"
+#include "fm1_power.h"            /* (Melodee 1.3.6) the stock supplies before the second core */
 #include "fm1_irq.h"
 #include "fm1_guard.h"
 #if FELUCCA_DUAL_CORE

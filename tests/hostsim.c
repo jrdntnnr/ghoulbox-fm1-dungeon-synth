@@ -161,12 +161,13 @@ static void put_step(track_t *t, uint32_t i, uint32_t n, const uint8_t *notes, u
     s->vel = n ? 100 : 0;
 }
 
-static uint32_t busy_now(void)                   /* sounding voices of the parts (none fading after a block) */
+static uint32_t busy_now(void)                   /* sounding voices of the parts (JIANT 0.6.74: not the fading ones, given
+                                                  * up: out of the budget, gone within a few blocks; regress.c checks that) */
 {
     uint32_t p, i, n = 0;
     for (p = 0; p < NPART; p++)
         for (i = 0; i < NVOICE; i++)
-            n += trk[p].v[i].active;
+            n += trk[p].v[i].active && trk[p].v[i].stage != 4u;
     return n;
 }
 
